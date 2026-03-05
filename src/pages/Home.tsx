@@ -1,0 +1,245 @@
+import { useEffect, useState } from "react";
+import { api, getImageUrl } from "@/lib/api";
+import MovieCard from "@/components/MovieCard";
+import { Play, Info, ChevronRight } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Swiper, SwiperSlide } from "swiper/react";
+import { Navigation, Pagination, Autoplay, EffectFade } from "swiper/modules";
+import "swiper/css";
+import "swiper/css/navigation";
+import "swiper/css/pagination";
+import "swiper/css/effect-fade";
+
+export default function Home() {
+  const [newMovies, setNewMovies] = useState<any[]>([]);
+  const [trending, setTrending] = useState<any[]>([]);
+  const [series, setSeries] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [newRes, trendingRes, seriesRes] = await Promise.all([
+          api.getNewUpdated(1),
+          api.getByCategory("phim-le", 1),
+          api.getByCategory("phim-bo", 1),
+        ]);
+        setNewMovies(newRes.items || []);
+        setTrending(trendingRes.items || []);
+        setSeries(seriesRes.items || []);
+      } catch (error) {
+        console.error("Failed to fetch data", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="w-12 h-12 border-4 border-[#E50914] border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  const heroMovies = [
+    { ...newMovies[0], badge: "🔥 PHIM MỚI CẬP NHẬT" },
+    { ...trending[0], badge: "⭐ PHIM NỔI BẬT" },
+    { ...newMovies[1], badge: "🎬 PHIM CHIẾU RẠP" },
+    { ...series[0], badge: "🇰🇷 PHIM HÀN QUỐC" },
+    { ...trending[1], badge: "🇻🇳 PHIM VIETSUB" },
+  ].filter(m => m && m.name);
+
+  return (
+    <div className="pb-20">
+      {/* Hero Section */}
+      {heroMovies.length > 0 && (
+        <div id="hero-banner" className="relative w-full overflow-hidden bg-[#0A0A0A] group/hero aspect-[3840/2160] max-h-[85vh] min-h-[50vh]">
+          <Swiper
+            modules={[Navigation, Pagination, Autoplay, EffectFade]}
+            effect="fade"
+            navigation={{
+              nextEl: '.hero-next',
+              prevEl: '.hero-prev',
+            }}
+            pagination={{
+              clickable: true,
+              el: '.hero-pagination',
+              bulletClass: 'hero-bullet',
+              bulletActiveClass: 'hero-bullet-active',
+            }}
+            autoplay={{ delay: 5000, disableOnInteraction: false }}
+            loop={true}
+            className="h-full w-full"
+          >
+            {heroMovies.map((movie, index) => (
+              <SwiperSlide key={`${movie.slug || movie._id || 'hero'}-${index}`} className="relative h-full w-full">
+                <div className="absolute inset-0">
+                  <img
+                    src={getImageUrl(movie.thumb_url || movie.poster_url, 'banner')}
+                    alt={movie.name}
+                    className="w-full h-full object-cover aspect-video"
+                  />
+                  {/* Gradient overlay from left to right (70% -> 30%) */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-black/20" />
+                  {/* Bottom gradient to fade into background */}
+                  <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-[var(--color-cine-bg)] to-transparent" />
+                </div>
+
+                <div className="absolute inset-0 flex items-center">
+                  <div className="max-w-[1280px] w-full mx-auto px-6">
+                    <div className="max-w-2xl animate-in slide-in-from-left-8 duration-1000">
+                      <span className="inline-block bg-[#E50914] text-white text-[12px] font-bold px-3 py-1 rounded-sm tracking-[1px] mb-4">
+                        {movie.badge}
+                      </span>
+                      <h1 className="text-3xl md:text-5xl lg:text-[48px] font-heading font-bold text-white mb-2 md:mb-4 leading-tight drop-shadow-lg">
+                        {movie.name}
+                      </h1>
+                      <p className="text-sm md:text-[16px] text-[#CCCCCC] max-w-[500px] leading-[1.6] mb-4 md:mb-6 line-clamp-2 md:line-clamp-3">
+                        {movie.content?.replace(/<[^>]*>?/gm, '') || movie.origin_name}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2 text-xs md:text-[14px] text-gray-400 mb-6 md:mb-8 font-medium">
+                        <span>{movie.year || new Date().getFullYear()}</span>
+                        <span>·</span>
+                        <span>{movie.category?.[0]?.name || 'Hành động'}</span>
+                        <span>·</span>
+                        <span>{movie.time || '120 phút'}</span>
+                        <span>·</span>
+                        <span className="text-white font-bold border border-white/20 px-1.5 py-0.5 rounded text-[10px] md:text-xs">{movie.quality || 'HD'}</span>
+                      </div>
+                      
+                      <div className="flex flex-wrap items-center gap-3 md:gap-4">
+                        <Link
+                          to={`/watch/${movie.slug}`}
+                          className="flex items-center justify-center gap-2 bg-[#E50914] text-white px-6 py-2.5 md:px-[32px] md:py-[12px] rounded-[40px] font-bold text-sm md:text-[16px] transition-all hover:scale-105 shadow-[0_4px_15px_rgba(229,9,20,0.5)]"
+                        >
+                          <Play className="w-4 h-4 md:w-5 md:h-5" fill="currentColor" />
+                          Xem ngay
+                        </Link>
+                        <Link
+                          to={`/movie/${movie.slug}`}
+                          className="flex items-center justify-center gap-2 bg-transparent backdrop-blur-[8px] border border-white/30 text-white px-6 py-2.5 md:px-[32px] md:py-[12px] rounded-[40px] font-bold text-sm md:text-[16px] transition-all hover:bg-white/20"
+                        >
+                          <Info className="w-4 h-4 md:w-5 md:h-5" />
+                          Chi tiết phim
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </SwiperSlide>
+            ))}
+          </Swiper>
+
+          {/* Custom Navigation */}
+          <button className="hero-prev absolute left-6 top-1/2 -translate-y-1/2 w-[48px] h-[48px] rounded-full bg-black/50 flex items-center justify-center text-white z-20 opacity-0 group-hover/hero:opacity-100 transition-all hover:bg-black/80 backdrop-blur-sm">
+            <ChevronRight className="w-6 h-6 rotate-180" />
+          </button>
+          <button className="hero-next absolute right-6 top-1/2 -translate-y-1/2 w-[48px] h-[48px] rounded-full bg-black/50 flex items-center justify-center text-white z-20 opacity-0 group-hover/hero:opacity-100 transition-all hover:bg-black/80 backdrop-blur-sm">
+            <ChevronRight className="w-6 h-6" />
+          </button>
+
+          {/* Custom Pagination */}
+          <div className="hero-pagination absolute bottom-8 right-8 z-20 flex gap-2 justify-end !w-auto"></div>
+        </div>
+      )}
+
+      <div className="max-w-[1280px] mx-auto px-6 mt-12 space-y-24">
+        {/* Phim thịnh hành (Carousel) */}
+        <section>
+          <div className="flex items-center justify-between mb-8">
+            <h2 className="text-2xl font-heading font-bold text-white  tracking-wider flex items-center gap-3">
+              <span className="w-1.5 h-8 bg-[#F5C518] rounded-full inline-block"></span>
+              Phim Thịnh Hành
+            </h2>
+          </div>
+          <Swiper
+            modules={[Navigation, Pagination, Autoplay]}
+            spaceBetween={24}
+            slidesPerView={2}
+            navigation
+            autoplay={{ delay: 4000, disableOnInteraction: false }}
+            breakpoints={{
+              640: { slidesPerView: 3 },
+              768: { slidesPerView: 4 },
+              1024: { slidesPerView: 5 },
+            }}
+            className="pb-12 !overflow-visible"
+          >
+            {trending.slice(0, 15).map((movie, index) => (
+              <SwiperSlide key={`${movie.slug || movie._id || 'trending'}-${index}`}>
+                <MovieCard movie={movie} />
+              </SwiperSlide>
+            ))}
+          </Swiper>
+        </section>
+
+        {/* Phim mới cập nhật */}
+        <section>
+          <div className="flex items-center justify-between mb-8">
+            <h2 className="text-2xl font-heading font-bold text-white  tracking-wider flex items-center gap-3">
+              <span className="w-1.5 h-8 bg-[#E50914] rounded-full inline-block"></span>
+              Phim Mới Cập Nhật
+            </h2>
+            <Link to="/movies" className="text-sm text-[#3B82F6] hover:text-white :text-black transition-colors flex items-center gap-1">
+              Xem tất cả <ChevronRight className="w-4 h-4" />
+            </Link>
+          </div>
+          <Swiper
+            modules={[Navigation, Pagination, Autoplay]}
+            spaceBetween={24}
+            slidesPerView={2}
+            navigation
+            autoplay={{ delay: 5000, disableOnInteraction: false }}
+            breakpoints={{
+              640: { slidesPerView: 3 },
+              768: { slidesPerView: 4 },
+              1024: { slidesPerView: 5 },
+            }}
+            className="pb-12 !overflow-visible"
+          >
+            {newMovies.slice(1, 16).map((movie, index) => (
+              <SwiperSlide key={`${movie.slug || movie._id || 'new'}-${index}`}>
+                <MovieCard movie={movie} />
+              </SwiperSlide>
+            ))}
+          </Swiper>
+        </section>
+
+        {/* Phim bộ nổi bật */}
+        <section>
+          <div className="flex items-center justify-between mb-8">
+            <h2 className="text-2xl font-heading font-bold text-white  tracking-wider flex items-center gap-3">
+              <span className="w-1.5 h-8 bg-[#3B82F6] rounded-full inline-block"></span>
+              Phim Bộ Nổi Bật
+            </h2>
+            <Link to="/series" className="text-sm text-[#3B82F6] hover:text-white :text-black transition-colors flex items-center gap-1">
+              Xem tất cả <ChevronRight className="w-4 h-4" />
+            </Link>
+          </div>
+          <Swiper
+            modules={[Navigation, Pagination, Autoplay]}
+            spaceBetween={24}
+            slidesPerView={2}
+            navigation
+            autoplay={{ delay: 6000, disableOnInteraction: false }}
+            breakpoints={{
+              640: { slidesPerView: 3 },
+              768: { slidesPerView: 4 },
+              1024: { slidesPerView: 5 },
+            }}
+            className="pb-12 !overflow-visible"
+          >
+            {series.slice(0, 15).map((movie, index) => (
+              <SwiperSlide key={`${movie.slug || movie._id || 'series'}-${index}`}>
+                <MovieCard movie={movie} />
+              </SwiperSlide>
+            ))}
+          </Swiper>
+        </section>
+      </div>
+    </div>
+  );
+}
