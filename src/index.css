@@ -410,3 +410,32 @@ body.cinema-mode .cinema-mode-btn {
 .btn-outline:hover {
   background: rgba(255,255,255,0.1);
 }
+
+/* Ad Skipper Notification */
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOut {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+.ad-skip-notification {
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  font-weight: 500;
+  pointer-events: none;
+}

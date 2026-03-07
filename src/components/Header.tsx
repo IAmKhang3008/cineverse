@@ -91,7 +91,7 @@ export default function Header() {
     <header
       className={cn(
         "fixed top-0 left-0 right-0 z-50 transition-all duration-300 header",
-        atTop ? "bg-[rgba(10,10,10,0.1)] backdrop-blur-[4px] border-b border-transparent" : "",
+        atTop ? "bg-[rgba(10,10,10,0.05)] backdrop-blur-[4px] border-b border-transparent" : "",
         scrolled ? "bg-[rgba(10,10,10,0.95)] backdrop-blur-[10px] border-b border-[rgba(255,255,255,0.1)] shadow-[0_4px_20px_rgba(0,0,0,0.5)]" : ""
       )}
     >

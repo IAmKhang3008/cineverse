@@ -76,6 +76,13 @@ export default function Watch() {
   }, [cinemaMode]);
 
   useEffect(() => {
+    // Initialize AdSkipper
+    // @ts-ignore
+    if (window.UltimateAdSkipper) {
+      // @ts-ignore
+      window.adSkipper = new window.UltimateAdSkipper();
+    }
+    
     const handleMessage = (e: MessageEvent) => {
       // Try to detect video end if the iframe sends a message
       // Note: This depends on the specific video player implementation in the iframe
@@ -84,7 +91,19 @@ export default function Watch() {
       }
     };
     window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      // @ts-ignore
+      if (window.adSkipper) {
+        // @ts-ignore
+        if (typeof window.adSkipper.destroy === 'function') {
+          // @ts-ignore
+          window.adSkipper.destroy();
+        }
+        // @ts-ignore
+        window.adSkipper = null;
+      }
+    };
   }, [autoPlay, currentEpisode, currentServer, episodes]);
 
   const handleNextEpisode = () => {

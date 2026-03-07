@@ -14,19 +14,43 @@ export default function Home() {
   const [newMovies, setNewMovies] = useState<any[]>([]);
   const [trending, setTrending] = useState<any[]>([]);
   const [series, setSeries] = useState<any[]>([]);
+  const [hoatHinh, setHoatHinh] = useState<any[]>([]);
+  const [tvShows, setTvShows] = useState<any[]>([]);
+  const [thaiLan, setThaiLan] = useState<any[]>([]);
+  const [hongKong, setHongKong] = useState<any[]>([]);
+  const [auMy, setAuMy] = useState<any[]>([]);
+  const [vietNam, setVietNam] = useState<any[]>([]);
+  const [kinhDi, setKinhDi] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [newRes, trendingRes, seriesRes] = await Promise.all([
+        const [
+          newRes, trendingRes, seriesRes, hoatHinhRes, tvShowsRes, 
+          thaiLanRes, hongKongRes, auMyRes, vietNamRes, kinhDiRes
+        ] = await Promise.all([
           api.getNewUpdated(1),
           api.getByCategory("phim-le", 1),
           api.getByCategory("phim-bo", 1),
+          api.getByCategory("hoat-hinh", 1),
+          api.getByCategory("tv-shows", 1),
+          api.getByCountry("thai-lan", 1),
+          api.getByCountry("hong-kong", 1),
+          api.getByCountry("au-my", 1),
+          api.getByCountry("viet-nam", 1),
+          api.getByGenre("kinh-di", 1),
         ]);
         setNewMovies(newRes.items || []);
         setTrending(trendingRes.items || []);
         setSeries(seriesRes.items || []);
+        setHoatHinh(hoatHinhRes.items || []);
+        setTvShows(tvShowsRes.items || []);
+        setThaiLan(thaiLanRes.items || []);
+        setHongKong(hongKongRes.items || []);
+        setAuMy(auMyRes.items || []);
+        setVietNam(vietNamRes.items || []);
+        setKinhDi(kinhDiRes.items || []);
       } catch (error) {
         console.error("Failed to fetch data", error);
       } finally {
@@ -56,7 +80,7 @@ export default function Home() {
     <div className="pb-20">
       {/* Hero Section */}
       {heroMovies.length > 0 && (
-        <div id="hero-banner" className="relative w-full overflow-hidden bg-[#0A0A0A] group/hero aspect-[3840/2160] max-h-[85vh] min-h-[50vh]">
+        <div id="hero-banner" className="relative w-full overflow-hidden bg-[#0A0A0A] group/hero aspect-[21/9] max-h-[85vh] min-h-[50vh]">
           <Swiper
             modules={[Navigation, Pagination, Autoplay, EffectFade]}
             effect="fade"
@@ -89,7 +113,7 @@ export default function Home() {
                 </div>
 
                 <div className="absolute inset-0 flex items-center">
-                  <div className="max-w-[1280px] w-full mx-auto px-6">
+                  <div className="max-w-[1440px] w-full mx-auto px-6">
                     <div className="max-w-2xl animate-in slide-in-from-left-8 duration-1000">
                       <span className="inline-block bg-[#E50914] text-white text-[12px] font-bold px-3 py-1 rounded-sm tracking-[1px] mb-4">
                         {movie.badge}
@@ -239,6 +263,244 @@ export default function Home() {
             ))}
           </Swiper>
         </section>
+
+        {/* Phim Hoạt Hình */}
+        {hoatHinh.length > 0 && (
+          <section>
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-3">
+                <span className="w-1.5 h-8 bg-[#10B981] rounded-full inline-block"></span>
+                Phim Hoạt Hình
+              </h2>
+              <Link to="/genres?genre=hoat-hinh" className="text-sm text-[#3B82F6] hover:text-white transition-colors flex items-center gap-1">
+                Xem tất cả <ChevronRight className="w-4 h-4" />
+              </Link>
+            </div>
+            <Swiper
+              modules={[Navigation, Pagination, Autoplay]}
+              spaceBetween={24}
+              slidesPerView={2}
+              navigation
+              autoplay={{ delay: 5500, disableOnInteraction: false }}
+              breakpoints={{
+                640: { slidesPerView: 3 },
+                768: { slidesPerView: 4 },
+                1024: { slidesPerView: 5 },
+              }}
+              className="pb-12 !overflow-visible"
+            >
+              {hoatHinh.slice(0, 15).map((movie, index) => (
+                <SwiperSlide key={`${movie.slug || movie._id || 'hoathinh'}-${index}`}>
+                  <MovieCard movie={movie} />
+                </SwiperSlide>
+              ))}
+            </Swiper>
+          </section>
+        )}
+
+        {/* Chương trình TV */}
+        {tvShows.length > 0 && (
+          <section>
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-3">
+                <span className="w-1.5 h-8 bg-[#8B5CF6] rounded-full inline-block"></span>
+                Chương trình TV
+              </h2>
+              <Link to="/genres?genre=tv-shows" className="text-sm text-[#3B82F6] hover:text-white transition-colors flex items-center gap-1">
+                Xem tất cả <ChevronRight className="w-4 h-4" />
+              </Link>
+            </div>
+            <Swiper
+              modules={[Navigation, Pagination, Autoplay]}
+              spaceBetween={24}
+              slidesPerView={2}
+              navigation
+              autoplay={{ delay: 6500, disableOnInteraction: false }}
+              breakpoints={{
+                640: { slidesPerView: 3 },
+                768: { slidesPerView: 4 },
+                1024: { slidesPerView: 5 },
+              }}
+              className="pb-12 !overflow-visible"
+            >
+              {tvShows.slice(0, 15).map((movie, index) => (
+                <SwiperSlide key={`${movie.slug || movie._id || 'tvshows'}-${index}`}>
+                  <MovieCard movie={movie} />
+                </SwiperSlide>
+              ))}
+            </Swiper>
+          </section>
+        )}
+
+        {/* Phim Thái Lan */}
+        {thaiLan.length > 0 && (
+          <section>
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-3">
+                <span className="w-1.5 h-8 bg-[#EC4899] rounded-full inline-block"></span>
+                Phim Thái Lan
+              </h2>
+              <Link to="/genres?country=thai-lan" className="text-sm text-[#3B82F6] hover:text-white transition-colors flex items-center gap-1">
+                Xem tất cả <ChevronRight className="w-4 h-4" />
+              </Link>
+            </div>
+            <Swiper
+              modules={[Navigation, Pagination, Autoplay]}
+              spaceBetween={24}
+              slidesPerView={2}
+              navigation
+              autoplay={{ delay: 4500, disableOnInteraction: false }}
+              breakpoints={{
+                640: { slidesPerView: 3 },
+                768: { slidesPerView: 4 },
+                1024: { slidesPerView: 5 },
+              }}
+              className="pb-12 !overflow-visible"
+            >
+              {thaiLan.slice(0, 15).map((movie, index) => (
+                <SwiperSlide key={`${movie.slug || movie._id || 'thailan'}-${index}`}>
+                  <MovieCard movie={movie} />
+                </SwiperSlide>
+              ))}
+            </Swiper>
+          </section>
+        )}
+
+        {/* Phim Hồng Kong */}
+        {hongKong.length > 0 && (
+          <section>
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-3">
+                <span className="w-1.5 h-8 bg-[#F59E0B] rounded-full inline-block"></span>
+                Phim Hồng Kong
+              </h2>
+              <Link to="/genres?country=hong-kong" className="text-sm text-[#3B82F6] hover:text-white transition-colors flex items-center gap-1">
+                Xem tất cả <ChevronRight className="w-4 h-4" />
+              </Link>
+            </div>
+            <Swiper
+              modules={[Navigation, Pagination, Autoplay]}
+              spaceBetween={24}
+              slidesPerView={2}
+              navigation
+              autoplay={{ delay: 5000, disableOnInteraction: false }}
+              breakpoints={{
+                640: { slidesPerView: 3 },
+                768: { slidesPerView: 4 },
+                1024: { slidesPerView: 5 },
+              }}
+              className="pb-12 !overflow-visible"
+            >
+              {hongKong.slice(0, 15).map((movie, index) => (
+                <SwiperSlide key={`${movie.slug || movie._id || 'hongkong'}-${index}`}>
+                  <MovieCard movie={movie} />
+                </SwiperSlide>
+              ))}
+            </Swiper>
+          </section>
+        )}
+
+        {/* Phim Âu Mỹ */}
+        {auMy.length > 0 && (
+          <section>
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-3">
+                <span className="w-1.5 h-8 bg-[#3B82F6] rounded-full inline-block"></span>
+                Phim Âu Mỹ
+              </h2>
+              <Link to="/genres?country=au-my" className="text-sm text-[#3B82F6] hover:text-white transition-colors flex items-center gap-1">
+                Xem tất cả <ChevronRight className="w-4 h-4" />
+              </Link>
+            </div>
+            <Swiper
+              modules={[Navigation, Pagination, Autoplay]}
+              spaceBetween={24}
+              slidesPerView={2}
+              navigation
+              autoplay={{ delay: 6000, disableOnInteraction: false }}
+              breakpoints={{
+                640: { slidesPerView: 3 },
+                768: { slidesPerView: 4 },
+                1024: { slidesPerView: 5 },
+              }}
+              className="pb-12 !overflow-visible"
+            >
+              {auMy.slice(0, 15).map((movie, index) => (
+                <SwiperSlide key={`${movie.slug || movie._id || 'aumy'}-${index}`}>
+                  <MovieCard movie={movie} />
+                </SwiperSlide>
+              ))}
+            </Swiper>
+          </section>
+        )}
+
+        {/* Phim Việt Nam */}
+        {vietNam.length > 0 && (
+          <section>
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-3">
+                <span className="w-1.5 h-8 bg-[#EF4444] rounded-full inline-block"></span>
+                Phim Việt Nam
+              </h2>
+              <Link to="/genres?country=viet-nam" className="text-sm text-[#3B82F6] hover:text-white transition-colors flex items-center gap-1">
+                Xem tất cả <ChevronRight className="w-4 h-4" />
+              </Link>
+            </div>
+            <Swiper
+              modules={[Navigation, Pagination, Autoplay]}
+              spaceBetween={24}
+              slidesPerView={2}
+              navigation
+              autoplay={{ delay: 4000, disableOnInteraction: false }}
+              breakpoints={{
+                640: { slidesPerView: 3 },
+                768: { slidesPerView: 4 },
+                1024: { slidesPerView: 5 },
+              }}
+              className="pb-12 !overflow-visible"
+            >
+              {vietNam.slice(0, 15).map((movie, index) => (
+                <SwiperSlide key={`${movie.slug || movie._id || 'vietnam'}-${index}`}>
+                  <MovieCard movie={movie} />
+                </SwiperSlide>
+              ))}
+            </Swiper>
+          </section>
+        )}
+
+        {/* Phim Kinh Dị */}
+        {kinhDi.length > 0 && (
+          <section>
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-3">
+                <span className="w-1.5 h-8 bg-[#6B7280] rounded-full inline-block"></span>
+                Phim Kinh Dị
+              </h2>
+              <Link to="/genres?genre=kinh-di" className="text-sm text-[#3B82F6] hover:text-white transition-colors flex items-center gap-1">
+                Xem tất cả <ChevronRight className="w-4 h-4" />
+              </Link>
+            </div>
+            <Swiper
+              modules={[Navigation, Pagination, Autoplay]}
+              spaceBetween={24}
+              slidesPerView={2}
+              navigation
+              autoplay={{ delay: 5500, disableOnInteraction: false }}
+              breakpoints={{
+                640: { slidesPerView: 3 },
+                768: { slidesPerView: 4 },
+                1024: { slidesPerView: 5 },
+              }}
+              className="pb-12 !overflow-visible"
+            >
+              {kinhDi.slice(0, 15).map((movie, index) => (
+                <SwiperSlide key={`${movie.slug || movie._id || 'kinhdi'}-${index}`}>
+                  <MovieCard movie={movie} />
+                </SwiperSlide>
+              ))}
+            </Swiper>
+          </section>
+        )}
       </div>
     </div>
   );
