@@ -156,7 +156,7 @@ export default function Header() {
               />
             </div>
             {isSearchFocused && searchQuery && (
-              <div className="absolute top-full mt-2 w-[100vw] md:w-[400px] -right-4 md:right-0 bg-[#121212] border border-white/10 rounded-xl shadow-2xl py-2 z-50 overflow-hidden suggestions-box">
+              <div className="absolute top-full mt-2 w-[calc(100vw-2rem)] md:w-[400px] -right-2 md:right-0 bg-[#121212] border border-white/10 rounded-xl shadow-2xl py-2 z-50 overflow-hidden suggestions-box">
                 <div className="px-4 py-2 text-xs text-gray-500 uppercase tracking-wider border-b border-white/5">Gợi ý tìm kiếm</div>
                 
                 {loadingSuggestions ? (

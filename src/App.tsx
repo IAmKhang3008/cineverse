@@ -21,31 +21,34 @@ import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { ToastProvider } from "./contexts/ToastContext";
+import { FavoritesProvider } from "./contexts/FavoritesContext";
 
 export default function App() {
   return (
     <ThemeProvider>
       <ToastProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Layout />}>
-              <Route index element={<Home />} />
-              <Route path="movies" element={<Movies />} />
-              <Route path="series" element={<Series />} />
-              <Route path="genres" element={<Genres />} />
-              <Route path="movie/:slug" element={<Detail />} />
-              <Route path="watch/:slug" element={<Watch />} />
-              <Route path="search" element={<Search />} />
-              <Route path="favorites" element={<Favorites />} />
-              <Route path="history" element={<History />} />
-              <Route path="terms" element={<Terms />} />
-              <Route path="login" element={<Login />} />
-              <Route path="profile" element={<Profile />} />
-              <Route path="settings" element={<Settings />} />
-              <Route path="*" element={<NotFound />} />
-            </Route>
-          </Routes>
-        </BrowserRouter>
+        <FavoritesProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<Layout />}>
+                <Route index element={<Home />} />
+                <Route path="movies" element={<Movies />} />
+                <Route path="series" element={<Series />} />
+                <Route path="genres" element={<Genres />} />
+                <Route path="movie/:slug" element={<Detail />} />
+                <Route path="watch/:slug" element={<Watch />} />
+                <Route path="search" element={<Search />} />
+                <Route path="favorites" element={<Favorites />} />
+                <Route path="history" element={<History />} />
+                <Route path="terms" element={<Terms />} />
+                <Route path="login" element={<Login />} />
+                <Route path="profile" element={<Profile />} />
+                <Route path="settings" element={<Settings />} />
+                <Route path="*" element={<NotFound />} />
+              </Route>
+            </Routes>
+          </BrowserRouter>
+        </FavoritesProvider>
       </ToastProvider>
     </ThemeProvider>
   );

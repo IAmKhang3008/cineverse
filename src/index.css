@@ -17,6 +17,11 @@
   --color-cine-gray: #2A2A2A;
 }
 
+html, body {
+  overflow-x: hidden;
+  width: 100%;
+}
+
 body {
   background-color: var(--color-cine-bg);
   color: #ffffff;

@@ -32,7 +32,9 @@ export default function Detail() {
         // Fetch related movies based on the first category
         if (res.movie?.category?.[0]?.slug) {
           const relatedRes = await api.getByGenre(res.movie.category[0].slug, 1);
-          setRelatedMovies(relatedRes.items?.filter((m: any) => m.slug !== slug).slice(0, 10) || []);
+          // Filter out current movie and take 10
+          const filtered = (relatedRes.items || []).filter((m: any) => m.slug !== slug);
+          setRelatedMovies(filtered.slice(0, 10));
         }
       } catch (error) {
         console.error("Failed to fetch movie detail", error);
