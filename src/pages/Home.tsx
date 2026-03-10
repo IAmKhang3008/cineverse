@@ -21,14 +21,18 @@ export default function Home() {
   const [auMy, setAuMy] = useState<any[]>([]);
   const [vietNam, setVietNam] = useState<any[]>([]);
   const [kinhDi, setKinhDi] = useState<any[]>([]);
+  const [heroMovies, setHeroMovies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [heroSwiper, setHeroSwiper] = useState<any>(null);
+  const [activeHeroIndex, setActiveHeroIndex] = useState(0);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const [
           newRes, trendingRes, seriesRes, hoatHinhRes, tvShowsRes, 
-          thaiLanRes, hongKongRes, auMyRes, vietNamRes, kinhDiRes
+          thaiLanRes, hongKongRes, auMyRes, vietNamRes, kinhDiRes,
+          chieuRapRes, hanQuocRes
         ] = await Promise.all([
           api.getNewUpdated(1),
           api.getByCategory("phim-le", 1),
@@ -40,7 +44,10 @@ export default function Home() {
           api.getByCountry("au-my", 1),
           api.getByCountry("viet-nam", 1),
           api.getByGenre("kinh-di", 1),
+          api.getByCategory("phim-chieu-rap", 1),
+          api.getByCountry("han-quoc", 1),
         ]);
+        
         setNewMovies(newRes.items || []);
         setTrending(trendingRes.items || []);
         setSeries(seriesRes.items || []);
@@ -51,6 +58,26 @@ export default function Home() {
         setAuMy(auMyRes.items || []);
         setVietNam(vietNamRes.items || []);
         setKinhDi(kinhDiRes.items || []);
+
+        const heroList = [
+          { ...(newRes.items?.[0] || {}), badge: "🔥 PHIM MỚI CẬP NHẬT" },
+          { ...(trendingRes.items?.[0] || {}), badge: "⭐ PHIM NỔI BẬT" },
+          { ...(chieuRapRes.items?.[0] || {}), badge: "🎬 PHIM CHIẾU RẠP" },
+          { ...(hanQuocRes.items?.[0] || {}), badge: "🇰🇷 PHIM HÀN QUỐC" },
+          { ...(vietNamRes.items?.[0] || {}), badge: "🇻🇳 PHIM VIỆT NAM" },
+        ].filter(m => m && m.slug);
+
+        const heroDetails = await Promise.all(
+          heroList.map(async (movie) => {
+            try {
+              const detail = await api.getMovieDetail(movie.slug);
+              return { ...movie, content: detail.movie?.content || movie.content };
+            } catch (e) {
+              return movie;
+            }
+          })
+        );
+        setHeroMovies(heroDetails);
       } catch (error) {
         console.error("Failed to fetch data", error);
       } finally {
@@ -68,31 +95,19 @@ export default function Home() {
     );
   }
 
-  const heroMovies = [
-    { ...newMovies[0], badge: "🔥 PHIM MỚI CẬP NHẬT" },
-    { ...trending[0], badge: "⭐ PHIM NỔI BẬT" },
-    { ...newMovies[1], badge: "🎬 PHIM CHIẾU RẠP" },
-    { ...series[0], badge: "🇰🇷 PHIM HÀN QUỐC" },
-    { ...trending[1], badge: "🇻🇳 PHIM VIETSUB" },
-  ].filter(m => m && m.name);
-
   return (
     <div className="pb-20">
       {/* Hero Section */}
       {heroMovies.length > 0 && (
-        <div id="hero-banner" className="relative w-full overflow-hidden bg-[#0A0A0A] group/hero aspect-[21/9] max-h-[85vh] min-h-[50vh]">
+        <div id="hero-banner" className="relative w-full overflow-hidden bg-[#0A0A0A] group/hero h-[60vh] md:h-[75vh] lg:h-[85vh]">
           <Swiper
             modules={[Navigation, Pagination, Autoplay, EffectFade]}
             effect="fade"
+            onSwiper={setHeroSwiper}
+            onSlideChange={(swiper) => setActiveHeroIndex(swiper.realIndex)}
             navigation={{
               nextEl: '.hero-next',
               prevEl: '.hero-prev',
-            }}
-            pagination={{
-              clickable: true,
-              el: '.hero-pagination',
-              bulletClass: 'hero-bullet',
-              bulletActiveClass: 'hero-bullet-active',
             }}
             autoplay={{ delay: 5000, disableOnInteraction: false }}
             loop={true}
@@ -104,7 +119,7 @@ export default function Home() {
                   <img
                     src={getImageUrl(movie.thumb_url || movie.poster_url, 'banner')}
                     alt={movie.name}
-                    className="w-full h-full object-cover aspect-video"
+                    className="w-full h-full object-cover"
                   />
                   {/* Gradient overlay from left to right (70% -> 30%) */}
                   <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-black/20" />
@@ -113,7 +128,7 @@ export default function Home() {
                 </div>
 
                 <div className="absolute inset-0 flex items-center">
-                  <div className="max-w-[1440px] w-full mx-auto px-6">
+                  <div className="max-w-[1440px] w-full mx-auto px-16 md:px-24">
                     <div className="max-w-2xl animate-in slide-in-from-left-8 duration-1000">
                       <span className="inline-block bg-[#E50914] text-white text-[12px] font-bold px-3 py-1 rounded-sm tracking-[1px] mb-4">
                         {movie.badge}
@@ -158,15 +173,33 @@ export default function Home() {
           </Swiper>
 
           {/* Custom Navigation */}
-          <button className="hero-prev absolute left-6 top-1/2 -translate-y-1/2 w-[48px] h-[48px] rounded-full bg-black/50 flex items-center justify-center text-white z-20 opacity-0 group-hover/hero:opacity-100 transition-all hover:bg-black/80 backdrop-blur-sm">
-            <ChevronRight className="w-6 h-6 rotate-180" />
+          <button className="hero-prev absolute left-2 md:left-6 top-1/2 -translate-y-1/2 w-[40px] h-[40px] md:w-[48px] md:h-[48px] rounded-full bg-black/50 flex items-center justify-center text-white z-20 opacity-0 group-hover/hero:opacity-100 transition-all hover:bg-black/80 backdrop-blur-sm">
+            <ChevronRight className="w-5 h-5 md:w-6 md:h-6 rotate-180" />
           </button>
-          <button className="hero-next absolute right-6 top-1/2 -translate-y-1/2 w-[48px] h-[48px] rounded-full bg-black/50 flex items-center justify-center text-white z-20 opacity-0 group-hover/hero:opacity-100 transition-all hover:bg-black/80 backdrop-blur-sm">
-            <ChevronRight className="w-6 h-6" />
+          <button className="hero-next absolute right-2 md:right-6 top-1/2 -translate-y-1/2 w-[40px] h-[40px] md:w-[48px] md:h-[48px] rounded-full bg-black/50 flex items-center justify-center text-white z-20 opacity-0 group-hover/hero:opacity-100 transition-all hover:bg-black/80 backdrop-blur-sm">
+            <ChevronRight className="w-5 h-5 md:w-6 md:h-6" />
           </button>
 
-          {/* Custom Pagination */}
-          <div className="hero-pagination absolute bottom-8 right-8 z-20 flex gap-2 justify-end !w-auto"></div>
+          {/* Custom Pagination (Thumbnails) */}
+          <div className="absolute bottom-4 md:bottom-8 right-4 md:right-8 z-20 flex gap-2 md:gap-4 justify-end">
+            {heroMovies.map((movie, index) => (
+              <button
+                key={index}
+                onClick={() => heroSwiper?.slideToLoop(index)}
+                className={`relative overflow-hidden rounded-md transition-all duration-300 ${
+                  activeHeroIndex === index 
+                    ? 'border-2 border-white scale-110 shadow-[0_0_15px_rgba(255,255,255,0.5)] z-10' 
+                    : 'border-2 border-transparent opacity-50 hover:opacity-100'
+                } w-[60px] h-[34px] md:w-[120px] md:h-[68px]`}
+              >
+                <img 
+                  src={getImageUrl(movie.thumb_url || movie.poster_url, 'banner')} 
+                  alt={movie.name}
+                  className="w-full h-full object-cover"
+                />
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

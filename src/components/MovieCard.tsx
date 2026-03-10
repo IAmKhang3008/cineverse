@@ -69,9 +69,9 @@ export default function MovieCard({ movie }: MovieCardProps) {
 
   return (
     <div className="group relative block w-full">
-      <Link to={`/movie/${movie.slug}`} className="block rounded-[12px] overflow-hidden aspect-[2/3] bg-[#121212]  transition-all duration-300 group-hover:scale-[1.05] shadow-[0_10px_20px_rgba(0,0,0,0.5)] _4px_10px_rgba(0,0,0,0.1)] group-hover:shadow-[0_15px_30px_rgba(229,9,20,0.3)] relative border border-transparent ">
+      <Link to={movie.is_tmdb ? `/${movie.slug}` : `/movie/${movie.slug}`} className="block rounded-[12px] overflow-hidden aspect-[2/3] bg-[#121212]  transition-all duration-300 group-hover:scale-[1.05] shadow-[0_10px_20px_rgba(0,0,0,0.5)] _4px_10px_rgba(0,0,0,0.1)] group-hover:shadow-[0_15px_30px_rgba(229,9,20,0.3)] relative border border-transparent ">
         <img
-          src={getImageUrl(movie.poster_url || movie.thumb_url, 'poster')}
+          src={movie.is_tmdb ? movie.thumb_url : getImageUrl(movie.poster_url || movie.thumb_url, 'poster')}
           alt={movie.name}
           className="w-full h-full object-cover transition-opacity duration-300 group-hover:opacity-40 movie-poster"
           loading="lazy"

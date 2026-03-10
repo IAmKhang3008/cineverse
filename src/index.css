@@ -63,6 +63,31 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Swiper Custom Styles */
+.hero-thumb-bullet {
+  width: 60px;
+  height: 40px;
+  border-radius: 8px;
+  background-size: cover;
+  background-position: center;
+  opacity: 0.5;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
+}
+
+.hero-thumb-bullet.swiper-pagination-bullet-active {
+  opacity: 1;
+  border-color: var(--color-cine-primary);
+  transform: scale(1.1);
+}
+
+@media (min-width: 768px) {
+  .hero-thumb-bullet {
+    width: 100px;
+    height: 56px;
+  }
+}
+
 .swiper-button-next,
 .swiper-button-prev {
   position: absolute;

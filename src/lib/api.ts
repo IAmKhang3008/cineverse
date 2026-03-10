@@ -45,4 +45,29 @@ export const api = {
     const data = await res.json();
     return { items: data.data?.items || [], pagination: data.data?.pagination };
   },
+  getTrendingFromTMDB: async () => {
+    try {
+      const apiKey = '15d2ea6d0dc1d476efbca3eba2b9bbfb';
+      const res = await fetch(`https://api.themoviedb.org/3/trending/all/day?api_key=${apiKey}&language=vi-VN`);
+      const data = await res.json();
+      
+      const items = data.results.map((m: any) => ({
+        _id: m.id.toString(),
+        name: m.title || m.name,
+        origin_name: m.original_title || m.original_name,
+        thumb_url: m.poster_path ? `https://image.tmdb.org/t/p/w500${m.poster_path}` : '',
+        poster_url: m.backdrop_path ? `https://image.tmdb.org/t/p/w1280${m.backdrop_path}` : '',
+        year: m.release_date?.split('-')[0] || m.first_air_date?.split('-')[0] || '',
+        is_tmdb: true,
+        tmdb_id: m.id,
+        media_type: m.media_type,
+        content: m.overview,
+        slug: `search?q=${encodeURIComponent(m.title || m.name)}`
+      }));
+      return items;
+    } catch (error) {
+      console.error("TMDB error", error);
+      return [];
+    }
+  },
 };
