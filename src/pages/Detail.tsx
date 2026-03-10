@@ -5,6 +5,7 @@ import { Play, Plus, Star, Clock, Calendar, Globe, Heart, X, ArrowLeft } from "l
 import MovieCard from "@/components/MovieCard";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
+import { decodeHtml } from "@/lib/utils";
 
 export default function Detail() {
   const { slug } = useParams<{ slug: string }>();
@@ -51,7 +52,7 @@ export default function Detail() {
       if (rating) return;
       
       try {
-        const apiKey = import.meta.env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
+        const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
         let tmdbId = movie.tmdb?.id;
         let tmdbType = movie.tmdb?.type || 'movie';
         
@@ -100,7 +101,7 @@ export default function Detail() {
       
       setLoadingCast(true);
       try {
-        const apiKey = import.meta.env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
+        const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
         let tmdbId = movie.tmdb?.id;
         let tmdbType = movie.tmdb?.type || 'movie';
         
@@ -138,7 +139,7 @@ export default function Detail() {
       
       setLoadingImages(true);
       try {
-        const apiKey = import.meta.env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
+        const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
         let tmdbId = movie.tmdb?.id;
         let tmdbType = movie.tmdb?.type || 'movie';
         
@@ -274,9 +275,10 @@ export default function Detail() {
 
           {/* Info */}
           <div className="flex-grow text-center md:text-left pt-4 md:pt-12">
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-heading font-bold text-white  mb-2 tracking-tighter leading-[1.1] drop-shadow-2xl">
-              {movie.name}
-            </h1>
+            <h1 
+              className="text-4xl md:text-5xl lg:text-6xl font-heading font-bold text-white  mb-2 tracking-tighter leading-[1.1] drop-shadow-2xl"
+              dangerouslySetInnerHTML={{ __html: movie.name }}
+            />
             <p className="text-xl text-[#A0A0A0]  mb-6 font-medium drop-shadow-md">
               {movie.year} • {movie.country?.[0]?.name || 'N/A'}
             </p>
@@ -417,33 +419,33 @@ export default function Detail() {
               )}
 
               {activeTab === 'cast' && (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-5 py-5">
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3 md:gap-5 py-5">
                   {loadingCast ? (
                     <div className="col-span-full flex justify-center py-10">
                       <div className="w-8 h-8 border-4 border-[#E50914] border-t-transparent rounded-full animate-spin"></div>
                     </div>
                   ) : cast.length > 0 ? (
                     cast.map((actor: any, idx: number) => (
-                      <div key={idx} className="text-center transition-transform duration-300 hover:-translate-y-1.5">
+                      <div key={idx} className="text-center transition-transform duration-300 hover:-translate-y-1.5 flex flex-col items-center">
                         <img 
                           src={actor.profile_path ? `https://image.tmdb.org/t/p/w185${actor.profile_path}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(actor.name)}&background=random&color=fff&size=185`} 
                           alt={actor.name}
-                          className="w-full aspect-[2/3] object-cover rounded-xl mb-2.5 shadow-[0_5px_15px_rgba(0,0,0,0.5)] bg-[#2A2A2A]"
+                          className="w-20 h-20 md:w-full md:h-auto md:aspect-[2/3] object-cover rounded-full md:rounded-xl mb-2.5 shadow-[0_5px_15px_rgba(0,0,0,0.5)] bg-[#2A2A2A]"
                         />
-                        <div className="font-semibold text-white mb-1 text-sm line-clamp-1" title={actor.name}>{actor.name}</div>
-                        <div className="text-sm text-[#AAAAAA] line-clamp-1" title={actor.character}>{actor.character ? `Vai: ${actor.character}` : ''}</div>
+                        <div className="font-semibold text-white mb-1 text-xs md:text-sm line-clamp-1 w-full" title={decodeHtml(actor.name)}>{decodeHtml(actor.name)}</div>
+                        <div className="text-[10px] md:text-sm text-[#AAAAAA] line-clamp-1 w-full" title={decodeHtml(actor.character)}>{actor.character ? `Vai: ${decodeHtml(actor.character)}` : ''}</div>
                       </div>
                     ))
                   ) : movie.actor && movie.actor.length > 0 && movie.actor[0] !== "Đang cập nhật" ? (
                     // Fallback to PhimAPI actors if TMDB fails
                     movie.actor.map((actorName: string, idx: number) => (
-                      <div key={idx} className="text-center transition-transform duration-300 hover:-translate-y-1.5">
+                      <div key={idx} className="text-center transition-transform duration-300 hover:-translate-y-1.5 flex flex-col items-center">
                         <img 
                           src={`https://ui-avatars.com/api/?name=${encodeURIComponent(actorName)}&background=random&color=fff&size=185`} 
                           alt={actorName}
-                          className="w-full aspect-[2/3] object-cover rounded-xl mb-2.5 shadow-[0_5px_15px_rgba(0,0,0,0.5)] bg-[#2A2A2A]"
+                          className="w-20 h-20 md:w-full md:h-auto md:aspect-[2/3] object-cover rounded-full md:rounded-xl mb-2.5 shadow-[0_5px_15px_rgba(0,0,0,0.5)] bg-[#2A2A2A]"
                         />
-                        <div className="font-semibold text-white mb-1 text-sm line-clamp-1" title={actorName}>{actorName}</div>
+                        <div className="font-semibold text-white mb-1 text-xs md:text-sm line-clamp-1 w-full" title={decodeHtml(actorName)}>{decodeHtml(actorName)}</div>
                       </div>
                     ))
                   ) : (

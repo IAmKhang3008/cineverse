@@ -71,7 +71,42 @@ export default function Home() {
           heroList.map(async (movie) => {
             try {
               const detail = await api.getMovieDetail(movie.slug);
-              return { ...movie, content: detail.movie?.content || movie.content };
+              let highQualityBanner = null;
+              
+              // Try to fetch high quality banner from TMDb
+              try {
+                const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
+                let tmdbId = detail.movie?.tmdb?.id;
+                let tmdbType = detail.movie?.tmdb?.type || 'movie';
+                
+                if (!tmdbId) {
+                  const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.name)}&language=vi-VN`;
+                  const searchRes = await fetch(searchUrl);
+                  const searchData = await searchRes.json();
+                  if (searchData.results && searchData.results.length > 0) {
+                    tmdbId = searchData.results[0].id;
+                    tmdbType = searchData.results[0].media_type || (searchData.results[0].first_air_date ? 'tv' : 'movie');
+                  }
+                }
+
+                if (tmdbId) {
+                  const imagesUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}/images?api_key=${apiKey}`;
+                  const imagesRes = await fetch(imagesUrl);
+                  const imagesData = await imagesRes.json();
+                  if (imagesData.backdrops && imagesData.backdrops.length > 0) {
+                    const sorted = imagesData.backdrops.sort((a: any, b: any) => b.width - a.width);
+                    highQualityBanner = `https://image.tmdb.org/t/p/original${sorted[0].file_path}`;
+                  }
+                }
+              } catch (e) {
+                console.error("Failed to fetch high quality banner", e);
+              }
+
+              return { 
+                ...movie, 
+                content: detail.movie?.content || movie.content,
+                highQualityBanner: highQualityBanner
+              };
             } catch (e) {
               return movie;
             }
@@ -99,7 +134,7 @@ export default function Home() {
     <div className="pb-20">
       {/* Hero Section */}
       {heroMovies.length > 0 && (
-        <div id="hero-banner" className="relative w-full overflow-hidden bg-[#0A0A0A] group/hero h-[60vh] md:h-[75vh] lg:h-[85vh]">
+        <div id="hero-banner" className="relative w-full overflow-hidden bg-[#0A0A0A] group/hero h-[70vh] md:h-[75vh] lg:h-[85vh]">
           <Swiper
             modules={[Navigation, Pagination, Autoplay, EffectFade]}
             effect="fade"
@@ -117,7 +152,7 @@ export default function Home() {
               <SwiperSlide key={`${movie.slug || movie._id || 'hero'}-${index}`} className="relative h-full w-full">
                 <div className="absolute inset-0">
                   <img
-                    src={getImageUrl(movie.thumb_url || movie.poster_url, 'banner')}
+                    src={movie.highQualityBanner || getImageUrl(movie.thumb_url || movie.poster_url, 'banner')}
                     alt={movie.name}
                     className="w-full h-full object-cover"
                   />
@@ -128,18 +163,20 @@ export default function Home() {
                 </div>
 
                 <div className="absolute inset-0 flex items-center">
-                  <div className="max-w-[1440px] w-full mx-auto px-16 md:px-24">
+                  <div className="max-w-[1440px] w-full mx-auto px-6 md:px-16 lg:px-24 mt-10 md:mt-0">
                     <div className="max-w-2xl animate-in slide-in-from-left-8 duration-1000">
-                      <span className="inline-block bg-[#E50914] text-white text-[12px] font-bold px-3 py-1 rounded-sm tracking-[1px] mb-4">
+                      <span className="inline-block bg-[#E50914] text-white text-[10px] md:text-[12px] font-bold px-2 py-1 md:px-3 md:py-1 rounded-sm tracking-[1px] mb-3 md:mb-4">
                         {movie.badge}
                       </span>
-                      <h1 className="text-3xl md:text-5xl lg:text-[48px] font-heading font-bold text-white mb-2 md:mb-4 leading-tight drop-shadow-lg">
-                        {movie.name}
-                      </h1>
-                      <p className="text-sm md:text-[16px] text-[#CCCCCC] max-w-[500px] leading-[1.6] mb-4 md:mb-6 line-clamp-2 md:line-clamp-3">
-                        {movie.content?.replace(/<[^>]*>?/gm, '') || movie.origin_name}
-                      </p>
-                      <div className="flex flex-wrap items-center gap-2 text-xs md:text-[14px] text-gray-400 mb-6 md:mb-8 font-medium">
+                      <h1 
+                        className="text-2xl sm:text-3xl md:text-5xl lg:text-[48px] font-heading font-bold text-white mb-2 md:mb-4 leading-tight drop-shadow-lg"
+                        dangerouslySetInnerHTML={{ __html: movie.name }}
+                      />
+                      <p 
+                        className="text-xs sm:text-sm md:text-[16px] text-[#CCCCCC] max-w-[500px] leading-[1.6] mb-4 md:mb-6 line-clamp-3 md:line-clamp-3"
+                        dangerouslySetInnerHTML={{ __html: movie.content?.replace(/<[^>]*>?/gm, '') || movie.origin_name }}
+                      />
+                      <div className="flex flex-wrap items-center gap-2 text-[10px] sm:text-xs md:text-[14px] text-gray-400 mb-6 md:mb-8 font-medium">
                         <span>{movie.year || new Date().getFullYear()}</span>
                         <span>·</span>
                         <span>{movie.category?.[0]?.name || 'Hành động'}</span>
@@ -173,11 +210,11 @@ export default function Home() {
           </Swiper>
 
           {/* Custom Navigation */}
-          <button className="hero-prev absolute left-2 md:left-6 top-1/2 -translate-y-1/2 w-[40px] h-[40px] md:w-[48px] md:h-[48px] rounded-full bg-black/50 flex items-center justify-center text-white z-20 opacity-0 group-hover/hero:opacity-100 transition-all hover:bg-black/80 backdrop-blur-sm">
-            <ChevronRight className="w-5 h-5 md:w-6 md:h-6 rotate-180" />
+          <button className="hero-prev absolute left-2 md:left-6 top-1/2 -translate-y-1/2 w-[32px] h-[32px] md:w-[48px] md:h-[48px] rounded-full bg-black/50 flex items-center justify-center text-white z-20 opacity-0 group-hover/hero:opacity-100 transition-all hover:bg-black/80 backdrop-blur-sm">
+            <ChevronRight className="w-4 h-4 md:w-6 md:h-6 rotate-180" />
           </button>
-          <button className="hero-next absolute right-2 md:right-6 top-1/2 -translate-y-1/2 w-[40px] h-[40px] md:w-[48px] md:h-[48px] rounded-full bg-black/50 flex items-center justify-center text-white z-20 opacity-0 group-hover/hero:opacity-100 transition-all hover:bg-black/80 backdrop-blur-sm">
-            <ChevronRight className="w-5 h-5 md:w-6 md:h-6" />
+          <button className="hero-next absolute right-2 md:right-6 top-1/2 -translate-y-1/2 w-[32px] h-[32px] md:w-[48px] md:h-[48px] rounded-full bg-black/50 flex items-center justify-center text-white z-20 opacity-0 group-hover/hero:opacity-100 transition-all hover:bg-black/80 backdrop-blur-sm">
+            <ChevronRight className="w-4 h-4 md:w-6 md:h-6" />
           </button>
 
           {/* Custom Pagination (Thumbnails) */}
@@ -186,14 +223,14 @@ export default function Home() {
               <button
                 key={index}
                 onClick={() => heroSwiper?.slideToLoop(index)}
-                className={`relative overflow-hidden rounded-md transition-all duration-300 ${
+                className={`relative overflow-hidden transition-all duration-300 ${
                   activeHeroIndex === index 
                     ? 'border-2 border-white scale-110 shadow-[0_0_15px_rgba(255,255,255,0.5)] z-10' 
                     : 'border-2 border-transparent opacity-50 hover:opacity-100'
-                } w-[60px] h-[34px] md:w-[120px] md:h-[68px]`}
+                } w-10 h-10 rounded-full md:w-[120px] md:h-[68px] md:rounded-md`}
               >
                 <img 
-                  src={getImageUrl(movie.thumb_url || movie.poster_url, 'banner')} 
+                  src={movie.highQualityBanner || getImageUrl(movie.thumb_url || movie.poster_url, 'banner')} 
                   alt={movie.name}
                   className="w-full h-full object-cover"
                 />

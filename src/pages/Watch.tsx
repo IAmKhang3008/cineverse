@@ -5,6 +5,7 @@ import { Play, Settings, SkipForward, Volume2, Maximize, AlertCircle, Film, Hear
 import { useHistory } from "@/hooks/useHistory";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
+import { decodeHtml } from "@/lib/utils";
 
 export default function Watch() {
   const { slug } = useParams<{ slug: string }>();
@@ -231,9 +232,10 @@ export default function Watch() {
             <div className="mb-8">
               <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-4">
                 <div>
-                  <h1 className="text-[24px] font-heading font-bold text-white  mb-2 tracking-tight">
-                    {movie.name}
-                  </h1>
+                  <h1 
+                    className="text-[24px] font-heading font-bold text-white  mb-2 tracking-tight"
+                    dangerouslySetInnerHTML={{ __html: movie.name }}
+                  />
                   <p className="text-[#A0A0A0]  text-sm font-medium flex items-center gap-2">
                     <span>Tập {currentEpisode.name}{movie.episode_total ? `/${movie.episode_total}` : ''}</span>
                     <span>•</span>
@@ -324,11 +326,13 @@ export default function Watch() {
                       />
                     </div>
                     <div className="flex flex-col justify-center">
-                      <h4 className="text-white  font-medium text-sm line-clamp-2 group-hover:text-[#E50914] transition-colors mb-1">
-                        {m.name}
-                      </h4>
+                      <h4 
+                        className="text-white  font-medium text-sm line-clamp-2 group-hover:text-[#E50914] transition-colors mb-1"
+                        title={decodeHtml(m.name)}
+                        dangerouslySetInnerHTML={{ __html: m.name }}
+                      />
                       <p className="text-[#A0A0A0]  text-xs">
-                        {m.year} • {m.episode_current || 'Full'}
+                        {m.year} • {decodeHtml(m.episode_current) || 'Full'}
                       </p>
                     </div>
                   </Link>
