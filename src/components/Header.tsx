@@ -75,6 +75,11 @@ export default function Header() {
       navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
       setIsSearchFocused(false);
       setIsMobileMenuOpen(false);
+      // Blur the input to hide keyboard on mobile
+      const activeElement = document.activeElement as HTMLElement;
+      if (activeElement) {
+        activeElement.blur();
+      }
     }
   };
 
@@ -105,7 +110,15 @@ export default function Header() {
           </button>
 
           <Link to="/" className="flex items-center gap-2 text-xl md:text-3xl font-heading font-bold tracking-wider group relative logo hover:scale-105 transition-transform duration-300">
-            <img src="/logo.png" alt="Cineverse Logo" className="w-8 h-8 md:w-10 md:h-10 object-cover rounded-lg shadow-sm group-hover:shadow-[0_0_15px_rgba(229,9,20,0.5)] transition-shadow duration-300" onError={(e) => e.currentTarget.style.display = 'none'} />
+            <img 
+              src="/logo.png" 
+              alt="Cineverse Logo" 
+              className="w-8 h-8 md:w-10 md:h-10 object-cover rounded-lg shadow-sm group-hover:shadow-[0_0_15px_rgba(229,9,20,0.5)] transition-shadow duration-300" 
+              onError={(e) => {
+                e.currentTarget.onerror = null; 
+                e.currentTarget.src = "https://ui-avatars.com/api/?name=Cine+Verse&background=E50914&color=fff&rounded=true&bold=true";
+              }} 
+            />
             <div className="hidden sm:block">
               <span className="text-white group-hover:text-[#F5C518] transition-colors duration-300">CINE</span>
               <span className="text-[#E50914] verse">VERSE</span>
@@ -152,7 +165,7 @@ export default function Header() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={() => setIsSearchFocused(true)}
                 onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
-                className="bg-transparent border-none outline-none text-sm text-white placeholder:text-gray-500 w-full search-input"
+                className="bg-transparent border-none outline-none text-base md:text-sm text-white placeholder:text-gray-500 w-full search-input"
               />
             </div>
             {isSearchFocused && searchQuery && (

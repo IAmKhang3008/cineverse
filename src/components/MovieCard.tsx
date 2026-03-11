@@ -70,7 +70,7 @@ export default function MovieCard({ movie }: MovieCardProps) {
 
   return (
     <div className="group relative block w-full flex flex-col items-center md:items-start">
-      <Link to={`/movie/${movie.slug}`} className="block w-28 h-28 md:w-full md:h-auto rounded-full md:rounded-[12px] overflow-hidden aspect-square md:aspect-[2/3] bg-[#121212]  transition-all duration-300 group-hover:scale-[1.05] shadow-[0_10px_20px_rgba(0,0,0,0.5)] _4px_10px_rgba(0,0,0,0.1)] group-hover:shadow-[0_15px_30px_rgba(229,9,20,0.3)] relative border border-transparent ">
+      <Link to={`/movie/${movie.slug}`} className="block w-full rounded-[12px] overflow-hidden aspect-[2/3] bg-[#121212] transition-all duration-300 group-hover:scale-[1.05] shadow-[0_10px_20px_rgba(0,0,0,0.5)] group-hover:shadow-[0_15px_30px_rgba(229,9,20,0.3)] relative border border-transparent">
         <img
           src={getImageUrl(movie.poster_url || movie.thumb_url, 'poster')}
           alt={movie.name}

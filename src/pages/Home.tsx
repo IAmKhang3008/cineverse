@@ -227,7 +227,7 @@ export default function Home() {
                   activeHeroIndex === index 
                     ? 'border-2 border-white scale-110 shadow-[0_0_15px_rgba(255,255,255,0.5)] z-10' 
                     : 'border-2 border-transparent opacity-50 hover:opacity-100'
-                } w-10 h-10 rounded-full md:w-[120px] md:h-[68px] md:rounded-md`}
+                } w-8 h-8 rounded-full md:w-[80px] md:h-[45px] md:rounded-md`}
               >
                 <img 
                   src={movie.highQualityBanner || getImageUrl(movie.thumb_url || movie.poster_url, 'banner')} 

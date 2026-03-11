@@ -179,24 +179,23 @@ export default function Watch() {
             allow="autoplay; fullscreen; picture-in-picture"
             frameBorder="0"
           ></iframe>
-          
-          <button 
-            onClick={() => setCinemaMode(!cinemaMode)}
-            className="cinema-mode-btn absolute top-4 right-4 z-10 flex items-center gap-2 bg-black/60 hover:bg-black/80 text-white px-4 py-2 rounded-[40px] font-medium transition-colors backdrop-blur-sm border border-white/10"
-          >
-            <Film className="w-4 h-4" />
-            {cinemaMode ? 'Thoát rạp' : 'Rạp phim'}
-          </button>
         </div>
 
         {/* Player Controls Bar */}
-        <div className={`flex flex-wrap items-center justify-between bg-[#121212]  p-4 rounded-xl border border-white/5  shadow-sm mb-8 gap-4 transition-opacity duration-500 ${cinemaMode ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+        <div className={`flex flex-wrap items-center justify-between bg-[#121212] p-4 rounded-xl border border-white/5 shadow-sm mb-8 gap-4 transition-opacity duration-500`}>
           <div className="flex items-center gap-4 overflow-x-auto custom-scrollbar pb-1 sm:pb-0 w-full sm:w-auto">
             <button className="flex items-center gap-2 text-sm font-medium text-[#A0A0A0]  hover:text-white :text-black transition-colors whitespace-nowrap bg-[#2A2A2A]  px-3 py-1.5 rounded-lg">
-              <Settings className="w-4 h-4" /> Chất lượng: Tự động
+              <Settings className="w-4 h-4" /> Chất lượng: {movie?.quality?.toUpperCase() === 'FHD' ? '1080p' : movie?.quality?.toUpperCase() === 'HD' ? '720p' : movie?.quality || 'Tự động'}
             </button>
             <button className="flex items-center gap-2 text-sm font-medium text-[#A0A0A0]  hover:text-white :text-black transition-colors whitespace-nowrap bg-[#2A2A2A]  px-3 py-1.5 rounded-lg">
               <Volume2 className="w-4 h-4" /> Audio: Gốc
+            </button>
+            <button 
+              onClick={() => setCinemaMode(!cinemaMode)}
+              className="flex items-center gap-2 text-sm font-medium text-[#A0A0A0] hover:text-white transition-colors whitespace-nowrap bg-[#2A2A2A] px-3 py-1.5 rounded-lg"
+            >
+              <Film className="w-4 h-4" />
+              Rạp phim: {cinemaMode ? 'Bật' : 'Tắt'}
             </button>
           </div>
           
