@@ -71,11 +71,11 @@ export default function Profile() {
 
           {/* Actions */}
           <div className="flex flex-col gap-3 w-full md:w-auto mt-6 md:mt-0">
-            <Link to="/settings" className="flex items-center justify-center gap-2 bg-[#2A2A2A] hover:bg-[#333] text-white px-6 py-3 rounded-xl font-medium transition-colors border border-white/5">
+            <Link to="/settings" className="btn flex items-center justify-center gap-2 bg-[#2A2A2A] hover:bg-[#333] text-white px-6 py-3 rounded-xl font-medium transition-colors border border-white/5">
               <Settings className="w-4 h-4" />
               Cài Đặt
             </Link>
-            <button className="flex items-center justify-center gap-2 bg-transparent hover:bg-red-500/10 text-[#E50914] px-6 py-3 rounded-xl font-medium transition-colors border border-[#E50914]/30">
+            <button className="btn flex items-center justify-center gap-2 bg-transparent hover:bg-red-500/10 text-[#E50914] px-6 py-3 rounded-xl font-medium transition-colors border border-[#E50914]/30">
               <LogOut className="w-4 h-4" />
               Đăng Xuất
             </button>
@@ -106,7 +106,7 @@ export default function Profile() {
       </div>
 
       {/* Content */}
-      <div>
+      <div className="tab-content">
         {activeTab === 'favorites' && (
           favorites.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6 gap-y-10">
@@ -119,7 +119,7 @@ export default function Profile() {
               <Heart className="w-12 h-12 mx-auto mb-4 text-[#A0A0A0] opacity-50" />
               <p className="text-xl font-medium">Chưa có phim yêu thích</p>
               <p className="text-sm mt-2">Hãy khám phá và lưu lại những bộ phim bạn thích.</p>
-              <Link to="/movies" className="inline-block mt-6 bg-[#E50914] text-white px-6 py-2 rounded-lg font-medium hover:bg-[#b80710] transition-colors">
+              <Link to="/movies" className="btn inline-block mt-6 bg-[#E50914] text-white px-6 py-2 rounded-lg font-medium hover:bg-[#b80710] transition-colors">
                 Khám phá ngay
               </Link>
             </div>

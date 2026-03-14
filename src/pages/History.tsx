@@ -10,7 +10,7 @@ export default function History() {
     <div className="max-w-[1280px] mx-auto px-6 py-12 mt-16">
       <Link 
         to="/" 
-        className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors font-medium"
+        className="back-btn inline-flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors font-medium"
       >
         <ArrowLeft className="w-5 h-5" />
         Quay lại trang chủ
@@ -23,7 +23,7 @@ export default function History() {
         {history.length > 0 && (
           <button 
             onClick={clearHistory}
-            className="text-sm text-[#E50914] hover:text-[#b80710] transition-colors flex items-center gap-2 font-medium bg-[#E50914]/10 hover:bg-[#E50914]/20 px-4 py-2 rounded-lg"
+            className="btn text-sm text-[#E50914] hover:text-[#b80710] transition-colors flex items-center gap-2 font-medium bg-[#E50914]/10 hover:bg-[#E50914]/20 px-4 py-2 rounded-lg"
           >
             <Trash2 className="w-4 h-4" /> Xóa tất cả
           </button>
@@ -61,7 +61,7 @@ export default function History() {
 
               <button 
                 onClick={() => removeFromHistory(item.slug)}
-                className="p-3 text-[#A0A0A0] hover:text-[#E50914] hover:bg-[#E50914]/10 rounded-xl transition-colors flex-shrink-0"
+                className="btn p-3 text-[#A0A0A0] hover:text-[#E50914] hover:bg-[#E50914]/10 rounded-xl transition-colors flex-shrink-0"
                 title="Xóa khỏi lịch sử"
               >
                 <Trash2 className="w-5 h-5" />

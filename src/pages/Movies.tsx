@@ -86,7 +86,7 @@ export default function Movies() {
     <div className="max-w-[1280px] mx-auto px-6 py-12 mt-16">
       <Link 
         to="/" 
-        className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors font-medium"
+        className="back-btn inline-flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors font-medium"
       >
         <ArrowLeft className="w-5 h-5" />
         Quay lại trang chủ
@@ -172,12 +172,12 @@ export default function Movies() {
         <div className="flex-grow"></div>
 
         <div className="flex items-center gap-3">
-          <button className="bg-[#E50914] hover:bg-[#b80710] text-white px-6 py-2.5 rounded-lg text-sm font-medium transition-colors shadow-[0_4px_14px_rgba(229,9,20,0.4)]">
+          <button className="btn bg-[#E50914] hover:bg-[#b80710] text-white px-6 py-2.5 rounded-lg text-sm font-medium transition-colors shadow-[0_4px_14px_rgba(229,9,20,0.4)]">
             Áp dụng bộ lọc
           </button>
           <button 
             onClick={() => { setSelectedYear(""); setSelectedGenre(""); setSelectedCountry(""); setPage(1); }}
-            className="bg-transparent border border-white/20 hover:bg-white/10 text-white px-6 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+            className="btn bg-transparent border border-white/20 hover:bg-white/10 text-white px-6 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
           >
             <RotateCcw className="w-4 h-4" /> Đặt lại
           </button>
@@ -187,7 +187,7 @@ export default function Movies() {
       {loading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
           {[...Array(10)].map((_, i) => (
-            <div key={i} className="aspect-[2/3] rounded-xl skeleton"></div>
+            <div key={i} className="aspect-[2/3] rounded-xl skeleton-loader bg-[#2A2A2A]"></div>
           ))}
         </div>
       ) : (

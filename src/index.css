@@ -469,3 +469,84 @@ body.cinema-mode .cinema-mode-btn {
   font-weight: 500;
   pointer-events: none;
 }
+
+/* BANNER RESPONSIVE - TỐI ƯU MOBILE/TABLET */
+.hero-banner {
+  position: relative;
+  width: 100vw;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
+  height: 80vh;
+  min-height: 600px;
+  overflow: hidden;
+}
+
+/* MOBILE - THU NHỎ BANNER */
+@media (max-width: 768px) {
+  .hero-banner {
+    height: 60vh;
+    min-height: 450px;
+  }
+  /* ẨN DESCRIPTION TRÊN MOBILE */
+  .movie-description {
+    display: none;
+  }
+  /* Điều chỉnh nội dung */
+  .banner-info {
+    max-width: 90%;
+    padding: 15px;
+    background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);
+    margin-bottom: 20px;
+  }
+  .movie-title {
+    font-size: 24px;
+    margin-bottom: 8px;
+  }
+  .movie-meta {
+    font-size: 12px;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .movie-genres {
+    font-size: 11px;
+    flex-wrap: wrap;
+  }
+  .movie-actions .btn {
+    padding: 8px 16px;
+    font-size: 13px;
+  }
+  /* THUMBNAILS VẪN GIỮ NGUYÊN */
+  .banner-thumbnails {
+    bottom: 10px;
+    padding: 5px 10px;
+  }
+  .thumbnail {
+    width: 50px;
+    height: 28px;
+  }
+}
+
+@media (max-width: 480px) {
+  .hero-banner {
+    height: 50vh;
+    min-height: 400px;
+  }
+  .banner-info {
+    padding: 12px;
+  }
+  .movie-title {
+    font-size: 20px;
+  }
+  .movie-meta {
+    font-size: 11px;
+  }
+  .movie-genres {
+    display: none; /* Ẩn genres trên mobile rất nhỏ */
+  }
+  .thumbnail {
+    width: 40px;
+    height: 23px;
+  }
+}

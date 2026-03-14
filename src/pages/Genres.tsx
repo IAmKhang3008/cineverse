@@ -64,7 +64,7 @@ export default function Genres() {
               setSelectedGenre(genre.slug);
               setPage(1);
             }}
-            className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all ${
+            className={`btn px-5 py-2.5 rounded-full text-sm font-medium transition-all ${
               selectedGenre === genre.slug
                 ? "bg-[#E50914] text-white shadow-[0_4px_14px_rgba(229,9,20,0.4)]"
                 : "bg-[#2A2A2A] text-[#A0A0A0] hover:bg-[#333] hover:text-white"
@@ -78,7 +78,7 @@ export default function Genres() {
       {loading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
           {[...Array(10)].map((_, i) => (
-            <div key={i} className="aspect-[2/3] rounded-xl skeleton"></div>
+            <div key={i} className="aspect-[2/3] rounded-xl skeleton-loader bg-[#2A2A2A]"></div>
           ))}
         </div>
       ) : (
@@ -93,7 +93,7 @@ export default function Genres() {
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="px-6 py-2.5 bg-[#2A2A2A] hover:bg-[#333] disabled:opacity-50 disabled:hover:bg-[#2A2A2A] rounded-lg text-white font-medium transition-colors"
+              className="btn px-6 py-2.5 bg-[#2A2A2A] hover:bg-[#333] disabled:opacity-50 disabled:hover:bg-[#2A2A2A] rounded-lg text-white font-medium transition-colors"
             >
               Trước
             </button>
@@ -104,7 +104,7 @@ export default function Genres() {
             </div>
             <button
               onClick={() => setPage((p) => p + 1)}
-              className="px-6 py-2.5 bg-[#2A2A2A] hover:bg-[#333] rounded-lg text-white font-medium transition-colors"
+              className="btn px-6 py-2.5 bg-[#2A2A2A] hover:bg-[#333] rounded-lg text-white font-medium transition-colors"
             >
               Sau
             </button>

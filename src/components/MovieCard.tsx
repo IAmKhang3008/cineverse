@@ -9,9 +9,10 @@ import { decodeHtml } from "@/lib/utils";
 interface MovieCardProps {
   movie: any;
   key?: React.Key;
+  fromSearch?: boolean;
 }
 
-export default function MovieCard({ movie }: MovieCardProps) {
+export default function MovieCard({ movie, fromSearch }: MovieCardProps) {
   const { isFavorite, toggleFavorite } = useFavorites();
   const favorite = movie ? isFavorite(movie.slug) : false;
   const { showToast } = useToast();
@@ -70,7 +71,7 @@ export default function MovieCard({ movie }: MovieCardProps) {
 
   return (
     <div className="group relative block w-full flex flex-col items-center md:items-start">
-      <Link to={`/movie/${movie.slug}`} className="block w-full rounded-[12px] overflow-hidden aspect-[2/3] bg-[#121212] transition-all duration-300 group-hover:scale-[1.05] shadow-[0_10px_20px_rgba(0,0,0,0.5)] group-hover:shadow-[0_15px_30px_rgba(229,9,20,0.3)] relative border border-transparent">
+      <Link to={`/movie/${movie.slug}`} state={fromSearch ? { fromSearch: true } : undefined} className="block w-full rounded-[12px] overflow-hidden aspect-[2/3] bg-[#121212] transition-all duration-300 group-hover:scale-[1.05] shadow-[0_10px_20px_rgba(0,0,0,0.5)] group-hover:shadow-[0_15px_30px_rgba(229,9,20,0.3)] relative border border-transparent">
         <img
           src={getImageUrl(movie.poster_url || movie.thumb_url, 'poster')}
           alt={movie.name}

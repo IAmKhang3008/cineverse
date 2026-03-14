@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "@/lib/api";
 import MovieCard from "@/components/MovieCard";
+import { motion } from "motion/react";
 
 export default function Search() {
   const [searchParams] = useSearchParams();
@@ -26,7 +27,13 @@ export default function Search() {
   }, [query]);
 
   return (
-    <div className="max-w-[1280px] mx-auto px-6 py-12">
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.5 }}
+      className="max-w-[1280px] mx-auto px-6 py-12"
+    >
       <h1 className="text-3xl font-heading font-bold text-white tracking-wider mb-8 flex items-center gap-3">
         <span className="w-1.5 h-8 bg-[#E50914] rounded-full inline-block"></span>
         Kết quả tìm kiếm cho: <span className="text-[#E50914]">{query}</span>
@@ -41,7 +48,7 @@ export default function Search() {
       ) : movies.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6 gap-y-10">
           {movies.map((movie, index) => (
-            <MovieCard key={`${movie.slug || movie._id || 'search'}-${index}`} movie={movie} />
+            <MovieCard key={`${movie.slug || movie._id || 'search'}-${index}`} movie={movie} fromSearch={true} />
           ))}
         </div>
       ) : (
@@ -50,6 +57,6 @@ export default function Search() {
           <p className="text-sm mt-2">Vui lòng thử lại với từ khóa khác.</p>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }

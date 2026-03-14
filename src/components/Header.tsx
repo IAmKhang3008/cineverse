@@ -187,7 +187,7 @@ export default function Header() {
                           setIsSearchFocused(false);
                           setSearchQuery("");
                         }}
-                        className="w-full text-left px-4 py-3 hover:bg-white/5 flex items-start gap-4 transition-colors border-b border-white/5 last:border-0 group suggestion-item"
+                        className="btn w-full text-left px-4 py-3 hover:bg-white/5 flex items-start gap-4 transition-colors border-b border-white/5 last:border-0 group suggestion-item"
                       >
                         <div className="w-12 h-16 flex-shrink-0 rounded-md overflow-hidden bg-[#2A2A2A] relative suggestion-poster">
                           <img 
@@ -223,7 +223,7 @@ export default function Header() {
                     e.preventDefault();
                     handleSearch(e as any);
                   }}
-                  className="w-full text-center px-4 py-3 text-sm text-[#3B82F6] hover:bg-white/5 flex items-center justify-center gap-2 border-t border-white/5 font-medium transition-colors"
+                  className="btn w-full text-center px-4 py-3 text-sm text-[#3B82F6] hover:bg-white/5 flex items-center justify-center gap-2 border-t border-white/5 font-medium transition-colors"
                 >
                   <Search className="w-4 h-4" /> Xem tất cả kết quả
                 </button>
@@ -234,7 +234,7 @@ export default function Header() {
           <div className="relative">
             <button
               onClick={() => setIsAvatarOpen(!isAvatarOpen)}
-              className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-[#2A2A2A] flex items-center justify-center border-2 border-transparent hover:border-[#F5C518] transition-colors overflow-hidden user-avatar-btn"
+              className="btn w-8 h-8 md:w-10 md:h-10 rounded-full bg-[#2A2A2A] flex items-center justify-center border-2 border-transparent hover:border-[#F5C518] transition-colors overflow-hidden user-avatar-btn"
             >
               <User className="w-4 h-4 md:w-5 md:h-5 text-gray-300" />
             </button>

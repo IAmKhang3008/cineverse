@@ -1,11 +1,12 @@
 import { useEffect, useState, useRef } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { api, getImageUrl } from "@/lib/api";
 import { Play, Settings, SkipForward, Volume2, Maximize, AlertCircle, Film, Heart, ArrowLeft } from "lucide-react";
 import { useHistory } from "@/hooks/useHistory";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
 import { decodeHtml } from "@/lib/utils";
+import { motion } from "motion/react";
 
 export default function Watch() {
   const { slug } = useParams<{ slug: string }>();
@@ -18,6 +19,10 @@ export default function Watch() {
   const [autoPlay, setAutoPlay] = useState(true);
   const [relatedMovies, setRelatedMovies] = useState<any[]>([]);
   
+  const location = useLocation();
+  const navigate = useNavigate();
+  const fromSearch = location.state?.fromSearch;
+
   const { addToHistory, history } = useHistory();
   const { isFavorite, toggleFavorite } = useFavorites();
   const { showToast } = useToast();
@@ -151,20 +156,36 @@ export default function Watch() {
   };
 
   return (
-    <div className="pb-20 transition-all duration-500">
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.5 }}
+      className="pb-20 transition-all duration-500"
+    >
       {/* Cinema Mode Overlay */}
       {cinemaMode && (
         <div className="fixed inset-0 bg-black z-[-1]"></div>
       )}
       
       <div className="max-w-[1280px] mx-auto px-6 py-8 mt-16">
-        <Link 
-          to={`/movie/${slug}`} 
-          className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors font-medium"
-        >
-          <ArrowLeft className="w-5 h-5" />
-          Quay lại
-        </Link>
+        {fromSearch ? (
+          <button 
+            onClick={() => navigate(-1)}
+            className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors font-medium cursor-pointer"
+          >
+            <ArrowLeft className="w-5 h-5" />
+            Quay lại
+          </button>
+        ) : (
+          <Link 
+            to={`/movie/${slug}`} 
+            className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors font-medium"
+          >
+            <ArrowLeft className="w-5 h-5" />
+            Quay lại trang chủ
+          </Link>
+        )}
         
         {/* Player Section */}
         <div 
@@ -232,8 +253,12 @@ export default function Watch() {
               <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-4">
                 <div>
                   <h1 
-                    className="text-[24px] font-heading font-bold text-white  mb-2 tracking-tight"
+                    className="text-[24px] font-heading font-bold text-white  mb-1 tracking-tight"
                     dangerouslySetInnerHTML={{ __html: movie.name }}
+                  />
+                  <h2 
+                    className="text-[18px] text-[#A0A0A0] font-medium mb-2 italic"
+                    dangerouslySetInnerHTML={{ __html: movie.origin_name }}
                   />
                   <p className="text-[#A0A0A0]  text-sm font-medium flex items-center gap-2">
                     <span>Tập {currentEpisode.name}{movie.episode_total ? `/${movie.episode_total}` : ''}</span>
@@ -342,6 +367,6 @@ export default function Watch() {
           
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

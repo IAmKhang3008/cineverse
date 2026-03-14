@@ -9,6 +9,7 @@ import "swiper/css";
 import "swiper/css/navigation";
 import "swiper/css/pagination";
 import "swiper/css/effect-fade";
+import { motion } from "motion/react";
 
 export default function Home() {
   const [newMovies, setNewMovies] = useState<any[]>([]);
@@ -99,7 +100,7 @@ export default function Home() {
                   }
                 }
               } catch (e) {
-                console.error("Failed to fetch high quality banner", e);
+                // Silently fail if high quality banner cannot be fetched (e.g., due to adblockers or CORS)
               }
 
               return { 
@@ -131,10 +132,16 @@ export default function Home() {
   }
 
   return (
-    <div className="pb-20">
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.5 }}
+      className="pb-20"
+    >
       {/* Hero Section */}
       {heroMovies.length > 0 && (
-        <div id="hero-banner" className="relative w-full overflow-hidden bg-[#0A0A0A] group/hero h-[70vh] md:h-[75vh] lg:h-[85vh]">
+        <div id="hero-banner" className="hero-banner bg-[#0A0A0A] group/hero">
           <Swiper
             modules={[Navigation, Pagination, Autoplay, EffectFade]}
             effect="fade"
@@ -164,39 +171,39 @@ export default function Home() {
 
                 <div className="absolute inset-0 flex items-center">
                   <div className="max-w-[1440px] w-full mx-auto px-6 md:px-16 lg:px-24 mt-10 md:mt-0">
-                    <div className="max-w-2xl animate-in slide-in-from-left-8 duration-1000">
+                    <div className="banner-info max-w-2xl animate-in slide-in-from-left-8 duration-1000 rounded-xl">
                       <span className="inline-block bg-[#E50914] text-white text-[10px] md:text-[12px] font-bold px-2 py-1 md:px-3 md:py-1 rounded-sm tracking-[1px] mb-3 md:mb-4">
                         {movie.badge}
                       </span>
                       <h1 
-                        className="text-2xl sm:text-3xl md:text-5xl lg:text-[48px] font-heading font-bold text-white mb-2 md:mb-4 leading-tight drop-shadow-lg"
+                        className="movie-title text-2xl sm:text-3xl md:text-5xl lg:text-[48px] font-heading font-bold text-white mb-2 md:mb-4 leading-tight drop-shadow-lg"
                         dangerouslySetInnerHTML={{ __html: movie.name }}
                       />
                       <p 
-                        className="text-xs sm:text-sm md:text-[16px] text-[#CCCCCC] max-w-[500px] leading-[1.6] mb-4 md:mb-6 line-clamp-3 md:line-clamp-3"
+                        className="movie-description text-[14px] text-[#CCCCCC] max-w-[500px] text-justify leading-[21.5px] mb-4 md:mb-6 line-clamp-3 md:line-clamp-3"
                         dangerouslySetInnerHTML={{ __html: movie.content?.replace(/<[^>]*>?/gm, '') || movie.origin_name }}
                       />
-                      <div className="flex flex-wrap items-center gap-2 text-[10px] sm:text-xs md:text-[14px] text-gray-400 mb-6 md:mb-8 font-medium">
+                      <div className="movie-meta flex flex-wrap items-center gap-2 text-[10px] sm:text-xs md:text-[14px] text-gray-400 mb-6 md:mb-8 font-medium">
                         <span>{movie.year || new Date().getFullYear()}</span>
                         <span>·</span>
-                        <span>{movie.category?.[0]?.name || 'Hành động'}</span>
+                        <span className="movie-genres">{movie.category?.[0]?.name || 'Hành động'}</span>
                         <span>·</span>
                         <span>{movie.time || '120 phút'}</span>
                         <span>·</span>
                         <span className="text-white font-bold border border-white/20 px-1.5 py-0.5 rounded text-[10px] md:text-xs">{movie.quality || 'HD'}</span>
                       </div>
                       
-                      <div className="flex flex-wrap items-center gap-3 md:gap-4">
+                      <div className="movie-actions flex flex-wrap items-center gap-3 md:gap-4">
                         <Link
                           to={`/watch/${movie.slug}`}
-                          className="flex items-center justify-center gap-2 bg-[#E50914] text-white px-6 py-2.5 md:px-[32px] md:py-[12px] rounded-[40px] font-bold text-sm md:text-[16px] transition-all hover:scale-105 shadow-[0_4px_15px_rgba(229,9,20,0.5)]"
+                          className="btn flex items-center justify-center gap-2 bg-[#E50914] text-white px-6 py-2.5 md:px-[32px] md:py-[12px] rounded-[40px] font-bold text-sm md:text-[16px] transition-all hover:scale-105 shadow-[0_4px_15px_rgba(229,9,20,0.5)]"
                         >
                           <Play className="w-4 h-4 md:w-5 md:h-5" fill="currentColor" />
                           Xem ngay
                         </Link>
                         <Link
                           to={`/movie/${movie.slug}`}
-                          className="flex items-center justify-center gap-2 bg-transparent backdrop-blur-[8px] border border-white/30 text-white px-6 py-2.5 md:px-[32px] md:py-[12px] rounded-[40px] font-bold text-sm md:text-[16px] transition-all hover:bg-white/20"
+                          className="btn flex items-center justify-center gap-2 bg-transparent backdrop-blur-[8px] !border !border-solid !border-[#4f4444] text-white px-6 py-2.5 md:px-[32px] md:py-[12px] rounded-[8px] font-bold text-sm md:text-[16px] transition-all hover:bg-white/20"
                         >
                           <Info className="w-4 h-4 md:w-5 md:h-5" />
                           Chi tiết phim
@@ -218,12 +225,12 @@ export default function Home() {
           </button>
 
           {/* Custom Pagination (Thumbnails) */}
-          <div className="absolute bottom-4 md:bottom-8 right-4 md:right-8 z-20 flex gap-2 md:gap-4 justify-end">
+          <div className="banner-thumbnails absolute bottom-4 md:bottom-8 right-4 md:right-8 z-20 flex gap-2 md:gap-4 justify-end">
             {heroMovies.map((movie, index) => (
               <button
                 key={index}
                 onClick={() => heroSwiper?.slideToLoop(index)}
-                className={`relative overflow-hidden transition-all duration-300 ${
+                className={`thumbnail relative overflow-hidden transition-all duration-300 ${
                   activeHeroIndex === index 
                     ? 'border-2 border-white scale-110 shadow-[0_0_15px_rgba(255,255,255,0.5)] z-10' 
                     : 'border-2 border-transparent opacity-50 hover:opacity-100'
@@ -572,6 +579,6 @@ export default function Home() {
           </section>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
