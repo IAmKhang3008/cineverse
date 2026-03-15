@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { Search, User, LogOut, Settings, Heart, History, ChevronDown, Play, Menu, X } from "lucide-react";
-import { cn, DEFAULT_AVATAR } from "@/lib/utils";
+import { cn, DEFAULT_USER_AVATAR } from "@/lib/utils";
 import { api, getImageUrl } from "@/lib/api";
 
 export default function Header() {
@@ -249,11 +249,11 @@ export default function Header() {
             <button
               onClick={() => setIsAvatarOpen(!isAvatarOpen)}
               className={cn(
-                "btn w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center border-2 transition-colors overflow-hidden user-avatar-btn",
+                "btn w-8 h-8 md:w-10 md:h-10 rounded-md flex items-center justify-center border-2 transition-colors overflow-hidden user-avatar-btn",
                 atTop ? "bg-transparent border-white/50 hover:border-white" : "bg-[#2A2A2A] border-transparent hover:border-[#F5C518]"
               )}
             >
-              <img src={DEFAULT_AVATAR} alt="Profile" className={cn("w-full h-full object-cover", atTop ? "opacity-80" : "")} />
+              <img src={DEFAULT_USER_AVATAR} alt="Profile" className={cn("w-full h-full object-cover", atTop ? "opacity-80" : "")} />
             </button>
 
             {isAvatarOpen && (

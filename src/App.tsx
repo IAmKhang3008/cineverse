@@ -23,6 +23,7 @@ import Settings from "./pages/Settings";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { ToastProvider } from "./contexts/ToastContext";
 import { FavoritesProvider } from "./contexts/FavoritesContext";
+import ScrollToTop from "./components/ScrollToTop";
 
 function AnimatedRoutes() {
   const location = useLocation();
@@ -59,6 +60,7 @@ export default function App() {
       <ToastProvider>
         <FavoritesProvider>
           <BrowserRouter>
+            <ScrollToTop />
             <AnimatedRoutes />
           </BrowserRouter>
         </FavoritesProvider>

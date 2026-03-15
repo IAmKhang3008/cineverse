@@ -1,68 +1,125 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { User, Settings, Clock, Heart, Film, Edit3, LogOut } from "lucide-react";
+import { User, Settings, Clock, Heart, Film, Edit3, LogOut, Camera } from "lucide-react";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useHistory } from "@/hooks/useHistory";
 import MovieCard from "@/components/MovieCard";
-import { DEFAULT_AVATAR } from "@/lib/utils";
+import { DEFAULT_USER_AVATAR } from "@/lib/utils";
 
 export default function Profile() {
   const { favorites } = useFavorites();
   const { history } = useHistory();
   const [activeTab, setActiveTab] = useState<'favorites' | 'history'>('favorites');
+  
+  // Ref để kích hoạt input chọn file ẩn
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Mock user data
-  const user = {
+  // 1. Đồng bộ State từ LocalStorage
+  const [userData, setUserData] = useState({
     name: "Nguyễn Văn A",
     email: "nguyenvana@example.com",
-    avatar: DEFAULT_AVATAR,
+    avatar: DEFAULT_USER_AVATAR,
     joinDate: "Tháng 1, 2026",
-    stats: {
-      watched: history.length,
-      hours: Math.floor(history.length * 1.5), // Mock calculation
-      favorites: favorites.length
+  });
+
+  useEffect(() => {
+    const savedData = localStorage.getItem("cineverse_settings");
+    if (savedData) {
+      const parsedData = JSON.parse(savedData);
+      setUserData(prev => ({
+        ...prev,
+        name: parsedData.name || prev.name,
+        email: parsedData.email || prev.email,
+        avatar: parsedData.avatar || prev.avatar, // Lấy avatar nếu có
+      }));
     }
+  }, []);
+
+  // 2. Hàm xử lý đổi ảnh đại diện (PFP)
+  const handleAvatarChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        
+        // Cập nhật state hiển thị ngay lập tức
+        const newUserData = { ...userData, avatar: base64String };
+        setUserData(newUserData);
+
+        // Lưu vào LocalStorage để trang Settings và Header cũng nhận được
+        const savedSettings = JSON.parse(localStorage.getItem("cineverse_settings") || "{}");
+        localStorage.setItem("cineverse_settings", JSON.stringify({
+          ...savedSettings,
+          avatar: base64String
+        }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const stats = {
+    watched: history.length,
+    hours: Math.floor(history.length * 1.5),
+    favorites: favorites.length
   };
 
   return (
     <div className="max-w-[1280px] mx-auto px-6 py-12">
+      {/* Input File ẩn */}
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        onChange={handleAvatarChange} 
+        accept="image/*" 
+        className="hidden" 
+      />
+
       {/* Profile Header */}
       <div className="bg-[#121212] rounded-3xl p-8 border border-white/5 relative overflow-hidden mb-12 shadow-[0_20px_50px_rgba(0,0,0,0.3)]">
-        {/* Background Blur */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-[#E50914]/10 rounded-full blur-[80px] pointer-events-none"></div>
         <div className="absolute bottom-0 left-0 w-64 h-64 bg-[#3B82F6]/10 rounded-full blur-[80px] pointer-events-none"></div>
         
         <div className="relative z-10 flex flex-col md:flex-row items-center md:items-start gap-8">
-          {/* Avatar */}
-          <div className="relative group">
-            <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-[#1A1A1A] shadow-[0_0_20px_rgba(0,0,0,0.5)]">
-              <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
+          
+          {/* Avatar Area - Click để đổi ảnh */}
+          <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+            <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-[#1A1A1A] shadow-[0_0_20px_rgba(0,0,0,0.5)] relative">
+              <img 
+                src={userData.avatar} 
+                alt={userData.name} 
+                className="w-full h-full object-cover transition-transform group-hover:scale-110" 
+              />
+              {/* Overlay khi hover */}
+              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <Camera className="w-8 h-8 text-white/80" />
+              </div>
             </div>
-            <button className="absolute bottom-0 right-0 bg-[#E50914] text-white p-2 rounded-full shadow-lg transform translate-x-1/4 translate-y-1/4 hover:bg-[#b80710] transition-colors">
+            <button className="absolute bottom-0 right-0 bg-[#E50914] text-white p-2 rounded-full shadow-lg transform translate-x-1/4 translate-y-1/4 hover:bg-[#b80710] transition-colors border-4 border-[#121212]">
               <Edit3 className="w-4 h-4" />
             </button>
           </div>
 
-          {/* User Info */}
+          {/* User Info - Đã đồng bộ */}
           <div className="flex-grow text-center md:text-left">
-            <h1 className="text-3xl font-heading font-bold text-white mb-2">{user.name}</h1>
-            <p className="text-[#A0A0A0] mb-6">{user.email} • Tham gia {user.joinDate}</p>
+            <h1 className="text-3xl font-heading font-bold text-white mb-2">{userData.name}</h1>
+            <p className="text-[#A0A0A0] mb-6">{userData.email} • Tham gia {userData.joinDate}</p>
             
             <div className="flex flex-wrap justify-center md:justify-start gap-4 md:gap-8">
               <div className="bg-[#1A1A1A] px-6 py-3 rounded-2xl border border-white/5 text-center min-w-[120px]">
-                <div className="text-2xl font-bold text-white mb-1">{user.stats.watched}</div>
+                <div className="text-2xl font-bold text-white mb-1">{stats.watched}</div>
                 <div className="text-xs text-[#A0A0A0] uppercase tracking-wider font-medium flex items-center justify-center gap-1.5">
                   <Film className="w-3.5 h-3.5 text-[#3B82F6]" /> Phim đã xem
                 </div>
               </div>
               <div className="bg-[#1A1A1A] px-6 py-3 rounded-2xl border border-white/5 text-center min-w-[120px]">
-                <div className="text-2xl font-bold text-white mb-1">{user.stats.hours}</div>
+                <div className="text-2xl font-bold text-white mb-1">{stats.hours}</div>
                 <div className="text-xs text-[#A0A0A0] uppercase tracking-wider font-medium flex items-center justify-center gap-1.5">
                   <Clock className="w-3.5 h-3.5 text-[#10B981]" /> Giờ xem
                 </div>
               </div>
               <div className="bg-[#1A1A1A] px-6 py-3 rounded-2xl border border-white/5 text-center min-w-[120px]">
-                <div className="text-2xl font-bold text-white mb-1">{user.stats.favorites}</div>
+                <div className="text-2xl font-bold text-white mb-1">{stats.favorites}</div>
                 <div className="text-xs text-[#A0A0A0] uppercase tracking-wider font-medium flex items-center justify-center gap-1.5">
                   <Heart className="w-3.5 h-3.5 text-[#E50914]" /> Yêu thích
                 </div>

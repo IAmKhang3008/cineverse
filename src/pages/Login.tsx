@@ -1,9 +1,55 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Mail, Lock, User, ArrowRight } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export default function Login() {
   const [isLogin, setIsLogin] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [shake, setShake] = useState(false);
+  
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  
+  const navigate = useNavigate();
+
+  const triggerShake = () => {
+    setShake(true);
+    setTimeout(() => setShake(false), 300);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!isLogin && password !== confirmPassword) {
+      alert("Mật khẩu nhập lại không chính xác!");
+      triggerShake();
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    if (isLogin) {
+      // Giả lập gọi API mất 1.5 giây
+      setTimeout(() => {
+        setIsSubmitting(false);
+        alert("Chào mừng bạn trở lại với Cineverse!");
+        navigate('/');
+      }, 1500);
+    } else {
+      // Giả lập quá trình tạo tài khoản
+      setTimeout(() => {
+        setIsSubmitting(false);
+        alert(`Chúc mừng ${username || email}, bạn đã gia nhập vũ trụ Cineverse!`);
+        // Tự động chuyển về box đăng nhập sau khi đăng ký thành công
+        setIsLogin(true);
+        setPassword("");
+        setConfirmPassword("");
+      }, 2000);
+    }
+  };
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center px-6 relative py-12">
@@ -18,7 +64,10 @@ export default function Login() {
         <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0A] via-[#0A0A0A]/80 to-transparent" />
       </div>
 
-      <div className="w-full max-w-md bg-[#121212]/80 backdrop-blur-xl p-8 md:p-10 rounded-3xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative z-10">
+      <div className={cn(
+        "w-full max-w-md bg-[#121212]/80 backdrop-blur-xl p-8 md:p-10 rounded-3xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative z-10 transition-all duration-300",
+        shake ? "error-shake" : ""
+      )}>
         <div className="text-center mb-8">
           <h1 className="text-3xl font-heading font-bold text-white mb-2">
             {isLogin ? "Chào mừng trở lại" : "Tạo tài khoản mới"}
@@ -28,7 +77,7 @@ export default function Login() {
           </p>
         </div>
 
-        <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
+        <form className="space-y-5" onSubmit={handleSubmit}>
           {!isLogin && (
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
@@ -37,6 +86,9 @@ export default function Login() {
               <input 
                 type="text" 
                 placeholder="Tên hiển thị" 
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required={!isLogin}
                 className="w-full bg-[#0A0A0A] border border-white/10 text-white rounded-xl pl-12 pr-4 py-4 focus:outline-none focus:border-[#E50914] focus:ring-1 focus:ring-[#E50914] transition-all"
               />
             </div>
@@ -49,6 +101,9 @@ export default function Login() {
             <input 
               type="email" 
               placeholder="Email của bạn" 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
               className="w-full bg-[#0A0A0A] border border-white/10 text-white rounded-xl pl-12 pr-4 py-4 focus:outline-none focus:border-[#E50914] focus:ring-1 focus:ring-[#E50914] transition-all"
             />
           </div>
@@ -60,9 +115,28 @@ export default function Login() {
             <input 
               type="password" 
               placeholder="Mật khẩu" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
               className="w-full bg-[#0A0A0A] border border-white/10 text-white rounded-xl pl-12 pr-4 py-4 focus:outline-none focus:border-[#E50914] focus:ring-1 focus:ring-[#E50914] transition-all"
             />
           </div>
+
+          {!isLogin && (
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                <Lock className="h-5 w-5 text-[#A0A0A0]" />
+              </div>
+              <input 
+                type="password" 
+                placeholder="Nhập lại mật khẩu" 
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required={!isLogin}
+                className="w-full bg-[#0A0A0A] border border-white/10 text-white rounded-xl pl-12 pr-4 py-4 focus:outline-none focus:border-[#E50914] focus:ring-1 focus:ring-[#E50914] transition-all"
+              />
+            </div>
+          )}
 
           {isLogin && (
             <div className="flex justify-end">
@@ -70,9 +144,20 @@ export default function Login() {
             </div>
           )}
 
-          <button className="w-full bg-[#E50914] hover:bg-[#b80710] text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-[0_4px_14px_rgba(229,9,20,0.4)] hover:shadow-[0_6px_20px_rgba(229,9,20,0.6)] hover:-translate-y-0.5">
-            {isLogin ? "Đăng Nhập" : "Đăng Ký"}
-            <ArrowRight className="w-5 h-5" />
+          <button 
+            type="submit"
+            disabled={isSubmitting}
+            className={cn(
+              "w-full bg-[#E50914] hover:bg-[#b80710] text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-[0_4px_14px_rgba(229,9,20,0.4)] hover:shadow-[0_6px_20px_rgba(229,9,20,0.6)] btn-primary",
+              isSubmitting ? "opacity-70 cursor-not-allowed" : "hover:-translate-y-0.5"
+            )}
+          >
+            {isSubmitting ? "ĐANG XỬ LÝ..." : (
+              <>
+                {isLogin ? "Đăng Nhập" : "Đăng Ký"}
+                <ArrowRight className="w-5 h-5" />
+              </>
+            )}
           </button>
         </form>
 
@@ -108,7 +193,12 @@ export default function Login() {
         <p className="text-center text-[#A0A0A0] mt-8">
           {isLogin ? "Chưa có tài khoản?" : "Đã có tài khoản?"}{" "}
           <button 
-            onClick={() => setIsLogin(!isLogin)}
+            onClick={() => {
+              setIsLogin(!isLogin);
+              setUsername("");
+              setPassword("");
+              setConfirmPassword("");
+            }}
             className="text-white font-semibold hover:text-[#E50914] transition-colors"
           >
             {isLogin ? "Đăng ký ngay" : "Đăng nhập"}
