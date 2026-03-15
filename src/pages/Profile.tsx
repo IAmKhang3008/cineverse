@@ -4,6 +4,7 @@ import { User, Settings, Clock, Heart, Film, Edit3, LogOut } from "lucide-react"
 import { useFavorites } from "@/hooks/useFavorites";
 import { useHistory } from "@/hooks/useHistory";
 import MovieCard from "@/components/MovieCard";
+import { DEFAULT_AVATAR } from "@/lib/utils";
 
 export default function Profile() {
   const { favorites } = useFavorites();
@@ -14,7 +15,7 @@ export default function Profile() {
   const user = {
     name: "Nguyễn Văn A",
     email: "nguyenvana@example.com",
-    avatar: "https://i.pravatar.cc/150?u=a042581f4e29026024d",
+    avatar: DEFAULT_AVATAR,
     joinDate: "Tháng 1, 2026",
     stats: {
       watched: history.length,

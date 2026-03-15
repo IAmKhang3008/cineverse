@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { Search, User, LogOut, Settings, Heart, History, ChevronDown, Play, Menu, X } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, DEFAULT_AVATAR } from "@/lib/utils";
 import { api, getImageUrl } from "@/lib/api";
 
 export default function Header() {
@@ -163,8 +163,22 @@ export default function Header() {
                 placeholder="Tìm kiếm..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                onFocus={() => setIsSearchFocused(true)}
-                onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+                onFocus={() => {
+                  setIsSearchFocused(true);
+                  const viewportMeta = document.querySelector('meta[name=viewport]');
+                  if (viewportMeta) {
+                    viewportMeta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
+                  }
+                }}
+                onBlur={() => {
+                  setTimeout(() => setIsSearchFocused(false), 200);
+                  setTimeout(() => {
+                    const viewportMeta = document.querySelector('meta[name=viewport]');
+                    if (viewportMeta) {
+                      viewportMeta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes');
+                    }
+                  }, 300);
+                }}
                 className="bg-transparent border-none outline-none text-base md:text-sm text-white placeholder:text-gray-500 w-full search-input"
               />
             </div>
@@ -234,9 +248,12 @@ export default function Header() {
           <div className="relative">
             <button
               onClick={() => setIsAvatarOpen(!isAvatarOpen)}
-              className="btn w-8 h-8 md:w-10 md:h-10 rounded-full bg-[#2A2A2A] flex items-center justify-center border-2 border-transparent hover:border-[#F5C518] transition-colors overflow-hidden user-avatar-btn"
+              className={cn(
+                "btn w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center border-2 transition-colors overflow-hidden user-avatar-btn",
+                atTop ? "bg-transparent border-white/50 hover:border-white" : "bg-[#2A2A2A] border-transparent hover:border-[#F5C518]"
+              )}
             >
-              <User className="w-4 h-4 md:w-5 md:h-5 text-gray-300" />
+              <img src={DEFAULT_AVATAR} alt="Profile" className={cn("w-full h-full object-cover", atTop ? "opacity-80" : "")} />
             </button>
 
             {isAvatarOpen && (

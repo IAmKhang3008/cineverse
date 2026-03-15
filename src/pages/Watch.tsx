@@ -5,7 +5,7 @@ import { Play, Settings, SkipForward, Volume2, Maximize, AlertCircle, Film, Hear
 import { useHistory } from "@/hooks/useHistory";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
-import { decodeHtml } from "@/lib/utils";
+import { decodeHtml, cn } from "@/lib/utils";
 import { motion } from "motion/react";
 
 export default function Watch() {
@@ -165,14 +165,14 @@ export default function Watch() {
     >
       {/* Cinema Mode Overlay */}
       {cinemaMode && (
-        <div className="fixed inset-0 bg-black z-[-1]"></div>
+        <div className="fixed inset-0 bg-black/95 z-[40]"></div>
       )}
       
       <div className="max-w-[1280px] mx-auto px-6 py-8 mt-16">
         {fromSearch ? (
           <button 
             onClick={() => navigate(-1)}
-            className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors font-medium cursor-pointer"
+            className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors font-medium cursor-pointer relative z-50"
           >
             <ArrowLeft className="w-5 h-5" />
             Quay lại
@@ -180,7 +180,7 @@ export default function Watch() {
         ) : (
           <Link 
             to={`/movie/${slug}`} 
-            className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors font-medium"
+            className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors font-medium relative z-50"
           >
             <ArrowLeft className="w-5 h-5" />
             Quay lại trang chủ
@@ -190,7 +190,10 @@ export default function Watch() {
         {/* Player Section */}
         <div 
           ref={playerRef}
-          className="relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/10 mb-4 transition-all duration-500 video-container"
+          className={cn(
+            "relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/10 mb-4 transition-all duration-500 video-container",
+            cinemaMode ? "z-50" : ""
+          )}
         >
           <iframe
             src={currentEpisode.link_embed}
@@ -203,7 +206,10 @@ export default function Watch() {
         </div>
 
         {/* Player Controls Bar */}
-        <div className={`flex flex-wrap items-center justify-between bg-[#121212] p-4 rounded-xl border border-white/5 shadow-sm mb-8 gap-4 transition-opacity duration-500`}>
+        <div className={cn(
+          "flex flex-wrap items-center justify-between bg-[#121212] p-4 rounded-xl border border-white/5 shadow-sm mb-8 gap-4 transition-opacity duration-500",
+          cinemaMode ? "relative z-50" : ""
+        )}>
           <div className="flex items-center gap-4 overflow-x-auto custom-scrollbar pb-1 sm:pb-0 w-full sm:w-auto">
             <button className="flex items-center gap-2 text-sm font-medium text-[#A0A0A0]  hover:text-white :text-black transition-colors whitespace-nowrap bg-[#2A2A2A]  px-3 py-1.5 rounded-lg">
               <Settings className="w-4 h-4" /> Chất lượng: {movie?.quality?.toUpperCase() === 'FHD' ? '1080p' : movie?.quality?.toUpperCase() === 'HD' ? '720p' : movie?.quality || 'Tự động'}
@@ -261,7 +267,11 @@ export default function Watch() {
                     dangerouslySetInnerHTML={{ __html: movie.origin_name }}
                   />
                   <p className="text-[#A0A0A0]  text-sm font-medium flex items-center gap-2">
-                    <span>Tập {currentEpisode.name}{movie.episode_total ? `/${movie.episode_total}` : ''}</span>
+                    <span>
+                      {currentEpisode.name.toLowerCase().includes('full') 
+                        ? 'Tập Full' 
+                        : `Tập ${currentEpisode.name.replace(/^Tập\s+/i, '')}${movie.episode_total && movie.episode_total !== "1" && movie.episode_total !== "Full" ? `/${movie.episode_total}` : ''}`}
+                    </span>
                     <span>•</span>
                     <span className="text-white  font-bold">{movie.quality || 'HD'}</span>
                     <span>•</span>

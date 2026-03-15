@@ -5,7 +5,8 @@ import { Play, Plus, Star, Clock, Calendar, Globe, Heart, X, ArrowLeft } from "l
 import MovieCard from "@/components/MovieCard";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
-import { decodeHtml } from "@/lib/utils";
+import { decodeHtml, DEFAULT_AVATAR } from "@/lib/utils";
+import { fetchWithCache } from "@/lib/tmdb";
 import { motion, AnimatePresence } from "motion/react";
 
 export default function Detail() {
@@ -61,9 +62,9 @@ export default function Detail() {
         let tmdbType = movie.tmdb?.type || 'movie';
         
         if (!tmdbId) {
-          const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.name)}&language=vi-VN`;
-          const searchRes = await fetch(searchUrl);
-          const searchData = await searchRes.json();
+          const yearQuery = movie.year ? `&year=${movie.year}` : '';
+          const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.origin_name || movie.name)}${yearQuery}&language=vi-VN`;
+          const searchData = await fetchWithCache(searchUrl, `tmdb_search_${movie.slug}`, 3600000);
           if (searchData.results && searchData.results.length > 0) {
             tmdbId = searchData.results[0].id;
             tmdbType = searchData.results[0].media_type || (searchData.results[0].first_air_date ? 'tv' : 'movie');
@@ -72,8 +73,7 @@ export default function Detail() {
 
         if (tmdbId) {
           const detailsUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=vi-VN`;
-          const detailsRes = await fetch(detailsUrl);
-          const detailsData = await detailsRes.json();
+          const detailsData = await fetchWithCache(detailsUrl, `tmdb_details_${tmdbType}_${tmdbId}`, 3600000);
           if (detailsData.vote_average) {
             let formattedVotes = '';
             if (detailsData.vote_count) {
@@ -110,9 +110,9 @@ export default function Detail() {
         let tmdbType = movie.tmdb?.type || 'movie';
         
         if (!tmdbId) {
-          const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.name)}&language=vi-VN`;
-          const searchRes = await fetch(searchUrl);
-          const searchData = await searchRes.json();
+          const yearQuery = movie.year ? `&year=${movie.year}` : '';
+          const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.origin_name || movie.name)}${yearQuery}&language=vi-VN`;
+          const searchData = await fetchWithCache(searchUrl, `tmdb_search_${movie.slug}`, 3600000);
           if (searchData.results && searchData.results.length > 0) {
             tmdbId = searchData.results[0].id;
             tmdbType = searchData.results[0].media_type || (searchData.results[0].first_air_date ? 'tv' : 'movie');
@@ -121,8 +121,7 @@ export default function Detail() {
 
         if (tmdbId) {
           const creditsUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}/credits?api_key=${apiKey}&language=vi-VN`;
-          const creditsRes = await fetch(creditsUrl);
-          const creditsData = await creditsRes.json();
+          const creditsData = await fetchWithCache(creditsUrl, `tmdb_credits_${tmdbType}_${tmdbId}`, 3600000);
           if (creditsData.cast) {
             setCast(creditsData.cast.slice(0, 12));
           }
@@ -148,9 +147,9 @@ export default function Detail() {
         let tmdbType = movie.tmdb?.type || 'movie';
         
         if (!tmdbId) {
-          const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.name)}&language=vi-VN`;
-          const searchRes = await fetch(searchUrl);
-          const searchData = await searchRes.json();
+          const yearQuery = movie.year ? `&year=${movie.year}` : '';
+          const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.origin_name || movie.name)}${yearQuery}&language=vi-VN`;
+          const searchData = await fetchWithCache(searchUrl, `tmdb_search_${movie.slug}`, 3600000);
           if (searchData.results && searchData.results.length > 0) {
             tmdbId = searchData.results[0].id;
             tmdbType = searchData.results[0].media_type || (searchData.results[0].first_air_date ? 'tv' : 'movie');
@@ -159,8 +158,7 @@ export default function Detail() {
 
         if (tmdbId) {
           const imagesUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}/images?api_key=${apiKey}`;
-          const imagesRes = await fetch(imagesUrl);
-          const imagesData = await imagesRes.json();
+          const imagesData = await fetchWithCache(imagesUrl, `tmdb_images_${tmdbType}_${tmdbId}`, 3600000);
           if (imagesData.backdrops) {
             setImages(imagesData.backdrops.slice(0, 12));
           }
@@ -470,7 +468,7 @@ export default function Detail() {
                           cast.map((actor: any, idx: number) => (
                             <div key={idx} className="text-center transition-transform duration-300 hover:-translate-y-1.5 flex flex-col items-center">
                               <img 
-                                src={actor.profile_path ? `https://image.tmdb.org/t/p/w185${actor.profile_path}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(actor.name)}&background=random&color=fff&size=185`} 
+                                src={actor.profile_path ? `https://image.tmdb.org/t/p/w185${actor.profile_path}` : DEFAULT_AVATAR} 
                                 alt={actor.name}
                                 className="w-20 h-20 md:w-full md:h-auto md:aspect-[2/3] object-cover rounded-full md:rounded-xl mb-2.5 shadow-[0_5px_15px_rgba(0,0,0,0.5)] bg-[#2A2A2A]"
                               />
@@ -483,7 +481,7 @@ export default function Detail() {
                           movie.actor.map((actorName: string, idx: number) => (
                             <div key={idx} className="text-center transition-transform duration-300 hover:-translate-y-1.5 flex flex-col items-center">
                               <img 
-                                src={`https://ui-avatars.com/api/?name=${encodeURIComponent(actorName)}&background=random&color=fff&size=185`} 
+                                src={DEFAULT_AVATAR} 
                                 alt={actorName}
                                 className="w-20 h-20 md:w-full md:h-auto md:aspect-[2/3] object-cover rounded-full md:rounded-xl mb-2.5 shadow-[0_5px_15px_rgba(0,0,0,0.5)] bg-[#2A2A2A]"
                               />
