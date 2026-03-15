@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Search, User, LogOut, Settings, Heart, History, ChevronDown, Play, Menu, X } from "lucide-react";
+import { Search, User, LogOut, Settings, Heart, History, ChevronDown, Play, Menu, X, LogIn, Bell } from "lucide-react";
 import { cn, DEFAULT_USER_AVATAR } from "@/lib/utils";
 import { api, getImageUrl } from "@/lib/api";
 
@@ -15,6 +15,57 @@ export default function Header() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userData, setUserData] = useState({
+    name: "Khách",
+    email: "guest@cineverse.com",
+    avatar: DEFAULT_USER_AVATAR
+  });
+
+  // Kiểm tra đăng nhập và lấy dữ liệu từ LocalStorage
+  useEffect(() => {
+    const checkAuth = () => {
+      const savedData = localStorage.getItem("cineverse_settings");
+      if (savedData) {
+        const parsed = JSON.parse(savedData);
+        setUserData({
+          name: parsed.name || "Người dùng",
+          email: parsed.email || "",
+          avatar: parsed.avatar || DEFAULT_USER_AVATAR
+        });
+        setIsLoggedIn(true);
+      } else {
+        setIsLoggedIn(false);
+        setUserData({
+          name: "Khách",
+          email: "guest@cineverse.com",
+          avatar: DEFAULT_USER_AVATAR
+        });
+      }
+    };
+
+    // Kiểm tra ngay lần đầu tiên component mount
+    checkAuth();
+
+    // Lắng nghe tín hiệu cập nhật TRONG CÙNG MỘT TAB
+    window.addEventListener("local-storage-update", checkAuth);
+    
+    // Lắng nghe thay đổi TỪ TAB KHÁC (giữ nguyên để đồng bộ)
+    window.addEventListener("storage", checkAuth);
+
+    return () => {
+      window.removeEventListener("local-storage-update", checkAuth);
+      window.removeEventListener("storage", checkAuth);
+    };
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem("cineverse_settings");
+    setIsLoggedIn(false);
+    setIsAvatarOpen(false);
+    navigate("/");
+  };
 
   useEffect(() => {
     const handleScroll = () => {
@@ -245,35 +296,75 @@ export default function Header() {
             )}
           </form>
 
-          <div className="relative">
-            <button
-              onClick={() => setIsAvatarOpen(!isAvatarOpen)}
-              className={cn(
-                "btn w-8 h-8 md:w-10 md:h-10 rounded-md flex items-center justify-center border-2 transition-colors overflow-hidden user-avatar-btn",
-                atTop ? "bg-transparent border-white/50 hover:border-white" : "bg-[#2A2A2A] border-transparent hover:border-[#F5C518]"
-              )}
-            >
-              <img src={DEFAULT_USER_AVATAR} alt="Profile" className={cn("w-full h-full object-cover", atTop ? "opacity-80" : "")} />
-            </button>
-
-            {isAvatarOpen && (
-              <div className="absolute right-0 mt-3 w-56 bg-[#121212] border border-white/10 rounded-xl shadow-2xl py-2 z-50">
-                <div className="px-4 py-3 border-b border-white/10 mb-2">
-                  <p className="text-sm font-medium text-white">Khách</p>
-                  <p className="text-xs text-gray-500">guest@cineverse.com</p>
-                </div>
-                <Link to="/profile" onClick={() => setIsAvatarOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-300 hover:bg-white/5 hover:text-white transition-colors">
-                  <User className="w-4 h-4" /> Hồ sơ
-                </Link>
-                <Link to="/settings" onClick={() => setIsAvatarOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-300 hover:bg-white/5 hover:text-white transition-colors">
-                  <Settings className="w-4 h-4" /> Cài đặt
-                </Link>
-                <div className="h-px bg-white/10 my-2" />
-                <Link to="/login" onClick={() => setIsAvatarOpen(false)} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[#E50914] hover:bg-white/5 transition-colors">
-                  <LogOut className="w-4 h-4" /> Đăng xuất
-                </Link>
-              </div>
+          <div className="flex items-center gap-3 md:gap-4">
+            {isLoggedIn && (
+              <button className="relative p-2 text-gray-400 hover:text-[#F5C518] transition-colors group">
+                <Bell className="w-6 h-6" />
+                {/* Chấm đỏ thông báo */}
+                <span className="absolute top-2 right-2 w-2 h-2 bg-[#E50914] rounded-full border-2 border-[#121212] group-hover:scale-125 transition-transform"></span>
+              </button>
             )}
+
+            <div className="relative">
+              {!isLoggedIn ? (
+                // NÚT ĐĂNG NHẬP (Khi chưa login)
+                <Link 
+                  to="/login" 
+                  className="flex items-center gap-2 bg-[#E50914] hover:bg-[#b80710] text-white px-4 py-2 rounded-lg text-sm font-bold transition-all active:scale-95 shadow-lg"
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span className="hidden sm:inline">Đăng nhập</span>
+                </Link>
+              ) : (
+                // AVATAR (Khi đã login)
+                <>
+                  <button
+                    onClick={() => setIsAvatarOpen(!isAvatarOpen)}
+                    className={cn(
+                      "w-9 h-9 md:w-11 md:h-11 rounded-full flex items-center justify-center border-2 transition-all overflow-hidden shadow-md",
+                      atTop ? "border-white/30 hover:border-white" : "border-transparent hover:border-[#E50914]"
+                    )}
+                  >
+                    <img 
+                      src={userData.avatar} 
+                      alt="Profile" 
+                      className="w-full h-full object-cover" 
+                    />
+                  </button>
+
+                  {isAvatarOpen && (
+                    <div className="absolute right-0 mt-3 w-60 bg-[#121212] border border-white/10 rounded-2xl shadow-2xl py-2 z-50 animate-in fade-in zoom-in duration-200">
+                      <div className="px-4 py-4 border-b border-white/5 mb-2 flex items-center gap-3">
+                        <img src={userData.avatar} className="w-10 h-10 rounded-full object-cover border border-white/10" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-white truncate">{userData.name}</p>
+                          <p className="text-[10px] text-gray-500 truncate">{userData.email}</p>
+                        </div>
+                      </div>
+                      
+                      <Link to="/profile" onClick={() => setIsAvatarOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-300 hover:bg-white/5 hover:text-white transition-colors">
+                        <User className="w-4 h-4 text-[#3B82F6]" /> Hồ sơ của tôi
+                      </Link>
+                      <Link to="/settings" onClick={() => setIsAvatarOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-300 hover:bg-white/5 hover:text-white transition-colors">
+                        <Settings className="w-4 h-4 text-gray-400" /> Cài đặt
+                      </Link>
+                      <Link to="/favorites" onClick={() => setIsAvatarOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-300 hover:bg-white/5 hover:text-white transition-colors">
+                        <Heart className="w-4 h-4 text-[#E50914]" /> Danh sách yêu thích
+                      </Link>
+
+                      <div className="h-px bg-white/5 my-2" />
+                      
+                      <button 
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-500 hover:bg-red-500/10 transition-colors font-medium"
+                      >
+                        <LogOut className="w-4 h-4" /> Đăng xuất
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>

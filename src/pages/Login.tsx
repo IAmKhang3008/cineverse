@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Mail, Lock, User, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -35,6 +35,21 @@ export default function Login() {
       // Giả lập gọi API mất 1.5 giây
       setTimeout(() => {
         setIsSubmitting(false);
+        
+        // Lưu thông tin đăng nhập
+        const mockUserData = {
+          name: "Nguyễn Văn A",
+          email: email,
+          theme: "dark",
+          emailNotifications: true,
+          pushNotifications: false,
+          twoFactor: false
+        };
+        localStorage.setItem("cineverse_settings", JSON.stringify(mockUserData));
+        
+        // Bắn sự kiện để Header cập nhật
+        window.dispatchEvent(new Event("local-storage-update"));
+
         alert("Chào mừng bạn trở lại với Cineverse!");
         navigate('/');
       }, 1500);
@@ -152,7 +167,7 @@ export default function Login() {
               isSubmitting ? "opacity-70 cursor-not-allowed" : "hover:-translate-y-0.5"
             )}
           >
-            {isSubmitting ? "ĐANG XỬ LÝ..." : (
+            {isSubmitting ? "Đang xử lý..." : (
               <>
                 {isLogin ? "Đăng Nhập" : "Đăng Ký"}
                 <ArrowRight className="w-5 h-5" />

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { User, Settings, Clock, Heart, Film, Edit3, LogOut, Camera } from "lucide-react";
 import { useFavorites } from "@/hooks/useFavorites";
