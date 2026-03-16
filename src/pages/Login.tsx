@@ -37,13 +37,15 @@ export default function Login() {
         setIsSubmitting(false);
         
         // Lưu thông tin đăng nhập
+        const currentData = JSON.parse(localStorage.getItem("cineverse_settings") || "{}");
         const mockUserData = {
-          name: "Nguyễn Văn A",
+          ...currentData,
+          name: currentData.name || "Người dùng",
           email: email,
-          theme: "dark",
-          emailNotifications: true,
-          pushNotifications: false,
-          twoFactor: false
+          theme: currentData.theme || "dark",
+          emailNotifications: currentData.emailNotifications ?? true,
+          pushNotifications: currentData.pushNotifications ?? false,
+          twoFactor: currentData.twoFactor ?? false
         };
         localStorage.setItem("cineverse_settings", JSON.stringify(mockUserData));
         
@@ -57,11 +59,27 @@ export default function Login() {
       // Giả lập quá trình tạo tài khoản
       setTimeout(() => {
         setIsSubmitting(false);
+        
+        const currentData = JSON.parse(localStorage.getItem("cineverse_settings") || "{}");
+        const newData = {
+          ...currentData,
+          name: username || "Người dùng", // Lấy giá trị từ Input, KHÔNG viết cứng "Nguyễn Văn A"
+          email: email,
+          avatar: currentData.avatar || undefined,
+          theme: "dark",
+          emailNotifications: true,
+          pushNotifications: false,
+          twoFactor: false
+        };
+
+        localStorage.setItem("cineverse_settings", JSON.stringify(newData));
+        
+        // Quan trọng: Bắn sự kiện để Header và các trang khác cập nhật ngay lập tức
+        window.dispatchEvent(new Event("local-storage-update"));
+
         alert(`Chúc mừng ${username || email}, bạn đã gia nhập vũ trụ Cineverse!`);
-        // Tự động chuyển về box đăng nhập sau khi đăng ký thành công
-        setIsLogin(true);
-        setPassword("");
-        setConfirmPassword("");
+        // Tự động chuyển về trang chủ sau khi đăng ký thành công
+        navigate('/');
       }, 2000);
     }
   };

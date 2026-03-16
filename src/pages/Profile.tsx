@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { User, Settings, Clock, Heart, Film, Edit3, LogOut, Camera } from "lucide-react";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useHistory } from "@/hooks/useHistory";
@@ -10,14 +10,15 @@ export default function Profile() {
   const { favorites } = useFavorites();
   const { history } = useHistory();
   const [activeTab, setActiveTab] = useState<'favorites' | 'history'>('favorites');
+  const navigate = useNavigate();
   
   // Ref để kích hoạt input chọn file ẩn
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 1. Đồng bộ State từ LocalStorage
   const [userData, setUserData] = useState({
-    name: "Nguyễn Văn A",
-    email: "nguyenvana@example.com",
+    name: "Người dùng",
+    email: "user@example.com",
     avatar: DEFAULT_USER_AVATAR,
     joinDate: "Tháng 1, 2026",
   });
@@ -53,9 +54,23 @@ export default function Profile() {
           ...savedSettings,
           avatar: base64String
         }));
+        
+        // Bắn sự kiện để Header cập nhật
+        window.dispatchEvent(new Event("local-storage-update"));
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const handleLogout = () => {
+    // 1. Xóa dữ liệu
+    localStorage.removeItem("cineverse_settings");
+    
+    // 2. Bắn sự kiện đồng bộ
+    window.dispatchEvent(new Event("local-storage-update"));
+    
+    // 3. Chuyển hướng
+    navigate("/");
   };
 
   const stats = {
@@ -133,7 +148,7 @@ export default function Profile() {
               <Settings className="w-4 h-4" />
               Cài Đặt
             </Link>
-            <button className="btn flex items-center justify-center gap-2 bg-transparent hover:bg-red-500/10 text-[#E50914] px-6 py-3 rounded-xl font-medium transition-colors border border-[#E50914]/30">
+            <button onClick={handleLogout} className="btn flex items-center justify-center gap-2 bg-transparent hover:bg-red-500/10 text-[#E50914] px-6 py-3 rounded-xl font-medium transition-colors border border-[#E50914]/30">
               <LogOut className="w-4 h-4" />
               Đăng Xuất
             </button>

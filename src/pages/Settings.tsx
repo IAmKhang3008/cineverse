@@ -9,8 +9,8 @@ export default function Settings() {
   const [settings, setSettings] = useState(() => {
     const savedData = localStorage.getItem("cineverse_settings");
     return savedData ? JSON.parse(savedData) : {
-      email: "nguyenvana@example.com",
-      name: "Nguyễn Văn A",
+      email: "user@example.com",
+      name: "Người dùng",
       theme: "dark",
       emailNotifications: true,
       pushNotifications: false,
@@ -26,6 +26,10 @@ export default function Settings() {
     setTimeout(() => {
       localStorage.setItem("cineverse_settings", JSON.stringify(settings));
       setIsSaving(false);
+      
+      // Bắn sự kiện để Header và các trang khác cập nhật ngay lập tức
+      window.dispatchEvent(new Event("local-storage-update"));
+
       // Thay alert bằng thông báo tinh tế hơn (nếu có thư viện Toast)
       alert("✨ Cineverse: Cài đặt của bạn đã được cập nhật!");
     }, 1000);

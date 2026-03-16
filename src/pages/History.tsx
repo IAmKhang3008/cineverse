@@ -1,10 +1,34 @@
+import { useEffect, useState } from "react";
 import { useHistory } from "@/hooks/useHistory";
 import { Link } from "react-router-dom";
-import { Play, Trash2, ArrowLeft } from "lucide-react";
+import { Play, Trash2, ArrowLeft, Clock } from "lucide-react";
 import { getImageUrl } from "@/lib/api";
 
 export default function History() {
   const { history, removeFromHistory, clearHistory } = useHistory();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    const user = localStorage.getItem("cineverse_settings");
+    setIsLoggedIn(!!user);
+  }, []);
+
+  if (!isLoggedIn) {
+    return (
+      <div className="max-w-[1280px] mx-auto px-6 py-32 mt-16 text-center">
+        <div className="inline-flex items-center justify-center w-20 h-20 bg-white/5 rounded-full mb-6 border border-white/10">
+          <Clock className="w-10 h-10 text-[#3B82F6]" />
+        </div>
+        <h1 className="text-3xl font-bold text-white mb-4">Lịch sử xem phim</h1>
+        <p className="text-gray-400 max-w-md mx-auto mb-8">
+          Vui lòng đăng nhập để Cineverse giúp bạn ghi nhớ những bộ phim đang xem dở và tập phim mới nhất.
+        </p>
+        <Link to="/login" className="bg-[#E50914] text-white px-8 py-3 rounded-full font-bold hover:bg-[#b80710] transition-all">
+          Đăng nhập để xem tiếp
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-[1280px] mx-auto px-6 py-12 mt-16">
