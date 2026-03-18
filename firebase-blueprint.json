@@ -1,0 +1,42 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "User's display name"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "User's email address"
+        },
+        "avatar": {
+          "type": "string",
+          "format": "uri",
+          "description": "User's avatar URL"
+        },
+        "uid": {
+          "type": "string",
+          "description": "User's unique identifier"
+        },
+        "isSocial": {
+          "type": "boolean",
+          "description": "Whether the user logged in via social provider"
+        }
+      },
+      "required": ["uid", "email"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/User"
+      },
+      "description": "User profiles"
+    }
+  }
+}

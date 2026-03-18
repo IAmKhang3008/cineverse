@@ -2,6 +2,9 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Mail, Lock, User, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { motion } from "motion/react";
+import { useToast } from "@/contexts/ToastContext";
+import { loginWithSocial, googleProvider, facebookProvider } from "@/lib/firebase";
 
 export default function Login() {
   const [isLogin, setIsLogin] = useState(true);
@@ -14,10 +17,27 @@ export default function Login() {
   const [confirmPassword, setConfirmPassword] = useState("");
   
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   const triggerShake = () => {
     setShake(true);
     setTimeout(() => setShake(false), 300);
+  };
+
+  const handleSocialLogin = async (providerName: 'google' | 'facebook') => {
+    try {
+      const provider = providerName === 'google' ? googleProvider : facebookProvider;
+      const userData = await loginWithSocial(provider);
+      showToast(`Chào mừng ${userData.name} quay trở lại!`, "success");
+      navigate("/");
+    } catch (error: any) {
+      console.error("Lỗi đăng nhập:", error);
+      if (error.code === 'auth/popup-closed-by-user') {
+         showToast("Bạn đã đóng cửa sổ đăng nhập", "error");
+      } else {
+         showToast("Đăng nhập thất bại, vui lòng thử lại", "error");
+      }
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -85,7 +105,13 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center px-6 relative py-12">
+    <motion.div
+      initial={{ opacity: 0, y: 30 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      transition={{ duration: 0.5, ease: "backOut" }}
+      className="min-h-[80vh] flex items-center justify-center px-6 relative py-12"
+    >
       {/* Blurred Background */}
       <div className="absolute inset-0 z-0">
         <img 
@@ -205,7 +231,11 @@ export default function Login() {
           </div>
 
           <div className="mt-6 grid grid-cols-2 gap-4">
-            <button className="flex items-center justify-center gap-2 bg-[#2A2A2A] hover:bg-[#333] text-white py-3 rounded-full transition-colors border border-white/5">
+            <button 
+              type="button"
+              onClick={() => handleSocialLogin('google')}
+              className="flex items-center justify-center gap-2 bg-[#2A2A2A] hover:bg-[#333] text-white py-3 rounded-full transition-colors border border-white/5"
+            >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
                 <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
@@ -214,7 +244,11 @@ export default function Login() {
               </svg>
               Google
             </button>
-            <button className="flex items-center justify-center gap-2 bg-[#2A2A2A] hover:bg-[#333] text-white py-3 rounded-full transition-colors border border-white/5">
+            <button 
+              type="button"
+              onClick={() => handleSocialLogin('facebook')}
+              className="flex items-center justify-center gap-2 bg-[#2A2A2A] hover:bg-[#333] text-white py-3 rounded-full transition-colors border border-white/5"
+            >
               <svg className="w-5 h-5 text-[#1877F2]" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.469h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.469h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
               </svg>
@@ -238,6 +272,6 @@ export default function Login() {
           </button>
         </p>
       </div>
-    </div>
+    </motion.div>
   );
 }

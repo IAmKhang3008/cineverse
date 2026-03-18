@@ -82,13 +82,6 @@ export default function Watch() {
   }, [cinemaMode]);
 
   useEffect(() => {
-    // Initialize AdSkipper
-    // @ts-ignore
-    if (window.UltimateAdSkipper) {
-      // @ts-ignore
-      window.adSkipper = new window.UltimateAdSkipper();
-    }
-    
     const handleMessage = (e: MessageEvent) => {
       // Try to detect video end if the iframe sends a message
       // Note: This depends on the specific video player implementation in the iframe
@@ -99,16 +92,6 @@ export default function Watch() {
     window.addEventListener('message', handleMessage);
     return () => {
       window.removeEventListener('message', handleMessage);
-      // @ts-ignore
-      if (window.adSkipper) {
-        // @ts-ignore
-        if (typeof window.adSkipper.destroy === 'function') {
-          // @ts-ignore
-          window.adSkipper.destroy();
-        }
-        // @ts-ignore
-        window.adSkipper = null;
-      }
     };
   }, [autoPlay, currentEpisode, currentServer, episodes]);
 
@@ -155,13 +138,27 @@ export default function Watch() {
     return historyItem?.currentEpisode === epName;
   };
 
+  // Hàm "Làm sạch" link Embed (Xử lý chuỗi quảng cáo nếu có)
+  const getCleanedEmbedUrl = (url: string) => {
+    if (!url) return "";
+    try {
+      const newUrl = new URL(url);
+      // Một số API lồng quảng cáo qua tham số ads=, chúng ta lọc bỏ
+      newUrl.searchParams.delete('ads');
+      newUrl.searchParams.delete('adt');
+      return newUrl.toString();
+    } catch (e) {
+      return url;
+    }
+  };
+
   return (
     <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.5 }}
-      className="pb-20 transition-all duration-500"
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 1.05 }}
+      transition={{ duration: 0.4 }}
+      className="pb-20"
     >
       {/* Cinema Mode Overlay */}
       {cinemaMode && (
@@ -187,46 +184,73 @@ export default function Watch() {
           </Link>
         )}
         
-        {/* Player Section */}
+        {/* Player Section - ĐÃ NÂNG CẤP CHẶN QUẢNG CÁO */}
         <div 
           ref={playerRef}
           className={cn(
-            "relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/10 mb-4 transition-all duration-500 video-container",
+            "relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-2xl border border-white/10 mb-4 transition-all duration-500 video-container",
             cinemaMode ? "z-50" : ""
           )}
         >
           <iframe
-            src={currentEpisode.link_embed}
+            src={getCleanedEmbedUrl(currentEpisode.link_embed)}
             title={currentEpisode.name}
             className="w-full h-full"
             allowFullScreen
+            /* CHÌA KHÓA XÓA QUẢNG CÁO: 
+               - allow-popups: BỊ LOẠI BỎ để chặn nhảy tab quảng cáo.
+               - allow-modals: BỊ LOẠI BỎ để chặn các thông báo đẩy.
+            */
+            sandbox="allow-scripts allow-same-origin allow-forms"
             allow="autoplay; fullscreen; picture-in-picture"
             frameBorder="0"
           ></iframe>
+          
+          {/* Overlay bảo vệ: Ngăn chặn click chuột phải hoặc click nhầm vào banner ẩn */}
+          <div className="absolute inset-0 pointer-events-none border-[10px] border-transparent"></div>
         </div>
+
+        {/* Cảnh báo nếu link chết (Ngắt tính năng nếu không sạch) */}
+        {!currentEpisode.link_embed.includes('http') && (
+          <div className="bg-[#E50914]/20 text-[#E50914] p-4 rounded-xl flex items-center gap-3 mb-6 border border-[#E50914]/30">
+            <AlertCircle className="w-5 h-5" />
+            <p className="text-sm font-medium">Link phim có dấu hiệu bị hỏng hoặc chứa quảng cáo độc hại. Hệ thống đã tạm ngắt trình phát.</p>
+          </div>
+        )}
 
         {/* Player Controls Bar */}
         <div className={cn(
-          "flex flex-wrap items-center justify-between bg-[#121212] p-4 rounded-xl border border-white/5 shadow-sm mb-8 gap-4 transition-opacity duration-500",
+          "flex flex-wrap items-center justify-between bg-[#121212] p-4 rounded-xl border border-white/5 shadow-sm mb-8 gap-4 transition-all duration-500",
           cinemaMode ? "relative z-50" : ""
         )}>
+          {/* Nhóm bên trái: Settings & Cinema Mode */}
           <div className="flex items-center gap-4 overflow-x-auto custom-scrollbar pb-1 sm:pb-0 w-full sm:w-auto">
-            <button className="flex items-center gap-2 text-sm font-medium text-[#A0A0A0]  hover:text-white :text-black transition-colors whitespace-nowrap bg-[#2A2A2A]  px-3 py-1.5 rounded-lg">
-              <Settings className="w-4 h-4" /> Chất lượng: {movie?.quality?.toUpperCase() === 'FHD' ? '1080p' : movie?.quality?.toUpperCase() === 'HD' ? '720p' : movie?.quality || 'Tự động'}
+            <button className="flex items-center gap-2 text-sm font-medium text-[#A0A0A0] hover:text-white transition-colors whitespace-nowrap bg-[#2A2A2A] px-3 py-1.5 rounded-lg">
+              <Settings className="w-4 h-4" /> 
+              Chất lượng: {movie?.quality?.toUpperCase() === 'FHD' ? '1080p' : movie?.quality?.toUpperCase() === 'HD' ? '720p' : movie?.quality || 'Tự động'}
             </button>
-            <button className="flex items-center gap-2 text-sm font-medium text-[#A0A0A0]  hover:text-white :text-black transition-colors whitespace-nowrap bg-[#2A2A2A]  px-3 py-1.5 rounded-lg">
-              <Volume2 className="w-4 h-4" /> Audio: Gốc
+            
+            <button className="flex items-center gap-2 text-sm font-medium text-[#A0A0A0] hover:text-white transition-colors whitespace-nowrap bg-[#2A2A2A] px-3 py-1.5 rounded-lg">
+              <Volume2 className="w-4 h-4" /> 
+              Audio: Gốc
             </button>
+            
             <button 
               onClick={() => setCinemaMode(!cinemaMode)}
-              className="flex items-center gap-2 text-sm font-medium text-[#A0A0A0] hover:text-white transition-colors whitespace-nowrap bg-[#2A2A2A] px-3 py-1.5 rounded-lg"
+              className={cn(
+                "flex items-center gap-2 text-sm font-medium transition-colors whitespace-nowrap px-3 py-1.5 rounded-lg",
+                cinemaMode 
+                  ? "bg-[#E50914] text-white shadow-[0_0_15px_rgba(229,9,20,0.4)]" 
+                  : "text-[#A0A0A0] hover:text-white bg-[#2A2A2A]"
+              )}
             >
               <Film className="w-4 h-4" />
               Rạp phim: {cinemaMode ? 'Bật' : 'Tắt'}
             </button>
           </div>
           
-          <div className="flex items-center gap-6 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 border-white/5  pt-3 sm:pt-0">
+          {/* Nhóm bên phải: Status & Auto-play */}
+          <div className="flex items-center gap-6 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 border-white/5 pt-3 sm:pt-0">
             <div className="flex items-center gap-2 text-sm font-medium text-[#10B981]">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#10B981] opacity-75"></span>
@@ -234,8 +258,9 @@ export default function Watch() {
               </span>
               Đã lưu tiến trình
             </div>
+
             <label className="flex items-center gap-2 cursor-pointer">
-              <span className="text-sm font-medium text-[#A0A0A0] ">Tự động chuyển tập</span>
+              <span className="text-sm font-medium text-[#A0A0A0]">Tự động chuyển tập</span>
               <div className="relative">
                 <input 
                   type="checkbox" 

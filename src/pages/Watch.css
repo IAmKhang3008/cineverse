@@ -1,0 +1,19 @@
+/* Glow nhẹ nhàng cho Cinema Mode - Tĩnh và không gây xao nhãng */
+.shadow-cinema-glow {
+  /* Một lớp shadow mờ màu đỏ thương hiệu, lan tỏa rộng nhưng độ đậm thấp */
+  box-shadow: 0 0 60px 10px rgba(229, 9, 20, 0.25);
+  border-color: rgba(229, 9, 20, 0.4);
+}
+
+/* Đảm bảo iframe không bị biến dạng khi chuyển chế độ */
+.video-container iframe {
+  transition: none; /* Xóa mọi transition gây lag khi thay đổi kích thước */
+}
+
+/* Làm mờ các thành phần khác khi bật Cinema Mode */
+body.cinema-mode .two-column-layout,
+body.cinema-mode .back-btn {
+  opacity: 0.1;
+  pointer-events: none;
+  transition: opacity 0.5s ease;
+}

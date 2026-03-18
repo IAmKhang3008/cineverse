@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useFavorites } from "@/hooks/useFavorites";
 import MovieCard from "@/components/MovieCard";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Lock } from "lucide-react";
+import { ArrowLeft, Lock, Heart } from "lucide-react";
 
 export default function Favorites() {
   const { favorites } = useFavorites();
@@ -17,11 +17,11 @@ export default function Favorites() {
     return (
       <div className="max-w-[1280px] mx-auto px-6 py-32 mt-16 text-center">
         <div className="inline-flex items-center justify-center w-20 h-20 bg-white/5 rounded-full mb-6 border border-white/10">
-          <Lock className="w-10 h-10 text-[#F5C518]" />
+          <Heart className="w-10 h-10 text-[#F5C518]" />
         </div>
-        <h1 className="text-3xl font-bold text-white mb-4">Tính năng giới hạn</h1>
+        <h1 className="text-3xl font-bold text-white mb-4">Phim Yêu Thích</h1>
         <p className="text-gray-400 max-w-md mx-auto mb-8">
-          Bạn cần đăng nhập để trải nghiệm tính năng lưu trữ phim yêu thích và đồng bộ danh sách trên mọi thiết bị.
+          Vui lòng đăng nhập để Cineverse giúp bạn lưu lại các tập phim yêu thích.
         </p>
         <Link to="/login" className="bg-[#E50914] text-white px-8 py-3 rounded-full font-bold hover:bg-[#b80710] transition-all">
           Đăng nhập ngay
