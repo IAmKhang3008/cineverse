@@ -178,7 +178,7 @@ export default function Login() {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.9 }}
       transition={{ duration: 0.5, ease: "backOut" }}
-      className="min-h-[80vh] flex items-center justify-center px-6 relative py-12"
+      className="-mt-16 md:-mt-20 min-h-[80vh] flex items-center justify-center px-6 relative py-12"
     >
       {/* Background (Giữ nguyên) */}
       <div className="absolute inset-0 z-0">

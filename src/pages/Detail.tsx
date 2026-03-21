@@ -222,7 +222,7 @@ export default function Detail() {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.5 }}
-      className="pb-20"
+      className="-mt-16 md:-mt-20 pb-20"
     >
       {/* Trailer Modal */}
       {showTrailer && movie.trailer_url && (

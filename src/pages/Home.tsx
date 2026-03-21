@@ -22,14 +22,18 @@ export default function Home() {
   const [auMy, setAuMy] = useState<any[]>([]);
   const [vietNam, setVietNam] = useState<any[]>([]);
   const [kinhDi, setKinhDi] = useState<any[]>([]);
+  const [heroMovies, setHeroMovies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [heroSwiper, setHeroSwiper] = useState<any>(null);
+  const [activeHeroIndex, setActiveHeroIndex] = useState(0);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const [
           newRes, trendingRes, seriesRes, hoatHinhRes, tvShowsRes, 
-          thaiLanRes, hongKongRes, auMyRes, vietNamRes, kinhDiRes
+          thaiLanRes, hongKongRes, auMyRes, vietNamRes, kinhDiRes,
+          chieuRapRes, hanQuocRes
         ] = await Promise.all([
           api.getNewUpdated(1),
           api.getByCategory("phim-le", 1),
@@ -40,7 +44,9 @@ export default function Home() {
           api.getByCountry("hong-kong", 1),
           api.getByCountry("au-my", 1),
           api.getByCountry("viet-nam", 1),
-          api.getByGenre("kinh-di", 1)
+          api.getByGenre("kinh-di", 1),
+          api.getByCategory("phim-chieu-rap", 1),
+          api.getByCountry("han-quoc", 1),
         ]);
         
         setNewMovies(newRes.items || []);
@@ -53,6 +59,61 @@ export default function Home() {
         setAuMy(auMyRes.items || []);
         setVietNam(vietNamRes.items || []);
         setKinhDi(kinhDiRes.items || []);
+
+        const heroList = [
+          { ...(newRes.items?.[0] || {}), badge: "🔥 PHIM MỚI CẬP NHẬT" },
+          { ...(trendingRes.items?.[0] || {}), badge: "⭐ PHIM NỔI BẬT" },
+          { ...(chieuRapRes.items?.[0] || {}), badge: "🎬 PHIM CHIẾU RẠP" },
+          { ...(hanQuocRes.items?.[0] || {}), badge: "🇰🇷 PHIM HÀN QUỐC" },
+          { ...(vietNamRes.items?.[0] || {}), badge: "🇻🇳 PHIM VIỆT NAM" },
+        ].filter(m => m && m.slug);
+
+        const heroDetails = await Promise.all(
+          heroList.map(async (movie) => {
+            try {
+              const detail = await api.getMovieDetail(movie.slug);
+              let highQualityBanner = null;
+              
+              // Try to fetch high quality banner from TMDb
+              try {
+                const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
+                let tmdbId = detail.movie?.tmdb?.id;
+                let tmdbType = detail.movie?.tmdb?.type || 'movie';
+                
+                if (!tmdbId) {
+                  const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.name)}&language=vi-VN`;
+                  const searchRes = await fetch(searchUrl);
+                  const searchData = await searchRes.json();
+                  if (searchData.results && searchData.results.length > 0) {
+                    tmdbId = searchData.results[0].id;
+                    tmdbType = searchData.results[0].media_type || (searchData.results[0].first_air_date ? 'tv' : 'movie');
+                  }
+                }
+
+                if (tmdbId) {
+                  const imagesUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}/images?api_key=${apiKey}`;
+                  const imagesRes = await fetch(imagesUrl);
+                  const imagesData = await imagesRes.json();
+                  if (imagesData.backdrops && imagesData.backdrops.length > 0) {
+                    const sorted = imagesData.backdrops.sort((a: any, b: any) => b.width - a.width);
+                    highQualityBanner = `https://image.tmdb.org/t/p/original${sorted[0].file_path}`;
+                  }
+                }
+              } catch (e) {
+                // Silently fail if high quality banner cannot be fetched (e.g., due to adblockers or CORS)
+              }
+
+              return { 
+                ...movie, 
+                content: detail.movie?.content || movie.content,
+                highQualityBanner: highQualityBanner
+              };
+            } catch (e) {
+              return movie;
+            }
+          })
+        );
+        setHeroMovies(heroDetails);
       } catch (error) {
         console.error("Failed to fetch data", error);
       } finally {
@@ -76,74 +137,113 @@ export default function Home() {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.5 }}
-      className="pb-20"
+      className="-mt-16 md:-mt-20 pb-20"
     >
       {/* Hero Section */}
-      {trending.length > 0 && (
-        <div className="relative h-[60vh] md:h-[80vh] w-full bg-[#0A0A0A]">
+      {heroMovies.length > 0 && (
+        <div id="hero-banner" className="hero-banner bg-[#0A0A0A] group/hero">
           <Swiper
             modules={[Navigation, Pagination, Autoplay, EffectFade]}
             effect="fade"
-            navigation
-            pagination={{ clickable: true }}
+            onSwiper={setHeroSwiper}
+            onSlideChange={(swiper) => setActiveHeroIndex(swiper.realIndex)}
+            navigation={{
+              nextEl: '.hero-next',
+              prevEl: '.hero-prev',
+            }}
             autoplay={{ delay: 5000, disableOnInteraction: false }}
             loop={true}
             className="h-full w-full"
           >
-            {trending.slice(0, 5).map((movie, index) => (
+            {heroMovies.map((movie, index) => (
               <SwiperSlide key={`${movie.slug || movie._id || 'hero'}-${index}`} className="relative h-full w-full">
                 <div className="absolute inset-0">
                   <img
-                    src={getImageUrl(movie.thumb_url || movie.poster_url, 'banner')}
+                    src={movie.highQualityBanner || getImageUrl(movie.thumb_url || movie.poster_url, 'banner')}
                     alt={movie.name}
-                    className="w-full h-full object-cover object-center"
+                    className="w-full h-full object-cover"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0A] via-[#0A0A0A]/60 to-transparent" />
-                  <div className="absolute inset-0 bg-gradient-to-r from-[#0A0A0A] via-[#0A0A0A]/40 to-transparent" />
+                  {/* Gradient overlay from left to right (70% -> 30%) */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-black/20" />
+                  {/* Bottom gradient to fade into background */}
+                  <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-[var(--color-cine-bg)] to-transparent" />
                 </div>
-                
+
                 <div className="absolute inset-0 flex items-center">
-                  <div className="max-w-[1280px] w-full mx-auto px-6">
-                    <motion.div 
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.5 }}
-                      className="max-w-2xl"
-                    >
-                      <h1 className="text-4xl md:text-6xl font-heading font-bold text-white mb-4 leading-tight">
-                        {movie.name}
-                      </h1>
-                      <div className="flex items-center gap-4 text-sm text-gray-300 mb-6">
-                        <span>{movie.year}</span>
-                        <span className="border border-gray-600 px-2 py-1 rounded">{movie.quality}</span>
-                        <span>{movie.time}</span>
+                  <div className="max-w-[1440px] w-full mx-auto px-6 md:px-16 lg:px-24 mt-10 md:mt-0">
+                    <div className="banner-info max-w-2xl animate-in slide-in-from-left-8 duration-1000 rounded-xl">
+                      <span className="inline-block bg-[#E50914] text-white text-[10px] md:text-[12px] font-bold px-2 py-1 md:px-3 md:py-1 rounded-sm tracking-[1px] mb-3 md:mb-4">
+                        {movie.badge}
+                      </span>
+                      <h1 
+                        className="movie-title text-2xl sm:text-3xl md:text-5xl lg:text-[48px] font-heading font-bold text-white mb-2 md:mb-4 leading-tight drop-shadow-lg"
+                        dangerouslySetInnerHTML={{ __html: movie.name }}
+                      />
+                      <p 
+                        className="movie-description text-[14px] text-[#CCCCCC] max-w-[500px] text-justify leading-[21.5px] mb-4 md:mb-6 line-clamp-3 md:line-clamp-3"
+                        dangerouslySetInnerHTML={{ __html: movie.content?.replace(/<[^>]*>?/gm, '') || movie.origin_name }}
+                      />
+                      <div className="movie-meta flex flex-wrap items-center gap-2 text-[10px] sm:text-xs md:text-[14px] text-gray-400 mb-6 md:mb-8 font-medium">
+                        <span>{movie.year || new Date().getFullYear()}</span>
+                        <span>·</span>
+                        <span className="movie-genres">{movie.category?.[0]?.name || 'Hành động'}</span>
+                        <span>·</span>
+                        <span>{movie.time || '120 phút'}</span>
+                        <span>·</span>
+                        <span className="text-white font-bold border border-white/20 px-1.5 py-0.5 rounded text-[10px] md:text-xs">{movie.quality || 'HD'}</span>
                       </div>
-                      <p className="text-gray-300 text-lg mb-8 line-clamp-3">
-                        {movie.content?.replace(/<[^>]*>?/gm, '') || movie.origin_name}
-                      </p>
                       
-                      <div className="flex items-center gap-4">
+                      <div className="movie-actions flex flex-wrap items-center gap-3 md:gap-4">
                         <Link
                           to={`/watch/${movie.slug}`}
-                          className="flex items-center gap-2 bg-[#E50914] hover:bg-[#b80710] text-white px-8 py-3 rounded-full font-semibold transition-colors"
+                          className="btn flex items-center justify-center gap-2 bg-[#E50914] text-white px-6 py-2.5 md:px-[32px] md:py-[12px] rounded-[40px] font-bold text-sm md:text-[16px] transition-all hover:scale-105 shadow-[0_4px_15px_rgba(229,9,20,0.5)]"
                         >
-                          <Play className="w-5 h-5 fill-current" />
-                          Xem Ngay
+                          <Play className="w-4 h-4 md:w-5 md:h-5" fill="currentColor" />
+                          Xem ngay
                         </Link>
                         <Link
                           to={`/movie/${movie.slug}`}
-                          className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white px-8 py-3 rounded-full font-semibold backdrop-blur-sm transition-colors"
+                          className="btn flex items-center justify-center gap-2 bg-transparent backdrop-blur-[8px] !border !border-solid !border-[#4f4444] text-white px-6 py-2.5 md:px-[32px] md:py-[12px] rounded-[8px] font-bold text-sm md:text-[16px] transition-all hover:bg-white/20"
                         >
-                          <Info className="w-5 h-5" />
-                          Chi Tiết
+                          <Info className="w-4 h-4 md:w-5 md:h-5" />
+                          Chi tiết phim
                         </Link>
                       </div>
-                    </motion.div>
+                    </div>
                   </div>
                 </div>
               </SwiperSlide>
             ))}
           </Swiper>
+
+          {/* Custom Navigation */}
+          <button className="hero-prev absolute left-2 md:left-6 top-1/2 -translate-y-1/2 w-[32px] h-[32px] md:w-[48px] md:h-[48px] rounded-full bg-black/50 flex items-center justify-center text-white z-20 opacity-0 group-hover/hero:opacity-100 transition-all hover:bg-black/80 backdrop-blur-sm">
+            <ChevronRight className="w-4 h-4 md:w-6 md:h-6 rotate-180" />
+          </button>
+          <button className="hero-next absolute right-2 md:right-6 top-1/2 -translate-y-1/2 w-[32px] h-[32px] md:w-[48px] md:h-[48px] rounded-full bg-black/50 flex items-center justify-center text-white z-20 opacity-0 group-hover/hero:opacity-100 transition-all hover:bg-black/80 backdrop-blur-sm">
+            <ChevronRight className="w-4 h-4 md:w-6 md:h-6" />
+          </button>
+
+          {/* Custom Pagination (Thumbnails) */}
+          <div className="banner-thumbnails absolute bottom-4 md:bottom-8 right-4 md:right-8 z-20 flex gap-2 md:gap-4 justify-end">
+            {heroMovies.map((movie, index) => (
+              <button
+                key={index}
+                onClick={() => heroSwiper?.slideToLoop(index)}
+                className={`thumbnail relative overflow-hidden transition-all duration-300 ${
+                  activeHeroIndex === index 
+                    ? 'border-2 border-white scale-110 shadow-[0_0_15px_rgba(255,255,255,0.5)] z-10' 
+                    : 'border-2 border-transparent opacity-50 hover:opacity-100'
+                } w-8 h-8 rounded-full md:w-[80px] md:h-[45px] md:rounded-md`}
+              >
+                <img 
+                  src={movie.highQualityBanner || getImageUrl(movie.thumb_url || movie.poster_url, 'banner')} 
+                  alt={movie.name}
+                  className="w-full h-full object-cover"
+                />
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

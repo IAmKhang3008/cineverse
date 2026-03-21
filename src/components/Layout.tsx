@@ -8,7 +8,7 @@ export default function Layout() {
   return (
     <div className="min-h-screen bg-black text-white font-sans flex flex-col overflow-x-hidden">
       <Header />
-      <main key={location.pathname} className="flex-grow pt-16 page-transition">
+      <main key={location.pathname} className="flex-grow pt-16 md:pt-20 page-transition">
         <Outlet />
       </main>
       <Footer />
