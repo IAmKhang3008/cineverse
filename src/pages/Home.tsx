@@ -225,12 +225,12 @@ export default function Home() {
           </button>
 
           {/* Custom Pagination (Thumbnails) */}
-          <div className="banner-thumbnails absolute bottom-4 md:bottom-8 right-4 md:right-8 z-20 flex gap-2 md:gap-4 justify-end">
+          <div className="banner-thumbnails absolute bottom-4 md:bottom-8 right-4 md:right-8 z-20 flex gap-2 md:gap-4 justify-end h-[42px] w-full max-w-[calc(100vw-2rem)] md:max-w-[456px] overflow-x-auto custom-scrollbar">
             {heroMovies.map((movie, index) => (
               <button
                 key={index}
                 onClick={() => heroSwiper?.slideToLoop(index)}
-                className={`thumbnail relative overflow-hidden transition-all duration-300 ${
+                className={`thumbnail relative overflow-hidden transition-all duration-300 flex-shrink-0 ${
                   activeHeroIndex === index 
                     ? 'border-2 border-white scale-110 shadow-[0_0_15px_rgba(255,255,255,0.5)] z-10' 
                     : 'border-2 border-transparent opacity-50 hover:opacity-100'
@@ -247,27 +247,27 @@ export default function Home() {
         </div>
       )}
 
-      <div className="max-w-[1280px] mx-auto px-6 mt-12 space-y-24">
+      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 mt-8 md:mt-12 space-y-16 md:space-y-24">
         {/* Phim thịnh hành (Carousel) */}
         <section>
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="text-2xl font-heading font-bold text-white  tracking-wider flex items-center gap-3">
-              <span className="w-1.5 h-8 bg-[#F5C518] rounded-full inline-block"></span>
+          <div className="flex items-center justify-between mb-6 md:mb-8">
+            <h2 className="text-xl md:text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-2 md:gap-3">
+              <span className="w-1.5 h-6 md:h-8 bg-[#F5C518] rounded-full inline-block"></span>
               Phim Thịnh Hành
             </h2>
           </div>
           <Swiper
             modules={[Navigation, Pagination, Autoplay]}
-            spaceBetween={24}
+            spaceBetween={16}
             slidesPerView={2}
             navigation
             autoplay={{ delay: 4000, disableOnInteraction: false }}
             breakpoints={{
-              640: { slidesPerView: 3 },
-              768: { slidesPerView: 4 },
-              1024: { slidesPerView: 5 },
+              640: { slidesPerView: 3, spaceBetween: 20 },
+              768: { slidesPerView: 4, spaceBetween: 24 },
+              1024: { slidesPerView: 5, spaceBetween: 24 },
             }}
-            className="pb-12 !overflow-visible"
+            className="pb-8 md:pb-12 !overflow-visible"
           >
             {trending.slice(0, 15).map((movie, index) => (
               <SwiperSlide key={`${movie.slug || movie._id || 'trending'}-${index}`}>
@@ -279,27 +279,27 @@ export default function Home() {
 
         {/* Phim mới cập nhật */}
         <section>
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="text-2xl font-heading font-bold text-white  tracking-wider flex items-center gap-3">
-              <span className="w-1.5 h-8 bg-[#E50914] rounded-full inline-block"></span>
+          <div className="flex items-center justify-between mb-6 md:mb-8">
+            <h2 className="text-xl md:text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-2 md:gap-3">
+              <span className="w-1.5 h-6 md:h-8 bg-[#E50914] rounded-full inline-block"></span>
               Phim Mới Cập Nhật
             </h2>
-            <Link to="/movies" className="text-sm text-[#3B82F6] hover:text-white :text-black transition-colors flex items-center gap-1">
-              Xem tất cả <ChevronRight className="w-4 h-4" />
+            <Link to="/movies" className="text-xs md:text-sm text-[#3B82F6] hover:text-white transition-colors flex items-center gap-1">
+              Xem tất cả <ChevronRight className="w-3 h-3 md:w-4 md:h-4" />
             </Link>
           </div>
           <Swiper
             modules={[Navigation, Pagination, Autoplay]}
-            spaceBetween={24}
+            spaceBetween={16}
             slidesPerView={2}
             navigation
             autoplay={{ delay: 5000, disableOnInteraction: false }}
             breakpoints={{
-              640: { slidesPerView: 3 },
-              768: { slidesPerView: 4 },
-              1024: { slidesPerView: 5 },
+              640: { slidesPerView: 3, spaceBetween: 20 },
+              768: { slidesPerView: 4, spaceBetween: 24 },
+              1024: { slidesPerView: 5, spaceBetween: 24 },
             }}
-            className="pb-12 !overflow-visible"
+            className="pb-8 md:pb-12 !overflow-visible"
           >
             {newMovies.slice(1, 16).map((movie, index) => (
               <SwiperSlide key={`${movie.slug || movie._id || 'new'}-${index}`}>
@@ -311,27 +311,27 @@ export default function Home() {
 
         {/* Phim bộ nổi bật */}
         <section>
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="text-2xl font-heading font-bold text-white  tracking-wider flex items-center gap-3">
-              <span className="w-1.5 h-8 bg-[#3B82F6] rounded-full inline-block"></span>
+          <div className="flex items-center justify-between mb-6 md:mb-8">
+            <h2 className="text-xl md:text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-2 md:gap-3">
+              <span className="w-1.5 h-6 md:h-8 bg-[#3B82F6] rounded-full inline-block"></span>
               Phim Bộ Nổi Bật
             </h2>
-            <Link to="/series" className="text-sm text-[#3B82F6] hover:text-white :text-black transition-colors flex items-center gap-1">
-              Xem tất cả <ChevronRight className="w-4 h-4" />
+            <Link to="/series" className="text-xs md:text-sm text-[#3B82F6] hover:text-white transition-colors flex items-center gap-1">
+              Xem tất cả <ChevronRight className="w-3 h-3 md:w-4 md:h-4" />
             </Link>
           </div>
           <Swiper
             modules={[Navigation, Pagination, Autoplay]}
-            spaceBetween={24}
+            spaceBetween={16}
             slidesPerView={2}
             navigation
             autoplay={{ delay: 6000, disableOnInteraction: false }}
             breakpoints={{
-              640: { slidesPerView: 3 },
-              768: { slidesPerView: 4 },
-              1024: { slidesPerView: 5 },
+              640: { slidesPerView: 3, spaceBetween: 20 },
+              768: { slidesPerView: 4, spaceBetween: 24 },
+              1024: { slidesPerView: 5, spaceBetween: 24 },
             }}
-            className="pb-12 !overflow-visible"
+            className="pb-8 md:pb-12 !overflow-visible"
           >
             {series.slice(0, 15).map((movie, index) => (
               <SwiperSlide key={`${movie.slug || movie._id || 'series'}-${index}`}>
@@ -344,27 +344,27 @@ export default function Home() {
         {/* Phim Hoạt Hình */}
         {hoatHinh.length > 0 && (
           <section>
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-3">
-                <span className="w-1.5 h-8 bg-[#10B981] rounded-full inline-block"></span>
+            <div className="flex items-center justify-between mb-6 md:mb-8">
+              <h2 className="text-xl md:text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-2 md:gap-3">
+                <span className="w-1.5 h-6 md:h-8 bg-[#10B981] rounded-full inline-block"></span>
                 Phim Hoạt Hình
               </h2>
-              <Link to="/genres?genre=hoat-hinh" className="text-sm text-[#3B82F6] hover:text-white transition-colors flex items-center gap-1">
-                Xem tất cả <ChevronRight className="w-4 h-4" />
+              <Link to="/genres?genre=hoat-hinh" className="text-xs md:text-sm text-[#3B82F6] hover:text-white transition-colors flex items-center gap-1">
+                Xem tất cả <ChevronRight className="w-3 h-3 md:w-4 md:h-4" />
               </Link>
             </div>
             <Swiper
               modules={[Navigation, Pagination, Autoplay]}
-              spaceBetween={24}
+              spaceBetween={16}
               slidesPerView={2}
               navigation
               autoplay={{ delay: 5500, disableOnInteraction: false }}
               breakpoints={{
-                640: { slidesPerView: 3 },
-                768: { slidesPerView: 4 },
-                1024: { slidesPerView: 5 },
+                640: { slidesPerView: 3, spaceBetween: 20 },
+                768: { slidesPerView: 4, spaceBetween: 24 },
+                1024: { slidesPerView: 5, spaceBetween: 24 },
               }}
-              className="pb-12 !overflow-visible"
+              className="pb-8 md:pb-12 !overflow-visible"
             >
               {hoatHinh.slice(0, 15).map((movie, index) => (
                 <SwiperSlide key={`${movie.slug || movie._id || 'hoathinh'}-${index}`}>
@@ -378,27 +378,27 @@ export default function Home() {
         {/* Chương trình TV */}
         {tvShows.length > 0 && (
           <section>
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-3">
-                <span className="w-1.5 h-8 bg-[#8B5CF6] rounded-full inline-block"></span>
+            <div className="flex items-center justify-between mb-6 md:mb-8">
+              <h2 className="text-xl md:text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-2 md:gap-3">
+                <span className="w-1.5 h-6 md:h-8 bg-[#8B5CF6] rounded-full inline-block"></span>
                 Chương trình TV
               </h2>
-              <Link to="/genres?genre=tv-shows" className="text-sm text-[#3B82F6] hover:text-white transition-colors flex items-center gap-1">
-                Xem tất cả <ChevronRight className="w-4 h-4" />
+              <Link to="/genres?genre=tv-shows" className="text-xs md:text-sm text-[#3B82F6] hover:text-white transition-colors flex items-center gap-1">
+                Xem tất cả <ChevronRight className="w-3 h-3 md:w-4 md:h-4" />
               </Link>
             </div>
             <Swiper
               modules={[Navigation, Pagination, Autoplay]}
-              spaceBetween={24}
+              spaceBetween={16}
               slidesPerView={2}
               navigation
               autoplay={{ delay: 6500, disableOnInteraction: false }}
               breakpoints={{
-                640: { slidesPerView: 3 },
-                768: { slidesPerView: 4 },
-                1024: { slidesPerView: 5 },
+                640: { slidesPerView: 3, spaceBetween: 20 },
+                768: { slidesPerView: 4, spaceBetween: 24 },
+                1024: { slidesPerView: 5, spaceBetween: 24 },
               }}
-              className="pb-12 !overflow-visible"
+              className="pb-8 md:pb-12 !overflow-visible"
             >
               {tvShows.slice(0, 15).map((movie, index) => (
                 <SwiperSlide key={`${movie.slug || movie._id || 'tvshows'}-${index}`}>
@@ -412,27 +412,27 @@ export default function Home() {
         {/* Phim Thái Lan */}
         {thaiLan.length > 0 && (
           <section>
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-3">
-                <span className="w-1.5 h-8 bg-[#EC4899] rounded-full inline-block"></span>
+            <div className="flex items-center justify-between mb-6 md:mb-8">
+              <h2 className="text-xl md:text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-2 md:gap-3">
+                <span className="w-1.5 h-6 md:h-8 bg-[#EC4899] rounded-full inline-block"></span>
                 Phim Thái Lan
               </h2>
-              <Link to="/genres?country=thai-lan" className="text-sm text-[#3B82F6] hover:text-white transition-colors flex items-center gap-1">
-                Xem tất cả <ChevronRight className="w-4 h-4" />
+              <Link to="/genres?country=thai-lan" className="text-xs md:text-sm text-[#3B82F6] hover:text-white transition-colors flex items-center gap-1">
+                Xem tất cả <ChevronRight className="w-3 h-3 md:w-4 md:h-4" />
               </Link>
             </div>
             <Swiper
               modules={[Navigation, Pagination, Autoplay]}
-              spaceBetween={24}
+              spaceBetween={16}
               slidesPerView={2}
               navigation
               autoplay={{ delay: 4500, disableOnInteraction: false }}
               breakpoints={{
-                640: { slidesPerView: 3 },
-                768: { slidesPerView: 4 },
-                1024: { slidesPerView: 5 },
+                640: { slidesPerView: 3, spaceBetween: 20 },
+                768: { slidesPerView: 4, spaceBetween: 24 },
+                1024: { slidesPerView: 5, spaceBetween: 24 },
               }}
-              className="pb-12 !overflow-visible"
+              className="pb-8 md:pb-12 !overflow-visible"
             >
               {thaiLan.slice(0, 15).map((movie, index) => (
                 <SwiperSlide key={`${movie.slug || movie._id || 'thailan'}-${index}`}>
@@ -446,27 +446,27 @@ export default function Home() {
         {/* Phim Hồng Kong */}
         {hongKong.length > 0 && (
           <section>
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-3">
-                <span className="w-1.5 h-8 bg-[#F59E0B] rounded-full inline-block"></span>
+            <div className="flex items-center justify-between mb-6 md:mb-8">
+              <h2 className="text-xl md:text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-2 md:gap-3">
+                <span className="w-1.5 h-6 md:h-8 bg-[#F59E0B] rounded-full inline-block"></span>
                 Phim Hồng Kong
               </h2>
-              <Link to="/genres?country=hong-kong" className="text-sm text-[#3B82F6] hover:text-white transition-colors flex items-center gap-1">
-                Xem tất cả <ChevronRight className="w-4 h-4" />
+              <Link to="/genres?country=hong-kong" className="text-xs md:text-sm text-[#3B82F6] hover:text-white transition-colors flex items-center gap-1">
+                Xem tất cả <ChevronRight className="w-3 h-3 md:w-4 md:h-4" />
               </Link>
             </div>
             <Swiper
               modules={[Navigation, Pagination, Autoplay]}
-              spaceBetween={24}
+              spaceBetween={16}
               slidesPerView={2}
               navigation
               autoplay={{ delay: 5000, disableOnInteraction: false }}
               breakpoints={{
-                640: { slidesPerView: 3 },
-                768: { slidesPerView: 4 },
-                1024: { slidesPerView: 5 },
+                640: { slidesPerView: 3, spaceBetween: 20 },
+                768: { slidesPerView: 4, spaceBetween: 24 },
+                1024: { slidesPerView: 5, spaceBetween: 24 },
               }}
-              className="pb-12 !overflow-visible"
+              className="pb-8 md:pb-12 !overflow-visible"
             >
               {hongKong.slice(0, 15).map((movie, index) => (
                 <SwiperSlide key={`${movie.slug || movie._id || 'hongkong'}-${index}`}>
@@ -480,27 +480,27 @@ export default function Home() {
         {/* Phim Âu Mỹ */}
         {auMy.length > 0 && (
           <section>
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-3">
-                <span className="w-1.5 h-8 bg-[#3B82F6] rounded-full inline-block"></span>
+            <div className="flex items-center justify-between mb-6 md:mb-8">
+              <h2 className="text-xl md:text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-2 md:gap-3">
+                <span className="w-1.5 h-6 md:h-8 bg-[#3B82F6] rounded-full inline-block"></span>
                 Phim Âu Mỹ
               </h2>
-              <Link to="/genres?country=au-my" className="text-sm text-[#3B82F6] hover:text-white transition-colors flex items-center gap-1">
-                Xem tất cả <ChevronRight className="w-4 h-4" />
+              <Link to="/genres?country=au-my" className="text-xs md:text-sm text-[#3B82F6] hover:text-white transition-colors flex items-center gap-1">
+                Xem tất cả <ChevronRight className="w-3 h-3 md:w-4 md:h-4" />
               </Link>
             </div>
             <Swiper
               modules={[Navigation, Pagination, Autoplay]}
-              spaceBetween={24}
+              spaceBetween={16}
               slidesPerView={2}
               navigation
               autoplay={{ delay: 6000, disableOnInteraction: false }}
               breakpoints={{
-                640: { slidesPerView: 3 },
-                768: { slidesPerView: 4 },
-                1024: { slidesPerView: 5 },
+                640: { slidesPerView: 3, spaceBetween: 20 },
+                768: { slidesPerView: 4, spaceBetween: 24 },
+                1024: { slidesPerView: 5, spaceBetween: 24 },
               }}
-              className="pb-12 !overflow-visible"
+              className="pb-8 md:pb-12 !overflow-visible"
             >
               {auMy.slice(0, 15).map((movie, index) => (
                 <SwiperSlide key={`${movie.slug || movie._id || 'aumy'}-${index}`}>
@@ -514,27 +514,27 @@ export default function Home() {
         {/* Phim Việt Nam */}
         {vietNam.length > 0 && (
           <section>
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-3">
-                <span className="w-1.5 h-8 bg-[#EF4444] rounded-full inline-block"></span>
+            <div className="flex items-center justify-between mb-6 md:mb-8">
+              <h2 className="text-xl md:text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-2 md:gap-3">
+                <span className="w-1.5 h-6 md:h-8 bg-[#EF4444] rounded-full inline-block"></span>
                 Phim Việt Nam
               </h2>
-              <Link to="/genres?country=viet-nam" className="text-sm text-[#3B82F6] hover:text-white transition-colors flex items-center gap-1">
-                Xem tất cả <ChevronRight className="w-4 h-4" />
+              <Link to="/genres?country=viet-nam" className="text-xs md:text-sm text-[#3B82F6] hover:text-white transition-colors flex items-center gap-1">
+                Xem tất cả <ChevronRight className="w-3 h-3 md:w-4 md:h-4" />
               </Link>
             </div>
             <Swiper
               modules={[Navigation, Pagination, Autoplay]}
-              spaceBetween={24}
+              spaceBetween={16}
               slidesPerView={2}
               navigation
               autoplay={{ delay: 4000, disableOnInteraction: false }}
               breakpoints={{
-                640: { slidesPerView: 3 },
-                768: { slidesPerView: 4 },
-                1024: { slidesPerView: 5 },
+                640: { slidesPerView: 3, spaceBetween: 20 },
+                768: { slidesPerView: 4, spaceBetween: 24 },
+                1024: { slidesPerView: 5, spaceBetween: 24 },
               }}
-              className="pb-12 !overflow-visible"
+              className="pb-8 md:pb-12 !overflow-visible"
             >
               {vietNam.slice(0, 15).map((movie, index) => (
                 <SwiperSlide key={`${movie.slug || movie._id || 'vietnam'}-${index}`}>
@@ -548,27 +548,27 @@ export default function Home() {
         {/* Phim Kinh Dị */}
         {kinhDi.length > 0 && (
           <section>
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-3">
-                <span className="w-1.5 h-8 bg-[#6B7280] rounded-full inline-block"></span>
+            <div className="flex items-center justify-between mb-6 md:mb-8">
+              <h2 className="text-xl md:text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-2 md:gap-3">
+                <span className="w-1.5 h-6 md:h-8 bg-[#6B7280] rounded-full inline-block"></span>
                 Phim Kinh Dị
               </h2>
-              <Link to="/genres?genre=kinh-di" className="text-sm text-[#3B82F6] hover:text-white transition-colors flex items-center gap-1">
-                Xem tất cả <ChevronRight className="w-4 h-4" />
+              <Link to="/genres?genre=kinh-di" className="text-xs md:text-sm text-[#3B82F6] hover:text-white transition-colors flex items-center gap-1">
+                Xem tất cả <ChevronRight className="w-3 h-3 md:w-4 md:h-4" />
               </Link>
             </div>
             <Swiper
               modules={[Navigation, Pagination, Autoplay]}
-              spaceBetween={24}
+              spaceBetween={16}
               slidesPerView={2}
               navigation
               autoplay={{ delay: 5500, disableOnInteraction: false }}
               breakpoints={{
-                640: { slidesPerView: 3 },
-                768: { slidesPerView: 4 },
-                1024: { slidesPerView: 5 },
+                640: { slidesPerView: 3, spaceBetween: 20 },
+                768: { slidesPerView: 4, spaceBetween: 24 },
+                1024: { slidesPerView: 5, spaceBetween: 24 },
               }}
-              className="pb-12 !overflow-visible"
+              className="pb-8 md:pb-12 !overflow-visible"
             >
               {kinhDi.slice(0, 15).map((movie, index) => (
                 <SwiperSlide key={`${movie.slug || movie._id || 'kinhdi'}-${index}`}>

@@ -178,7 +178,7 @@ export default function Login() {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.9 }}
       transition={{ duration: 0.5, ease: "backOut" }}
-      className="-mt-16 md:-mt-20 min-h-[80vh] flex items-center justify-center px-6 relative py-12"
+      className="-mt-16 md:-mt-20 min-h-[80vh] flex items-center justify-center px-4 sm:px-6 relative py-12"
     >
       {/* Background (Giữ nguyên) */}
       <div className="absolute inset-0 z-0">
@@ -187,14 +187,14 @@ export default function Login() {
       </div>
 
       <div className={cn(
-        "w-full max-w-md bg-[#121212]/80 backdrop-blur-xl p-8 md:p-10 rounded-3xl border border-white/10 shadow-2xl relative z-10",
+        "w-full max-w-md bg-[#121212]/80 backdrop-blur-xl p-6 sm:p-8 md:p-10 rounded-3xl border border-white/10 shadow-2xl relative z-10",
         shake ? "animate-shake" : ""
       )}>
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-heading font-bold text-white mb-2">
+        <div className="text-center mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-heading font-bold text-white mb-2">
             {isLogin ? "Chào mừng trở lại" : "Tạo tài khoản mới"}
           </h1>
-          {isLocked && <p className="text-red-500 font-bold animate-pulse text-sm">HỆ THỐNG ĐANG TẠM KHÓA</p>}
+          {isLocked && <p className="text-red-500 font-bold animate-pulse text-xs md:text-sm">HỆ THỐNG ĐANG TẠM KHÓA</p>}
         </div>
 
         <form className="space-y-5" onSubmit={handleSubmit}>

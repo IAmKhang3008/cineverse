@@ -165,21 +165,21 @@ export default function Watch() {
         <div className="fixed inset-0 bg-black/95 z-[40]"></div>
       )}
       
-      <div className="max-w-[1280px] mx-auto px-6 py-8 mt-16">
+      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-6 md:py-8 mt-16">
         {fromSearch ? (
           <button 
             onClick={() => navigate(-1)}
-            className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors font-medium cursor-pointer relative z-50"
+            className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-4 md:mb-6 transition-colors font-medium cursor-pointer relative z-50 text-sm md:text-base"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
             Quay lại
           </button>
         ) : (
           <Link 
             to={`/movie/${slug}`} 
-            className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-6 transition-colors font-medium relative z-50"
+            className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-4 md:mb-6 transition-colors font-medium relative z-50 text-sm md:text-base"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
             Quay lại trang chủ
           </Link>
         )}
@@ -280,40 +280,40 @@ export default function Watch() {
           {/* Left Column (70%) */}
           <div className="w-full lg:w-[70%]">
             {/* Movie Info & Actions */}
-            <div className="mb-8">
+            <div className="mb-6 md:mb-8">
               <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-4">
                 <div>
                   <h1 
-                    className="text-[24px] font-heading font-bold text-white  mb-1 tracking-tight"
+                    className="text-xl md:text-[24px] font-heading font-bold text-white mb-1 tracking-tight"
                     dangerouslySetInnerHTML={{ __html: movie.name }}
                   />
                   <h2 
-                    className="text-[18px] text-[#A0A0A0] font-medium mb-2 italic"
+                    className="text-base md:text-[18px] text-[#A0A0A0] font-medium mb-2 italic"
                     dangerouslySetInnerHTML={{ __html: movie.origin_name }}
                   />
-                  <p className="text-[#A0A0A0]  text-sm font-medium flex items-center gap-2">
+                  <p className="text-[#A0A0A0] text-xs md:text-sm font-medium flex flex-wrap items-center gap-2">
                     <span>
                       {currentEpisode.name.toLowerCase().includes('full') 
                         ? 'Tập Full' 
                         : `Tập ${currentEpisode.name.replace(/^Tập\s+/i, '')}${movie.episode_total && movie.episode_total !== "1" && movie.episode_total !== "Full" ? `/${movie.episode_total}` : ''}`}
                     </span>
                     <span>•</span>
-                    <span className="text-white  font-bold">{movie.quality || 'HD'}</span>
+                    <span className="text-white font-bold">{movie.quality || 'HD'}</span>
                     <span>•</span>
                     <span>{movie.lang || 'Vietsub'}</span>
                   </p>
                 </div>
                 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 w-full md:w-auto">
                   <button 
                     onClick={handleFavoriteClick}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors border ${
+                    className={`flex items-center justify-center gap-2 px-4 py-2.5 md:py-2 rounded-lg font-medium transition-colors border w-full md:w-auto ${
                       favorite 
                       ? 'bg-[#E50914]/10 border-[#E50914] text-[#E50914]' 
                       : 'bg-transparent border-gray-600 text-gray-300 hover:border-[#E50914] hover:text-[#E50914]'
                     }`}
                   >
-                    <Heart className={`w-5 h-5 ${favorite ? 'fill-current' : ''}`} />
+                    <Heart className={`w-4 h-4 md:w-5 md:h-5 ${favorite ? 'fill-current' : ''}`} />
                     {favorite ? 'Bỏ yêu thích' : 'Yêu thích'}
                   </button>
                 </div>
@@ -321,16 +321,16 @@ export default function Watch() {
             </div>
 
             {/* Episodes List */}
-            <div className="bg-[#121212]  rounded-xl p-6 border border-white/5  shadow-sm">
-              <h3 className="text-[18px] font-heading font-bold text-white  tracking-wider mb-6 pb-3 border-b border-white/10 ">
+            <div className="bg-[#121212] rounded-xl p-4 md:p-6 border border-white/5 shadow-sm">
+              <h3 className="text-base md:text-[18px] font-heading font-bold text-white tracking-wider mb-4 md:mb-6 pb-3 border-b border-white/10">
                 DANH SÁCH TẬP
               </h3>
               
-              <div className="max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+              <div className="max-h-[300px] md:max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                 {episodes.map((server: any, serverIdx: number) => (
                   <div key={serverIdx} className="mb-6 last:mb-0">
-                    <h4 className="text-[#A0A0A0] text-xs font-bold uppercase mb-3 pl-1 tracking-wider">{server.server_name}</h4>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+                    <h4 className="text-[#A0A0A0] text-[10px] md:text-xs font-bold uppercase mb-3 pl-1 tracking-wider">{server.server_name}</h4>
+                    <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-2">
                       {server.server_data.map((ep: any, idx: number) => {
                         const isCurrent = currentEpisode?.slug === ep.slug && currentServer === server.server_name;
                         const watched = isWatched(ep.name);
@@ -343,7 +343,7 @@ export default function Watch() {
                               setCurrentServer(server.server_name);
                             }}
                             className={`
-                              h-[40px] rounded-[8px] text-sm font-medium transition-all flex items-center justify-center
+                              h-[36px] md:h-[40px] rounded-[8px] text-xs md:text-sm font-medium transition-all flex items-center justify-center
                               ${isCurrent 
                                 ? 'bg-[#E50914] text-white shadow-[0_4px_10px_rgba(229,9,20,0.3)]' 
                                 : watched
@@ -365,19 +365,19 @@ export default function Watch() {
 
           {/* Right Column (30%) */}
           <div className="w-full lg:w-[30%]">
-            <div className="bg-[#121212]  rounded-xl p-6 border border-white/5  shadow-sm">
-              <h3 className="text-[16px] font-heading font-bold text-white  tracking-wider mb-6 pb-3 border-b border-white/10  uppercase">
+            <div className="bg-[#121212] rounded-xl p-4 md:p-6 border border-white/5 shadow-sm">
+              <h3 className="text-sm md:text-[16px] font-heading font-bold text-white tracking-wider mb-4 md:mb-6 pb-3 border-b border-white/10 uppercase">
                 Có thể bạn muốn xem
               </h3>
               
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-3 md:gap-4">
                 {relatedMovies.map((m, idx) => (
                   <Link 
                     key={idx} 
                     to={`/movie/${m.slug}`}
-                    className="flex items-center gap-4 p-2 rounded-lg hover:bg-[#2A2A2A] :bg-gray-50 transition-colors group"
+                    className="flex items-center gap-3 md:gap-4 p-2 rounded-lg hover:bg-[#2A2A2A] transition-colors group"
                   >
-                    <div className="w-[60px] h-[90px] rounded-md overflow-hidden flex-shrink-0 bg-gray-800 border border-white/10">
+                    <div className="w-[50px] h-[75px] md:w-[60px] md:h-[90px] rounded-md overflow-hidden flex-shrink-0 bg-gray-800 border border-white/10">
                       <img 
                         src={getImageUrl(m.poster_url || m.thumb_url, 'poster')} 
                         alt={m.name}
@@ -386,11 +386,11 @@ export default function Watch() {
                     </div>
                     <div className="flex flex-col justify-center">
                       <h4 
-                        className="text-white  font-medium text-sm line-clamp-2 group-hover:text-[#E50914] transition-colors mb-1"
+                        className="text-white font-medium text-xs md:text-sm line-clamp-2 group-hover:text-[#E50914] transition-colors mb-1"
                         title={decodeHtml(m.name)}
                         dangerouslySetInnerHTML={{ __html: m.name }}
                       />
-                      <p className="text-[#A0A0A0]  text-xs">
+                      <p className="text-[#A0A0A0] text-[10px] md:text-xs">
                         {m.year} • {decodeHtml(m.episode_current) || 'Full'}
                       </p>
                     </div>

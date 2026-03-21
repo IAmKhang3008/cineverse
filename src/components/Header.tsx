@@ -152,7 +152,7 @@ export default function Header() {
       )}
     >
       <div className="max-w-[1280px] mx-auto px-4 md:px-6 h-16 md:h-20 flex items-center justify-between container">
-        <div className="flex items-center gap-4 md:gap-12">
+        <div className="flex items-center gap-3 md:gap-12">
           <button 
             className="mobile-menu-btn lg:hidden text-white"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}

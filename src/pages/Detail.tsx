@@ -247,21 +247,21 @@ export default function Detail() {
 
       {/* Backdrop */}
       <div className="relative w-full bg-[#0A0A0A] overflow-hidden aspect-[3840/2160] max-h-[85vh] min-h-[50vh]">
-        <div className="absolute top-24 left-6 z-50">
+        <div className="absolute top-20 md:top-24 left-4 md:left-6 z-50">
           {fromSearch ? (
             <button 
               onClick={() => navigate(-1)}
-              className="inline-flex items-center gap-2 text-white/80 hover:text-white bg-black/40 hover:bg-black/60 px-4 py-2 rounded-full backdrop-blur-sm transition-all font-medium cursor-pointer"
+              className="inline-flex items-center gap-2 text-white/80 hover:text-white bg-black/40 hover:bg-black/60 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-sm transition-all font-medium cursor-pointer text-sm md:text-base"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
               Quay lại
             </button>
           ) : (
             <Link 
               to="/" 
-              className="inline-flex items-center gap-2 text-white/80 hover:text-white bg-black/40 hover:bg-black/60 px-4 py-2 rounded-full backdrop-blur-sm transition-all font-medium"
+              className="inline-flex items-center gap-2 text-white/80 hover:text-white bg-black/40 hover:bg-black/60 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-sm transition-all font-medium text-sm md:text-base"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
               Quay lại trang chủ
             </Link>
           )}
@@ -278,10 +278,10 @@ export default function Detail() {
       </div>
 
       {/* Content */}
-      <div className="max-w-[1280px] mx-auto px-6 -mt-32 md:-mt-64 relative z-10">
-        <div className="flex flex-col md:flex-row gap-8 md:gap-16 animate-in slide-in-from-bottom-8 duration-1000">
+      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 -mt-32 md:-mt-64 relative z-10">
+        <div className="flex flex-col md:flex-row gap-6 md:gap-16 animate-in slide-in-from-bottom-8 duration-1000">
           {/* Poster */}
-          <div className="w-56 md:w-80 flex-shrink-0 mx-auto md:mx-0">
+          <div className="w-48 sm:w-56 md:w-80 flex-shrink-0 mx-auto md:mx-0">
             <div className="rounded-2xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] aspect-[2/3] border border-white/10  group">
               <img
                 src={getImageUrl(movie.poster_url || movie.thumb_url, 'poster')}
@@ -294,7 +294,7 @@ export default function Detail() {
           {/* Info */}
           <div className="flex-grow text-center md:text-left pt-4 md:pt-12">
             <h1 
-              className="text-4xl md:text-5xl lg:text-6xl font-heading font-bold text-white  mb-2 tracking-tighter leading-[1.1] drop-shadow-2xl"
+              className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-heading font-bold text-white  mb-2 tracking-tighter leading-[1.1] drop-shadow-2xl"
               dangerouslySetInnerHTML={{ __html: movie.name }}
             />
             <h2 
@@ -344,41 +344,41 @@ export default function Detail() {
               <Link
                 to={`/watch/${movie.slug}`}
                 state={{ fromSearch }}
-                className="flex items-center justify-center gap-2 bg-[#E50914] hover:bg-[#b80710] text-white px-8 py-4 rounded-xl font-semibold transition-all text-lg shadow-[0_4px_14px_rgba(229,9,20,0.4)] hover:shadow-[0_6px_20px_rgba(229,9,20,0.6)] hover:-translate-y-0.5 w-full sm:w-auto min-w-[180px]"
+                className="flex items-center justify-center gap-2 bg-[#E50914] hover:bg-[#b80710] text-white px-6 md:px-8 py-3 md:py-4 rounded-xl font-semibold transition-all text-base md:text-lg shadow-[0_4px_14px_rgba(229,9,20,0.4)] hover:shadow-[0_6px_20px_rgba(229,9,20,0.6)] hover:-translate-y-0.5 w-full sm:w-auto min-w-[160px] md:min-w-[180px]"
               >
-                <Play className="w-5 h-5" fill="currentColor" />
+                <Play className="w-4 h-4 md:w-5 md:h-5" fill="currentColor" />
                 Xem Ngay
               </Link>
               
               {movie.trailer_url && (
                 <button 
                   onClick={() => setShowTrailer(true)}
-                  className="flex items-center justify-center gap-2 bg-transparent border-2 border-[#666666] text-white  hover:bg-black/50 hover:border-[#E50914]/50 px-8 py-4 rounded-xl font-semibold transition-all text-lg w-full sm:w-auto min-w-[180px]"
+                  className="flex items-center justify-center gap-2 bg-transparent border-2 border-[#666666] text-white  hover:bg-black/50 hover:border-[#E50914]/50 px-6 md:px-8 py-3 md:py-4 rounded-xl font-semibold transition-all text-base md:text-lg w-full sm:w-auto min-w-[160px] md:min-w-[180px]"
                 >
-                  <Play className="w-5 h-5 text-[#E50914]" fill="currentColor" />
+                  <Play className="w-4 h-4 md:w-5 md:h-5 text-[#E50914]" fill="currentColor" />
                   Trailer
                 </button>
               )}
 
               <button 
                 onClick={handleFavoriteClick}
-                className={`flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-semibold transition-all text-lg w-full sm:w-auto min-w-[180px] border-2 ${
+                className={`flex items-center justify-center gap-2 px-6 md:px-8 py-3 md:py-4 rounded-xl font-semibold transition-all text-base md:text-lg w-full sm:w-auto min-w-[160px] md:min-w-[180px] border-2 ${
                   favorite 
                   ? 'bg-transparent border-gray-500 text-gray-400 hover:border-white hover:text-white' 
                   : 'bg-transparent border-gray-500 text-gray-300 hover:border-[#E50914] hover:text-[#E50914]'
                 }`}
               >
-                <Heart className={`w-5 h-5 ${favorite ? 'fill-current text-[#E50914]' : ''}`} />
+                <Heart className={`w-4 h-4 md:w-5 md:h-5 ${favorite ? 'fill-current text-[#E50914]' : ''}`} />
                 {favorite ? 'Bỏ yêu thích' : 'Yêu thích'}
               </button>
             </div>
             
               {/* Detailed Info Tabs */}
-              <div className="mt-12 bg-[#121212] rounded-2xl p-6 border border-white/5">
-                <div className="flex items-center gap-6 border-b border-white/10 pb-4 mb-6 relative">
+              <div className="mt-8 md:mt-12 bg-[#121212] rounded-2xl p-4 md:p-6 border border-white/5">
+                <div className="flex items-center gap-4 md:gap-6 border-b border-white/10 pb-4 mb-6 relative overflow-x-auto no-scrollbar whitespace-nowrap">
                   <button 
                     onClick={() => setActiveTab('details')}
-                    className={`font-heading font-bold text-lg pb-4 -mb-[17px] transition-colors relative ${activeTab === 'details' ? 'text-white' : 'text-gray-400 hover:text-white'}`}
+                    className={`font-heading font-bold text-sm md:text-lg pb-4 -mb-[17px] transition-colors relative flex-shrink-0 ${activeTab === 'details' ? 'text-white' : 'text-gray-400 hover:text-white'}`}
                   >
                     Chi tiết
                     {activeTab === 'details' && (
@@ -387,7 +387,7 @@ export default function Detail() {
                   </button>
                   <button 
                     onClick={() => setActiveTab('cast')}
-                    className={`font-heading font-bold text-lg pb-4 -mb-[17px] transition-colors relative ${activeTab === 'cast' ? 'text-white' : 'text-gray-400 hover:text-white'}`}
+                    className={`font-heading font-bold text-sm md:text-lg pb-4 -mb-[17px] transition-colors relative flex-shrink-0 ${activeTab === 'cast' ? 'text-white' : 'text-gray-400 hover:text-white'}`}
                   >
                     Diễn viên
                     {activeTab === 'cast' && (
@@ -396,7 +396,7 @@ export default function Detail() {
                   </button>
                   <button 
                     onClick={() => setActiveTab('images')}
-                    className={`font-heading font-bold text-lg pb-4 -mb-[17px] transition-colors relative ${activeTab === 'images' ? 'text-white' : 'text-gray-400 hover:text-white'}`}
+                    className={`font-heading font-bold text-sm md:text-lg pb-4 -mb-[17px] transition-colors relative flex-shrink-0 ${activeTab === 'images' ? 'text-white' : 'text-gray-400 hover:text-white'}`}
                   >
                     Hình ảnh
                     {activeTab === 'images' && (
@@ -531,12 +531,12 @@ export default function Detail() {
 
           {/* Related Movies */}
           {relatedMovies.length > 0 && (
-            <div className="mt-24">
-              <h2 className="text-2xl font-heading font-bold text-white  tracking-wider mb-8 flex items-center gap-3">
-                 <span className="w-1.5 h-8 bg-[#E50914] rounded-full inline-block"></span>
+            <div className="mt-16 md:mt-24">
+              <h2 className="text-xl md:text-2xl font-heading font-bold text-white tracking-wider mb-6 md:mb-8 flex items-center gap-2 md:gap-3">
+                 <span className="w-1.5 h-6 md:h-8 bg-[#E50914] rounded-full inline-block"></span>
                 Phim Liên Quan
               </h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6 gap-y-10">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6 gap-y-8 md:gap-y-10">
                 {relatedMovies.map((m, index) => (
                   <MovieCard key={`${m.slug || m._id || 'related'}-${index}`} movie={m} />
                 ))}
