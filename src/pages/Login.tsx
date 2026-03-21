@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Mail, Lock, User, ArrowRight } from "lucide-react";
+import { Mail, Lock, User, ArrowRight, ShieldCheck, RefreshCw, CheckSquare, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "motion/react";
 import { useToast } from "@/contexts/ToastContext";
@@ -10,14 +10,44 @@ export default function Login() {
   const [isLogin, setIsLogin] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [shake, setShake] = useState(false);
-  
+
+  // Form States
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  
+  const [rememberMe, setRememberMe] = useState(false);
+
+  // Security States
+  const [captchaCode, setCaptchaCode] = useState("");
+  const [captchaInput, setCaptchaInput] = useState("");
+  const [loginAttempts, setLoginAttempts] = useState(0);
+  const [isLocked, setIsLocked] = useState(false);
+
   const navigate = useNavigate();
   const { showToast } = useToast();
+
+  // 1. Tạo CAPTCHA ngẫu nhiên
+  const generateCaptcha = useCallback(() => {
+    const code = Math.random().toString(36).substring(2, 6).toUpperCase();
+    setCaptchaCode(code);
+  }, []);
+
+  useEffect(() => {
+    generateCaptcha();
+    // Kiểm tra "Remember me"
+    const saved = localStorage.getItem("remembered_user");
+    if (saved) {
+      try {
+        const { email: savedEmail, pass } = JSON.parse(saved);
+        if (savedEmail) setEmail(savedEmail);
+        if (pass) setPassword(pass);
+        setRememberMe(true);
+      } catch (e) {
+        console.error("Lỗi parse remembered_user", e);
+      }
+    }
+  }, [generateCaptcha]);
 
   const triggerShake = () => {
     setShake(true);
@@ -40,67 +70,105 @@ export default function Login() {
     }
   };
 
+  // 2. Kiểm tra tính hợp lệ
+  const validateForm = () => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      showToast("Email không đúng định dạng!", "error");
+      return false;
+    }
+    if (password.length < 6) {
+      showToast("Mật khẩu phải từ 6 ký tự!", "error");
+      return false;
+    }
+    if (captchaInput.toUpperCase() !== captchaCode) {
+      showToast("Mã xác nhận (CAPTCHA) không đúng!", "error");
+      generateCaptcha();
+      return false;
+    }
+    if (!isLogin && password !== confirmPassword) {
+      showToast("Mật khẩu xác nhận không khớp!", "error");
+      return false;
+    }
+    return true;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!isLogin && password !== confirmPassword) {
-      alert("Mật khẩu nhập lại không chính xác!");
+    if (isLocked) return;
+    if (!validateForm()) {
       triggerShake();
       return;
     }
 
     setIsSubmitting(true);
 
+    // Giả lập "Cơ sở dữ liệu" người dùng trên LocalStorage
+    const usersDB = JSON.parse(localStorage.getItem("cineverse_users") || "[]");
+
     if (isLogin) {
-      // Giả lập gọi API mất 1.5 giây
+      // LOGIC ĐĂNG NHẬP
       setTimeout(() => {
-        setIsSubmitting(false);
-        
-        // Lưu thông tin đăng nhập
-        const currentData = JSON.parse(localStorage.getItem("cineverse_settings") || "{}");
-        const mockUserData = {
-          ...currentData,
-          name: currentData.name || "Người dùng",
+        const user = usersDB.find((u: any) => u.email === email && u.password === password);
+
+        if (user) {
+          // Thành công
+          if (rememberMe) {
+            localStorage.setItem("remembered_user", JSON.stringify({ email, pass: password }));
+          } else {
+            localStorage.removeItem("remembered_user");
+          }
+
+          localStorage.setItem("cineverse_settings", JSON.stringify(user));
+          window.dispatchEvent(new Event("local-storage-update"));
+          showToast("Đăng nhập thành công!", "success");
+          navigate('/');
+        } else {
+          // Thất bại
+          const newAttempts = loginAttempts + 1;
+          setLoginAttempts(newAttempts);
+          triggerShake();
+          showToast(`Sai email hoặc mật khẩu! (${newAttempts}/5)`, "error");
+          
+          if (newAttempts >= 5) {
+            setIsLocked(true);
+            showToast("Bạn đã nhập sai quá 5 lần. Vui lòng thử lại sau 30 giây.", "error");
+            setTimeout(() => {
+              setIsLocked(false);
+              setLoginAttempts(0);
+            }, 30000);
+          }
+          setIsSubmitting(false);
+          generateCaptcha();
+        }
+      }, 1000);
+    } else {
+      // LOGIC ĐĂNG KÝ
+      setTimeout(() => {
+        const userExists = usersDB.some((u: any) => u.email === email);
+        if (userExists) {
+          showToast("Email này đã được đăng ký!", "error");
+          setIsSubmitting(false);
+          triggerShake();
+          return;
+        }
+
+        const newUser = {
+          name: username,
           email: email,
-          theme: currentData.theme || "dark",
-          emailNotifications: currentData.emailNotifications ?? true,
-          pushNotifications: currentData.pushNotifications ?? false,
-          twoFactor: currentData.twoFactor ?? false
+          password: password, // Trong thực tế phải mã hóa hash
+          avatar: `https://ui-avatars.com/api/?name=${username}`,
+          theme: "dark"
         };
-        localStorage.setItem("cineverse_settings", JSON.stringify(mockUserData));
-        
-        // Bắn sự kiện để Header cập nhật
+
+        usersDB.push(newUser);
+        localStorage.setItem("cineverse_users", JSON.stringify(usersDB));
+        localStorage.setItem("cineverse_settings", JSON.stringify(newUser));
         window.dispatchEvent(new Event("local-storage-update"));
 
-        alert("Chào mừng bạn trở lại với Cineverse!");
+        showToast("Đăng ký tài khoản thành công!", "success");
         navigate('/');
       }, 1500);
-    } else {
-      // Giả lập quá trình tạo tài khoản
-      setTimeout(() => {
-        setIsSubmitting(false);
-        
-        const currentData = JSON.parse(localStorage.getItem("cineverse_settings") || "{}");
-        const newData = {
-          ...currentData,
-          name: username || "Người dùng", // Lấy giá trị từ Input, KHÔNG viết cứng "Nguyễn Văn A"
-          email: email,
-          avatar: currentData.avatar || undefined,
-          theme: "dark",
-          emailNotifications: true,
-          pushNotifications: false,
-          twoFactor: false
-        };
-
-        localStorage.setItem("cineverse_settings", JSON.stringify(newData));
-        
-        // Quan trọng: Bắn sự kiện để Header và các trang khác cập nhật ngay lập tức
-        window.dispatchEvent(new Event("local-storage-update"));
-
-        alert(`Chúc mừng ${username || email}, bạn đã gia nhập vũ trụ Cineverse!`);
-        // Tự động chuyển về trang chủ sau khi đăng ký thành công
-        navigate('/');
-      }, 2000);
     }
   };
 
@@ -112,114 +180,86 @@ export default function Login() {
       transition={{ duration: 0.5, ease: "backOut" }}
       className="min-h-[80vh] flex items-center justify-center px-6 relative py-12"
     >
-      {/* Blurred Background */}
+      {/* Background (Giữ nguyên) */}
       <div className="absolute inset-0 z-0">
-        <img 
-          src="https://picsum.photos/seed/cinema/1920/1080?blur=4" 
-          alt="Background" 
-          className="w-full h-full object-cover opacity-20"
-          referrerPolicy="no-referrer"
-        />
+        <img src="https://picsum.photos/seed/cinema/1920/1080?blur=4" alt="Background" className="w-full h-full object-cover opacity-20" />
         <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0A] via-[#0A0A0A]/80 to-transparent" />
       </div>
 
       <div className={cn(
-        "w-full max-w-md bg-[#121212]/80 backdrop-blur-xl p-8 md:p-10 rounded-3xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative z-10 transition-all duration-300",
-        shake ? "error-shake" : ""
+        "w-full max-w-md bg-[#121212]/80 backdrop-blur-xl p-8 md:p-10 rounded-3xl border border-white/10 shadow-2xl relative z-10",
+        shake ? "animate-shake" : ""
       )}>
         <div className="text-center mb-8">
           <h1 className="text-3xl font-heading font-bold text-white mb-2">
             {isLogin ? "Chào mừng trở lại" : "Tạo tài khoản mới"}
           </h1>
-          <p className="text-[#A0A0A0]">
-            {isLogin ? "Đăng nhập để tiếp tục hành trình điện ảnh" : "Tham gia Cineverse để trải nghiệm phim đỉnh cao"}
-          </p>
+          {isLocked && <p className="text-red-500 font-bold animate-pulse text-sm">HỆ THỐNG ĐANG TẠM KHÓA</p>}
         </div>
 
         <form className="space-y-5" onSubmit={handleSubmit}>
+          {/* Input Username (Chỉ khi Đăng ký) */}
           {!isLogin && (
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <User className="h-5 w-5 text-[#A0A0A0]" />
-              </div>
-              <input 
-                type="text" 
-                placeholder="Tên hiển thị" 
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required={!isLogin}
-                className="w-full bg-[#0A0A0A] border border-white/10 text-white rounded-xl pl-12 pr-4 py-4 focus:outline-none focus:border-[#E50914] focus:ring-1 focus:ring-[#E50914] transition-all"
-              />
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center"><User className="h-5 w-5 text-[#A0A0A0]" /></div>
+              <input type="text" placeholder="Tên hiển thị" value={username} onChange={(e) => setUsername(e.target.value)} required={!isLogin} className="w-full bg-[#0A0A0A] border border-white/10 text-white rounded-xl pl-12 pr-4 py-4 focus:border-[#E50914] outline-none transition-all" />
             </div>
           )}
 
+          {/* Input Email */}
           <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-              <Mail className="h-5 w-5 text-[#A0A0A0]" />
-            </div>
-            <input 
-              type="email" 
-              placeholder="Email của bạn" 
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full bg-[#0A0A0A] border border-white/10 text-white rounded-xl pl-12 pr-4 py-4 focus:outline-none focus:border-[#E50914] focus:ring-1 focus:ring-[#E50914] transition-all"
-            />
+            <div className="absolute inset-y-0 left-0 pl-4 flex items-center"><Mail className="h-5 w-5 text-[#A0A0A0]" /></div>
+            <input type="email" placeholder="Email của bạn" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full bg-[#0A0A0A] border border-white/10 text-white rounded-xl pl-12 pr-4 py-4 focus:border-[#E50914] outline-none transition-all" />
           </div>
 
+          {/* Input Password */}
           <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-              <Lock className="h-5 w-5 text-[#A0A0A0]" />
-            </div>
-            <input 
-              type="password" 
-              placeholder="Mật khẩu" 
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="w-full bg-[#0A0A0A] border border-white/10 text-white rounded-xl pl-12 pr-4 py-4 focus:outline-none focus:border-[#E50914] focus:ring-1 focus:ring-[#E50914] transition-all"
-            />
+            <div className="absolute inset-y-0 left-0 pl-4 flex items-center"><Lock className="h-5 w-5 text-[#A0A0A0]" /></div>
+            <input type="password" placeholder="Mật khẩu (mẫu: 123456)" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full bg-[#0A0A0A] border border-white/10 text-white rounded-xl pl-12 pr-4 py-4 focus:border-[#E50914] outline-none transition-all" />
           </div>
 
+          {/* Xác nhận mật khẩu (Cực kỳ quan trọng) */}
           {!isLogin && (
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <Lock className="h-5 w-5 text-[#A0A0A0]" />
-              </div>
-              <input 
-                type="password" 
-                placeholder="Nhập lại mật khẩu" 
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required={!isLogin}
-                className="w-full bg-[#0A0A0A] border border-white/10 text-white rounded-xl pl-12 pr-4 py-4 focus:outline-none focus:border-[#E50914] focus:ring-1 focus:ring-[#E50914] transition-all"
-              />
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center"><ShieldCheck className="h-5 w-5 text-[#A0A0A0]" /></div>
+              <input type="password" placeholder="Xác nhận mật khẩu" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required className="w-full bg-[#0A0A0A] border border-white/10 text-white rounded-xl pl-12 pr-4 py-4 focus:border-[#E50914] outline-none transition-all" />
             </div>
           )}
 
-          {isLogin && (
-            <div className="flex justify-end">
-              <a href="#" className="text-sm text-[#A0A0A0] hover:text-white transition-colors">Quên mật khẩu?</a>
+          {/* CAPTCHA TỰ CHẾ (Yêu cầu mới) */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="relative">
+              <input type="text" placeholder="Mã xác nhận" value={captchaInput} onChange={(e) => setCaptchaInput(e.target.value)} required className="w-full bg-[#0A0A0A] border border-white/10 text-white rounded-xl px-4 py-4 focus:border-[#E50914] outline-none" />
             </div>
-          )}
+            <div className="bg-[#2A2A2A] rounded-xl flex items-center justify-between px-4 select-none">
+              <span className="text-xl font-bold tracking-widest text-[#E50914] italic line-through decoration-white/30">{captchaCode}</span>
+              <button type="button" onClick={generateCaptcha} className="text-[#A0A0A0] hover:text-white"><RefreshCw className="w-4 h-4" /></button>
+            </div>
+          </div>
+
+          {/* Remember Me & Forgot Pass */}
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-2 cursor-pointer group" onClick={() => setRememberMe(!rememberMe)}>
+              {rememberMe ? <CheckSquare className="w-5 h-5 text-[#E50914]" /> : <Square className="w-5 h-5 text-[#A0A0A0] group-hover:text-white" />}
+              <span className="text-sm text-[#A0A0A0] group-hover:text-white">Ghi nhớ tôi</span>
+            </div>
+            {isLogin && <a href="#" className="text-sm text-[#A0A0A0] hover:text-white transition-colors">Quên mật khẩu?</a>}
+          </div>
 
           <button 
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || isLocked}
             className={cn(
-              "w-full bg-[#E50914] hover:bg-[#b80710] text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-[0_4px_14px_rgba(229,9,20,0.4)] hover:shadow-[0_6px_20px_rgba(229,9,20,0.6)] btn-primary",
-              isSubmitting ? "opacity-70 cursor-not-allowed" : "hover:-translate-y-0.5"
+              "w-full bg-[#E50914] text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg",
+              (isSubmitting || isLocked) ? "opacity-50 cursor-not-allowed" : "hover:scale-[1.02] active:scale-[0.98]"
             )}
           >
-            {isSubmitting ? "Đang xử lý..." : (
-              <>
-                {isLogin ? "Đăng Nhập" : "Đăng Ký"}
-                <ArrowRight className="w-5 h-5" />
-              </>
-            )}
+            {isLocked ? "Đã bị khóa" : isSubmitting ? "Đang xử lý..." : isLogin ? "Đăng Nhập" : "Đăng Ký"}
+            {!isSubmitting && !isLocked && <ArrowRight className="w-5 h-5" />}
           </button>
         </form>
 
+        {/* Social Login & Switch Mode (Giữ nguyên giao diện) */}
         <div className="mt-8">
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
@@ -275,3 +315,4 @@ export default function Login() {
     </motion.div>
   );
 }
+

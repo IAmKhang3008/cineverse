@@ -428,7 +428,7 @@ export default function Detail() {
                           <span className="text-gray-400">{movie.time || 'N/A'}</span>
                         </div>
                         <div className="flex">
-                          <span className="w-32 font-bold text-white flex-shrink-0">Năm phát hành:</span>
+                          <span className="w-32 font-bold text-white flex-shrink-0">Năm:</span>
                           <span className="text-gray-400">{movie.year || 'N/A'}</span>
                         </div>
                         <div className="flex">
