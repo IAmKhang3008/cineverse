@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Search, User, LogOut, Settings, Heart, History, ChevronDown, Play, Menu, X, LogIn, Bell } from "lucide-react";
+import { Search, User, LogOut, Settings, Heart, History, ChevronDown, Play, Menu, X, LogIn, Bell, Trash2, Clock } from "lucide-react";
 import { cn, DEFAULT_USER_AVATAR } from "@/lib/utils";
 import { api, getImageUrl } from "@/lib/api";
 
@@ -13,6 +13,10 @@ export default function Header() {
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  
+  // Mới: State cho lịch sử tìm kiếm
+  const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  
   const navigate = useNavigate();
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -22,6 +26,34 @@ export default function Header() {
     email: "guest@cineverse.com",
     avatar: DEFAULT_USER_AVATAR
   });
+
+  // 1. Load lịch sử tìm kiếm từ LocalStorage khi khởi tạo
+  useEffect(() => {
+    const history = localStorage.getItem("search_history");
+    if (history) {
+      setSearchHistory(JSON.parse(history));
+    }
+  }, []);
+
+  // Hàm lưu lịch sử mới
+  const saveToHistory = (query: string) => {
+    if (!query.trim()) return;
+    const cleanQuery = query.trim();
+    const newHistory = [
+      cleanQuery,
+      ...searchHistory.filter(item => item !== cleanQuery) // Xóa trùng lặp và đưa lên đầu
+    ].slice(0, 8); // Chỉ giữ lại 8 mục gần nhất
+    
+    setSearchHistory(newHistory);
+    localStorage.setItem("search_history", JSON.stringify(newHistory));
+  };
+
+  const removeHistoryItem = (e: React.MouseEvent, item: string) => {
+    e.stopPropagation();
+    const newHistory = searchHistory.filter(i => i !== item);
+    setSearchHistory(newHistory);
+    localStorage.setItem("search_history", JSON.stringify(newHistory));
+  };
 
   // Kiểm tra đăng nhập và lấy dữ liệu từ LocalStorage
   useEffect(() => {
@@ -123,6 +155,7 @@ export default function Header() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
+      saveToHistory(searchQuery); // Lưu lịch sử khi nhấn Enter
       navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
       setIsSearchFocused(false);
       setIsMobileMenuOpen(false);
@@ -216,6 +249,7 @@ export default function Header() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={() => {
                   setIsSearchFocused(true);
+                  // GIẢI PHÁP CHỐNG ZOOM: Khóa viewport bằng metadata khi focus
                   const viewportMeta = document.querySelector('meta[name=viewport]');
                   if (viewportMeta) {
                     viewportMeta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
@@ -223,6 +257,7 @@ export default function Header() {
                 }}
                 onBlur={() => {
                   setTimeout(() => setIsSearchFocused(false), 200);
+                  // TRẢ LẠI VIEWPORT: Cho phép zoom lại khi đã thoát search
                   setTimeout(() => {
                     const viewportMeta = document.querySelector('meta[name=viewport]');
                     if (viewportMeta) {
@@ -230,68 +265,104 @@ export default function Header() {
                     }
                   }, 300);
                 }}
-                className="bg-transparent border-none outline-none text-base md:text-sm text-white placeholder:text-gray-500 w-full search-input"
+                /* ÉP FONT SIZE 16PX TRÊN MOBILE ĐỂ KHÔNG BỊ ZOOM */
+                className="bg-transparent border-none outline-none text-[16px] md:text-sm text-white placeholder:text-gray-500 w-full search-input"
               />
             </div>
-            {isSearchFocused && searchQuery && (
-              <div className="absolute top-full mt-2 w-[calc(100vw-2rem)] md:w-[400px] -right-2 md:right-0 bg-[#121212] border border-white/10 rounded-xl shadow-2xl py-2 z-50 overflow-hidden suggestions-box">
-                <div className="px-4 py-2 text-xs text-gray-500 uppercase tracking-wider border-b border-white/5">Gợi ý tìm kiếm</div>
+            {/* DROP BOX: Lịch sử & Gợi ý */}
+            {isSearchFocused && (
+              <div className="absolute top-full mt-2 w-[calc(100vw-2rem)] md:w-[400px] -right-2 md:right-0 bg-[#121212] border border-white/10 rounded-2xl shadow-2xl py-2 z-[60] overflow-hidden suggestions-box">
                 
-                {loadingSuggestions ? (
-                  <div className="flex justify-center items-center py-6">
-                    <div className="w-6 h-6 border-2 border-[#E50914] border-t-transparent rounded-full animate-spin"></div>
-                  </div>
-                ) : suggestions.length > 0 ? (
-                  <div className="max-h-[60vh] md:max-h-[400px] overflow-y-auto custom-scrollbar">
-                    {suggestions.map((movie, index) => (
-                      <button
-                        key={`${movie.slug || movie._id || 'suggestion'}-${index}`}
-                        type="button"
+                {/* HIỂN THỊ LỊCH SỬ (Khi chưa gõ gì) */}
+                {!searchQuery && searchHistory.length > 0 && (
+                  <div>
+                    <div className="px-4 py-2 text-[10px] text-gray-500 uppercase font-bold tracking-widest flex justify-between items-center">
+                      <span>Lịch sử tìm kiếm</span>
+                      <button onMouseDown={(e) => {e.preventDefault(); setSearchHistory([]); localStorage.removeItem("search_history");}} className="hover:text-white transition-colors">Xóa hết</button>
+                    </div>
+                    {searchHistory.map((item, idx) => (
+                      <div 
+                        key={idx}
+                        className="flex items-center justify-between px-4 py-2.5 hover:bg-white/5 cursor-pointer group"
                         onMouseDown={() => {
-                          navigate(`/movie/${movie.slug}`);
-                          setIsSearchFocused(false);
-                          setSearchQuery("");
+                          setSearchQuery(item);
+                          navigate(`/search?q=${encodeURIComponent(item)}`);
                         }}
-                        className="btn w-full text-left px-4 py-3 hover:bg-white/5 flex items-start gap-4 transition-colors border-b border-white/5 last:border-0 group suggestion-item"
                       >
-                        <div className="w-12 h-16 flex-shrink-0 rounded-md overflow-hidden bg-[#2A2A2A] relative suggestion-poster">
-                          <img 
-                            src={getImageUrl(movie.poster_url || movie.thumb_url, 'poster')} 
-                            alt={movie.name}
-                            className="w-full h-full object-cover"
-                          />
-                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Play className="w-6 h-6 text-white" fill="currentColor" />
-                          </div>
+                        <div className="flex items-center gap-3 text-sm text-gray-300">
+                          <Clock className="w-3.5 h-3.5 text-gray-500" />
+                          {item}
                         </div>
-                        <div className="flex-grow min-w-0 py-1">
-                          <h4 className="text-sm font-bold text-white line-clamp-1 group-hover:text-[#E50914] transition-colors suggestion-title">{movie.name}</h4>
-                          <p className="text-xs text-gray-400 mt-1 line-clamp-1 suggestion-original">{movie.origin_name}</p>
-                          <div className="flex items-center gap-2 mt-1.5 suggestion-meta">
-                            <span className="text-[10px] bg-[#2A2A2A] text-gray-300 px-1.5 py-0.5 rounded">{movie.year || 'N/A'}</span>
-                            {movie.quality && <span className="text-[10px] bg-black/50 border border-white/10 text-white px-1.5 py-0.5 rounded">{movie.quality}</span>}
-                            {movie.lang && <span className="text-[10px] bg-[#3B82F6]/20 border border-[#3B82F6]/30 text-[#3B82F6] px-1.5 py-0.5 rounded">{movie.lang}</span>}
-                          </div>
-                        </div>
-                      </button>
+                        <button 
+                          onMouseDown={(e) => removeHistoryItem(e, item)}
+                          className="opacity-0 group-hover:opacity-100 p-1 hover:bg-white/10 rounded"
+                        >
+                          <X className="w-3 h-3 text-gray-500" />
+                        </button>
+                      </div>
                     ))}
                   </div>
-                ) : searchQuery.trim().length >= 2 ? (
-                  <div className="px-4 py-6 text-center text-sm text-gray-400">
-                    Không tìm thấy phim nào phù hợp.
-                  </div>
-                ) : null}
+                )}
 
-                <button 
-                  type="submit" 
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    handleSearch(e as any);
-                  }}
-                  className="btn w-full text-center px-4 py-3 text-sm text-[#3B82F6] hover:bg-white/5 flex items-center justify-center gap-2 border-t border-white/5 font-medium transition-colors"
-                >
-                  <Search className="w-4 h-4" /> Xem tất cả kết quả
-                </button>
+                {/* GỢI Ý TỪ API (Khi đã gõ >= 2 ký tự) */}
+                {searchQuery.trim().length >= 2 && (
+                  <>
+                    <div className="px-4 py-2 text-[10px] text-gray-500 uppercase font-bold tracking-widest border-b border-white/5">Gợi ý từ Cineverse</div>
+                    {loadingSuggestions ? (
+                      <div className="py-8 flex justify-center"><div className="w-5 h-5 border-2 border-[#E50914] border-t-transparent rounded-full animate-spin" /></div>
+                    ) : suggestions.length > 0 ? (
+                      <div className="max-h-[350px] overflow-y-auto custom-scrollbar">
+                        {suggestions.map((movie, index) => (
+                          <button
+                            key={`${movie.slug || movie._id || 'suggestion'}-${index}`}
+                            onMouseDown={() => {
+                              saveToHistory(movie.name);
+                              navigate(`/movie/${movie.slug}`);
+                              setIsSearchFocused(false);
+                              setSearchQuery("");
+                            }}
+                            className="w-full flex items-start gap-3 px-4 py-3 hover:bg-white/5 border-b border-white/5 last:border-0 group suggestion-item"
+                          >
+                            <div className="w-12 h-16 flex-shrink-0 rounded-md overflow-hidden bg-[#2A2A2A] relative suggestion-poster">
+                              <img 
+                                src={getImageUrl(movie.poster_url || movie.thumb_url, 'poster')} 
+                                alt={movie.name}
+                                className="w-full h-full object-cover"
+                              />
+                              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Play className="w-6 h-6 text-white" fill="currentColor" />
+                              </div>
+                            </div>
+                            <div className="flex-grow min-w-0 py-1 text-left">
+                              <h4 className="text-sm font-bold text-white line-clamp-1 group-hover:text-[#E50914] transition-colors suggestion-title">{movie.name}</h4>
+                              <p className="text-xs text-gray-400 mt-1 line-clamp-1 suggestion-original">{movie.origin_name}</p>
+                              <div className="flex items-center gap-2 mt-1.5 suggestion-meta">
+                                <span className="text-[10px] bg-[#2A2A2A] text-gray-300 px-1.5 py-0.5 rounded">{movie.year || 'N/A'}</span>
+                                {movie.quality && <span className="text-[10px] bg-black/50 border border-white/10 text-white px-1.5 py-0.5 rounded">{movie.quality}</span>}
+                                {movie.lang && <span className="text-[10px] bg-[#3B82F6]/20 border border-[#3B82F6]/30 text-[#3B82F6] px-1.5 py-0.5 rounded">{movie.lang}</span>}
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="px-4 py-6 text-center text-xs text-gray-500 italic">Không tìm thấy kết quả phù hợp...</div>
+                    )}
+                  </>
+                )}
+                
+                {searchQuery && (
+                  <button 
+                    type="submit"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleSearch(e as any);
+                    }}
+                    className="w-full py-3 text-sm text-[#3B82F6] font-bold hover:bg-white/5 border-t border-white/5 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Search className="w-4 h-4" /> Xem tất cả kết quả cho "{searchQuery}"
+                  </button>
+                )}
               </div>
             )}
           </form>

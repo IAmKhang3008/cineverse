@@ -225,7 +225,7 @@ export default function Home() {
           </button>
 
           {/* Custom Pagination (Thumbnails) */}
-          <div className="banner-thumbnails absolute bottom-4 md:bottom-8 right-4 md:right-8 z-20 flex gap-2 md:gap-4 justify-end h-[42px] w-full max-w-[calc(100vw-2rem)] md:max-w-[456px] overflow-x-auto custom-scrollbar">
+          <div className="banner-thumbnails absolute bottom-4 md:bottom-8 right-4 md:right-8 z-20 flex gap-2 md:gap-4 justify-end w-full max-w-[calc(100vw-2rem)] md:max-w-[456px] overflow-x-auto no-scrollbar p-2">
             {heroMovies.map((movie, index) => (
               <button
                 key={index}
@@ -234,7 +234,7 @@ export default function Home() {
                   activeHeroIndex === index 
                     ? 'border-2 border-white scale-110 shadow-[0_0_15px_rgba(255,255,255,0.5)] z-10' 
                     : 'border-2 border-transparent opacity-50 hover:opacity-100'
-                } w-8 h-8 rounded-full md:w-[80px] md:h-[45px] md:rounded-md`}
+                } w-7 h-7 rounded-full md:w-[64px] md:h-[36px] md:rounded-md`}
               >
                 <img 
                   src={movie.highQualityBanner || getImageUrl(movie.thumb_url || movie.poster_url, 'banner')} 
