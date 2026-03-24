@@ -8,6 +8,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { decodeHtml, DEFAULT_AVATAR } from "@/lib/utils";
 import { fetchWithCache } from "@/lib/tmdb";
 import { motion, AnimatePresence } from "motion/react";
+import CommentsSection from "@/components/CommentsSection";
 
 export default function Detail() {
   const { slug } = useParams<{ slug: string }>();
@@ -528,6 +529,9 @@ export default function Detail() {
               
             </div>
           </div>
+
+          {/* Comments Section */}
+          <CommentsSection movieId={movie._id || movie.slug} />
 
           {/* Related Movies */}
           {relatedMovies.length > 0 && (

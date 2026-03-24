@@ -29,6 +29,46 @@
         }
       },
       "required": ["uid", "email"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "A comment on a movie",
+      "type": "object",
+      "properties": {
+        "movieId": {
+          "type": "string",
+          "description": "ID of the movie being commented on"
+        },
+        "userId": {
+          "type": "string",
+          "description": "ID of the user who made the comment"
+        },
+        "userName": {
+          "type": "string",
+          "description": "Name of the user who made the comment"
+        },
+        "userAvatar": {
+          "type": "string",
+          "description": "Avatar URL of the user who made the comment"
+        },
+        "content": {
+          "type": "string",
+          "description": "Content of the comment"
+        },
+        "likes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Array of user IDs who liked the comment"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the comment was created"
+        }
+      },
+      "required": ["movieId", "userId", "userName", "userAvatar", "content", "likes", "createdAt"]
     }
   },
   "firestore": {
@@ -37,6 +77,12 @@
         "$ref": "#/entities/User"
       },
       "description": "User profiles"
+    },
+    "/comments/{commentId}": {
+      "schema": {
+        "$ref": "#/entities/Comment"
+      },
+      "description": "Movie comments"
     }
   }
 }
