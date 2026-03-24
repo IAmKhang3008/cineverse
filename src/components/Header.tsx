@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Search, User, LogOut, Settings, Heart, History, ChevronDown, Play, Menu, X, LogIn, Bell, Trash2, Clock } from "lucide-react";
+import { Search, User, LogOut, Settings, Heart, History, ChevronDown, Play, Menu, X, LogIn, Bell, Trash2, Clock, TrendingUp } from "lucide-react";
 import { cn, DEFAULT_USER_AVATAR } from "@/lib/utils";
 import { api, getImageUrl } from "@/lib/api";
 
@@ -16,6 +16,8 @@ export default function Header() {
   
   // Mới: State cho lịch sử tìm kiếm
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  const [trendingMovies, setTrendingMovies] = useState<any[]>([]);
+  const [isFetchingTrending, setIsFetchingTrending] = useState(false);
   
   const navigate = useNavigate();
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -33,6 +35,20 @@ export default function Header() {
     if (history) {
       setSearchHistory(JSON.parse(history));
     }
+
+    // Fetch Trending (Giả lập lấy từ top phim hot của website)
+    const fetchTrending = async () => {
+      setIsFetchingTrending(true);
+      try {
+        const res = await api.getByCategory('phim-bo', 1); 
+        setTrendingMovies(res.items?.slice(0, 5) || []);
+      } catch (error) {
+        console.error("Lỗi lấy trending:", error);
+      } finally {
+        setIsFetchingTrending(false);
+      }
+    };
+    fetchTrending();
   }, []);
 
   // Hàm lưu lịch sử mới
@@ -167,6 +183,12 @@ export default function Header() {
     }
   };
 
+  // Tuyệt chiêu: Ép font-size 16px cố định cho mobile và chặn touch-action zoom
+  const inputStyle = {
+    fontSize: '16px',
+    touchAction: 'none' as const
+  };
+
   const navLinks = [
     { name: "Trang chủ", path: "/" },
     { name: "Phim lẻ", path: "/movies" },
@@ -247,60 +269,70 @@ export default function Header() {
                 placeholder="Tìm kiếm..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                onFocus={() => {
-                  setIsSearchFocused(true);
-                  // GIẢI PHÁP CHỐNG ZOOM: Khóa viewport bằng metadata khi focus
-                  const viewportMeta = document.querySelector('meta[name=viewport]');
-                  if (viewportMeta) {
-                    viewportMeta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
-                  }
-                }}
-                onBlur={() => {
-                  setTimeout(() => setIsSearchFocused(false), 200);
-                  // TRẢ LẠI VIEWPORT: Cho phép zoom lại khi đã thoát search
-                  setTimeout(() => {
-                    const viewportMeta = document.querySelector('meta[name=viewport]');
-                    if (viewportMeta) {
-                      viewportMeta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes');
-                    }
-                  }, 300);
-                }}
-                /* ÉP FONT SIZE 16PX TRÊN MOBILE ĐỂ KHÔNG BỊ ZOOM */
-                className="bg-transparent border-none outline-none text-[16px] md:text-sm text-white placeholder:text-gray-500 w-full search-input"
+                onFocus={() => setIsSearchFocused(true)}
+                onBlur={() => setTimeout(() => setIsSearchFocused(false), 250)}
+                style={inputStyle}
+                className="bg-transparent border-none outline-none text-white placeholder:text-gray-500 w-full search-input"
               />
             </div>
             {/* DROP BOX: Lịch sử & Gợi ý */}
             {isSearchFocused && (
               <div className="absolute top-full mt-2 w-[calc(100vw-2rem)] md:w-[400px] -right-2 md:right-0 bg-[#121212] border border-white/10 rounded-2xl shadow-2xl py-2 z-[60] overflow-hidden suggestions-box">
                 
-                {/* HIỂN THỊ LỊCH SỬ (Khi chưa gõ gì) */}
-                {!searchQuery && searchHistory.length > 0 && (
-                  <div>
-                    <div className="px-4 py-2 text-[10px] text-gray-500 uppercase font-bold tracking-widest flex justify-between items-center">
-                      <span>Lịch sử tìm kiếm</span>
-                      <button onMouseDown={(e) => {e.preventDefault(); setSearchHistory([]); localStorage.removeItem("search_history");}} className="hover:text-white transition-colors">Xóa hết</button>
-                    </div>
-                    {searchHistory.map((item, idx) => (
-                      <div 
-                        key={idx}
-                        className="flex items-center justify-between px-4 py-2.5 hover:bg-white/5 cursor-pointer group"
-                        onMouseDown={() => {
-                          setSearchQuery(item);
-                          navigate(`/search?q=${encodeURIComponent(item)}`);
-                        }}
-                      >
-                        <div className="flex items-center gap-3 text-sm text-gray-300">
-                          <Clock className="w-3.5 h-3.5 text-gray-500" />
-                          {item}
+                {/* HIỂN THỊ LỊCH SỬ HOẶC TRENDING (Khi chưa gõ gì) */}
+                {!searchQuery && (
+                  <div className="py-2">
+                    {/* Nếu có lịch sử -> Hiện lịch sử */}
+                    {searchHistory.length > 0 ? (
+                      <div>
+                        <div className="px-4 py-2 flex justify-between items-center text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                          <span className="flex items-center gap-1.5"><History className="w-3 h-3" /> Tìm kiếm gần đây</span>
+                          <button onMouseDown={(e) => {e.preventDefault(); setSearchHistory([]); localStorage.removeItem("search_history");}} className="hover:text-red-500 transition-colors">Xóa hết</button>
                         </div>
-                        <button 
-                          onMouseDown={(e) => removeHistoryItem(e, item)}
-                          className="opacity-0 group-hover:opacity-100 p-1 hover:bg-white/10 rounded"
-                        >
-                          <X className="w-3 h-3 text-gray-500" />
-                        </button>
+                        {searchHistory.map((item, idx) => (
+                          <div 
+                            key={idx}
+                            className="flex items-center justify-between px-4 py-2.5 hover:bg-white/5 cursor-pointer group"
+                            onMouseDown={() => {
+                              setSearchQuery(item);
+                              navigate(`/search?q=${encodeURIComponent(item)}`);
+                            }}
+                          >
+                            <div className="flex items-center gap-3 text-sm text-gray-300 group-hover:text-white">
+                              <Clock className="w-3.5 h-3.5 text-gray-500 group-hover:text-gray-400" />
+                              {item}
+                            </div>
+                            <button 
+                              onMouseDown={(e) => removeHistoryItem(e, item)}
+                              className="opacity-0 group-hover:opacity-100 p-1 hover:bg-white/10 rounded"
+                            >
+                              <X className="w-3 h-3 text-gray-500" />
+                            </button>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    ) : (
+                      /* Nếu lịch sử trống -> Hiện TRENDING SEARCH */
+                      <div>
+                        <div className="px-4 py-2 text-[11px] font-bold text-[#E50914] uppercase tracking-wider flex items-center gap-1.5">
+                          <TrendingUp className="w-3 h-3" /> Xu hướng tìm kiếm
+                        </div>
+                        {isFetchingTrending ? (
+                          <div className="p-8 flex justify-center"><div className="w-5 h-5 border-2 border-[#E50914] border-t-transparent rounded-full animate-spin" /></div>
+                        ) : (
+                          trendingMovies.map((movie, i) => (
+                            <div 
+                              key={i} 
+                              onMouseDown={() => navigate(`/movie/${movie.slug}`)}
+                              className="px-4 py-3 hover:bg-white/5 flex items-center gap-3 cursor-pointer group"
+                            >
+                              <span className="text-sm font-bold text-gray-500 group-hover:text-[#E50914]">{i + 1}</span>
+                              <span className="text-sm text-gray-300 group-hover:text-white line-clamp-1">{movie.name}</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 

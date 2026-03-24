@@ -24,7 +24,7 @@ export default function History() {
           Vui lòng đăng nhập để Cineverse giúp bạn ghi nhớ những bộ phim đang xem dở và tập phim mới nhất.
         </p>
         <Link to="/login" className="bg-[#E50914] text-white px-8 py-3 rounded-full font-bold hover:bg-[#b80710] transition-all">
-          Đăng nhập để xem tiếp
+          Đăng nhập ngay
         </Link>
       </div>
     );
