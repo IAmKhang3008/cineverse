@@ -10,6 +10,7 @@ import "swiper/css/navigation";
 import "swiper/css/pagination";
 import "swiper/css/effect-fade";
 import { motion } from "motion/react";
+import { HeroBannerSkeleton, MovieCardSkeleton } from "@/components/Skeleton";
 
 export default function Home() {
   const [newMovies, setNewMovies] = useState<any[]>([]);
@@ -125,8 +126,20 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <div className="w-12 h-12 border-4 border-[#E50914] border-t-transparent rounded-full animate-spin"></div>
+      <div className="-mt-16 md:-mt-20 pb-20">
+        <HeroBannerSkeleton />
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 mt-8 md:mt-12 space-y-12">
+          {[...Array(4)].map((_, sectionIndex) => (
+            <div key={sectionIndex} className="space-y-4">
+              <div className="h-8 w-48 bg-[#2A2A2A] rounded-md animate-pulse"></div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
+                {[...Array(6)].map((_, i) => (
+                  <MovieCardSkeleton key={i} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -164,9 +177,16 @@ export default function Home() {
                     className="w-full h-full object-cover"
                   />
                   {/* Gradient overlay from left to right (70% -> 30%) */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-black/20" />
-                  {/* Bottom gradient to fade into background */}
-                  <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-[var(--color-cine-bg)] to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/60 to-black/20" />
+                  {/* Bottom gradient to fade into background with a softer blur effect */}
+                  <div 
+                    className="absolute inset-x-0 bottom-0 h-[80%] pointer-events-none" 
+                    style={{
+                      background: 'linear-gradient(to top, #0A0A0A 0%, rgba(10,10,10,0.98) 15%, rgba(10,10,10,0.85) 35%, rgba(10,10,10,0.4) 70%, transparent 100%)'
+                    }}
+                  />
+                  {/* Extra solid block at the very bottom to ensure no sharp edges */}
+                  <div className="absolute inset-x-0 bottom-0 h-8 bg-[#0A0A0A] pointer-events-none" />
                 </div>
 
                 <div className="absolute inset-0 flex items-center">

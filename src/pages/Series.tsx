@@ -3,6 +3,7 @@ import { api } from "@/lib/api";
 import MovieCard from "@/components/MovieCard";
 import { Filter, RotateCcw, ChevronDown, ArrowLeft } from "lucide-react";
 import { Link } from "react-router-dom";
+import { MovieCardSkeleton } from "@/components/Skeleton";
 
 const YEARS = Array.from({ length: 25 }, (_, i) => (2024 - i).toString());
 const GENRES = [
@@ -188,9 +189,9 @@ export default function Series() {
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6 gap-y-8 md:gap-y-10">
           {[...Array(10)].map((_, i) => (
-            <div key={i} className="aspect-[2/3] rounded-xl skeleton-loader bg-[#2A2A2A]"></div>
+            <MovieCardSkeleton key={i} />
           ))}
         </div>
       ) : (

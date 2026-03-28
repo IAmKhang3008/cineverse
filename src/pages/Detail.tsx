@@ -9,6 +9,7 @@ import { decodeHtml, DEFAULT_AVATAR } from "@/lib/utils";
 import { fetchWithCache } from "@/lib/tmdb";
 import { motion, AnimatePresence } from "motion/react";
 import CommentsSection from "@/components/CommentsSection";
+import { MovieDetailSkeleton } from "@/components/Skeleton";
 
 export default function Detail() {
   const { slug } = useParams<{ slug: string }>();
@@ -175,8 +176,8 @@ export default function Detail() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-[80vh]">
-        <div className="w-12 h-12 border-4 border-[#E50914] border-t-transparent rounded-full animate-spin"></div>
+      <div className="-mt-16 md:-mt-20 pb-20">
+        <MovieDetailSkeleton />
       </div>
     );
   }

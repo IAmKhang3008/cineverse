@@ -178,16 +178,16 @@ export default function Login() {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.9 }}
       transition={{ duration: 0.5, ease: "backOut" }}
-      className="-mt-16 md:-mt-20 min-h-[80vh] flex items-center justify-center px-4 sm:px-6 relative py-12"
+      className="min-h-screen flex items-center justify-center px-4 sm:px-6 relative pt-28 pb-12"
     >
-      {/* Background (Giữ nguyên) */}
+      {/* Background */}
       <div className="absolute inset-0 z-0">
-        <img src="https://picsum.photos/seed/cinema/1920/1080?blur=4" alt="Background" className="w-full h-full object-cover opacity-20" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0A] via-[#0A0A0A]/80 to-transparent" />
+        <img src="https://wallpapercave.com/wp/wp10615910.jpg" alt="Background" className="w-full h-full object-cover opacity-40" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0A] via-[#0A0A0A]/60 to-[#0A0A0A]/80" />
       </div>
 
       <div className={cn(
-        "w-full max-w-md bg-[#121212]/80 backdrop-blur-xl p-6 sm:p-8 md:p-10 rounded-3xl border border-white/10 shadow-2xl relative z-10",
+        "w-full max-w-md bg-[#000000]/70 backdrop-blur-md p-6 sm:p-8 md:p-10 rounded-3xl border border-white/10 shadow-2xl relative z-10 mt-4",
         shake ? "animate-shake" : ""
       )}>
         <div className="text-center mb-6 md:mb-8">

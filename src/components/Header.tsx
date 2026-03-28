@@ -3,6 +3,7 @@ import { Link, NavLink, useNavigate } from "react-router-dom";
 import { Search, User, LogOut, Settings, Heart, History, ChevronDown, Play, Menu, X, LogIn, Bell, Trash2, Clock, TrendingUp } from "lucide-react";
 import { cn, DEFAULT_USER_AVATAR } from "@/lib/utils";
 import { api, getImageUrl } from "@/lib/api";
+import { SearchSuggestionSkeleton, Skeleton } from "@/components/Skeleton";
 
 export default function Header() {
   const [scrolled, setScrolled] = useState(false);
@@ -318,7 +319,14 @@ export default function Header() {
                           <TrendingUp className="w-3 h-3" /> Xu hướng tìm kiếm
                         </div>
                         {isFetchingTrending ? (
-                          <div className="p-8 flex justify-center"><div className="w-5 h-5 border-2 border-[#E50914] border-t-transparent rounded-full animate-spin" /></div>
+                          <div className="flex flex-col">
+                            {[...Array(5)].map((_, i) => (
+                              <div key={i} className="px-4 py-3 border-b border-white/5 last:border-0 flex items-center gap-3">
+                                <Skeleton className="w-4 h-4 rounded-sm" />
+                                <Skeleton className="h-4 w-3/4" />
+                              </div>
+                            ))}
+                          </div>
                         ) : (
                           trendingMovies.map((movie, i) => (
                             <div 
@@ -341,7 +349,11 @@ export default function Header() {
                   <>
                     <div className="px-4 py-2 text-[10px] text-gray-500 uppercase font-bold tracking-widest border-b border-white/5">Gợi ý từ Cineverse</div>
                     {loadingSuggestions ? (
-                      <div className="py-8 flex justify-center"><div className="w-5 h-5 border-2 border-[#E50914] border-t-transparent rounded-full animate-spin" /></div>
+                      <div className="flex flex-col">
+                        {[...Array(3)].map((_, i) => (
+                          <SearchSuggestionSkeleton key={i} />
+                        ))}
+                      </div>
                     ) : suggestions.length > 0 ? (
                       <div className="max-h-[350px] overflow-y-auto custom-scrollbar">
                         {suggestions.map((movie, index) => (

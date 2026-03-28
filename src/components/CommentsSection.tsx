@@ -17,6 +17,7 @@ import {
   arrayUnion, 
   arrayRemove 
 } from "firebase/firestore";
+import { onAuthStateChanged, User } from "firebase/auth";
 import { db, auth, handleFirestoreError, OperationType } from "@/lib/firebase";
 
 interface Comment {
@@ -37,12 +38,26 @@ export default function CommentsSection({ movieId }: { movieId: string }) {
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
+  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
 
   // 1. LẤY THÔNG TIN USER ĐÃ ĐĂNG NHẬP
   useEffect(() => {
     const savedUser = localStorage.getItem("cineverse_settings");
     if (savedUser) setUserData(JSON.parse(savedUser));
+    
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setFirebaseUser(user);
+    });
+    return () => unsubscribe();
   }, []);
+
+  const checkAuth = () => {
+    if (!firebaseUser) {
+      alert("Vui lòng đăng nhập để thực hiện chức năng này!");
+      return false;
+    }
+    return true;
+  };
 
   // 2. LẮNG NGHE BÌNH LUẬN REALTIME TỪ FIRESTORE
   useEffect(() => {
@@ -71,21 +86,18 @@ export default function CommentsSection({ movieId }: { movieId: string }) {
   // 3. GỬI BÌNH LUẬN MỚI LÊN FIREBASE
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newComment.trim() || !userData || isSubmitting) return;
+    if (!checkAuth()) return;
+    if (!newComment.trim() || isSubmitting) return;
 
-    const currentUserId = auth.currentUser?.uid || userData.id || userData.uid;
-    if (!currentUserId) {
-      alert("Vui lòng đăng nhập lại để bình luận!");
-      return;
-    }
+    const currentUserId = firebaseUser!.uid;
 
     setIsSubmitting(true);
     try {
       await addDoc(collection(db, "comments"), {
         movieId,
         userId: currentUserId,
-        userName: userData.name || "Thành viên",
-        userAvatar: userData.avatar || DEFAULT_USER_AVATAR,
+        userName: firebaseUser!.displayName || userData?.name || "Thành viên",
+        userAvatar: firebaseUser!.photoURL || userData?.avatar || DEFAULT_USER_AVATAR,
         content: newComment,
         likes: [],
         createdAt: serverTimestamp()
@@ -101,8 +113,8 @@ export default function CommentsSection({ movieId }: { movieId: string }) {
 
   // 4. XỬ LÝ LIKE / UNLIKE
   const handleLike = async (commentId: string, likes: string[]) => {
-    const currentUserId = auth.currentUser?.uid || userData?.id || userData?.uid;
-    if (!currentUserId) return alert("Vui lòng đăng nhập để thích bình luận!");
+    if (!checkAuth()) return;
+    const currentUserId = firebaseUser!.uid;
     
     const commentRef = doc(db, "comments", commentId);
     const isLiked = likes?.includes(currentUserId);
@@ -119,6 +131,7 @@ export default function CommentsSection({ movieId }: { movieId: string }) {
 
   // 5. XỬ LÝ XÓA BÌNH LUẬN
   const confirmDelete = async () => {
+    if (!checkAuth()) return;
     if (!deletingCommentId) return;
     try {
       await deleteDoc(doc(db, "comments", deletingCommentId));
@@ -131,11 +144,13 @@ export default function CommentsSection({ movieId }: { movieId: string }) {
 
   // 6. XỬ LÝ SỬA BÌNH LUẬN
   const handleEdit = (comment: Comment) => {
+    if (!checkAuth()) return;
     setEditingCommentId(comment.id);
     setEditContent(comment.content);
   };
 
   const saveEdit = async () => {
+    if (!checkAuth()) return;
     if (!editingCommentId || !editContent.trim()) return;
     try {
       await updateDoc(doc(db, "comments", editingCommentId), {
@@ -169,9 +184,9 @@ export default function CommentsSection({ movieId }: { movieId: string }) {
 
       {/* FORM NHẬP BÌNH LUẬN - CHỈ HIỆN KHI ĐÃ ĐĂNG NHẬP */}
       <div className="bg-[#121212] rounded-2xl p-4 sm:p-6 border border-white/5 mb-10">
-        {userData ? (
+        {firebaseUser ? (
           <form onSubmit={handleSubmit} className="flex gap-4">
-            <img src={userData.avatar || DEFAULT_USER_AVATAR} className="w-10 h-10 rounded-full shrink-0 border border-white/10 object-cover" />
+            <img src={firebaseUser.photoURL || userData?.avatar || DEFAULT_USER_AVATAR} className="w-10 h-10 rounded-full shrink-0 border border-white/10 object-cover" />
             <div className="flex-1">
               <textarea
                 value={newComment}
@@ -204,8 +219,8 @@ export default function CommentsSection({ movieId }: { movieId: string }) {
       <div className="space-y-6">
         {comments.length > 0 ? (
           comments.map((comment) => {
-            const currentUserId = auth.currentUser?.uid || userData?.id || userData?.uid;
-            const isLiked = comment.likes?.includes(currentUserId);
+            const currentUserId = firebaseUser?.uid;
+            const isLiked = currentUserId ? comment.likes?.includes(currentUserId) : false;
             const isOwner = currentUserId && (currentUserId === comment.userId);
 
             return (
@@ -259,6 +274,7 @@ export default function CommentsSection({ movieId }: { movieId: string }) {
                       </button>
                       <button 
                         onClick={() => {
+                          if (!checkAuth()) return;
                           setNewComment(`@${comment.userName} `);
                           window.scrollTo({ top: document.querySelector('textarea')?.offsetTop ? document.querySelector('textarea')!.offsetTop - 200 : 0, behavior: 'smooth' });
                         }}
