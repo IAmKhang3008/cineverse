@@ -218,7 +218,7 @@ export default function Header() {
 
           <Link to="/" className="flex items-center gap-2 text-xl md:text-3xl font-heading font-bold tracking-wider group relative logo hover:scale-105 transition-transform duration-300">
             <img 
-              src="/logo.png" 
+              src="https://i.ibb.co/bgFXs8nH/logo.png" 
               alt="Cineverse Logo" 
               className="w-8 h-8 md:w-10 md:h-10 object-cover rounded-lg shadow-sm group-hover:shadow-[0_0_15px_rgba(229,9,20,0.5)] transition-shadow duration-300" 
               onError={(e) => {

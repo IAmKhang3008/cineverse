@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, getImageUrl } from "@/lib/api";
 import MovieCard from "@/components/MovieCard";
-import { Play, Info, ChevronRight } from "lucide-react";
+import { Play, Info, ChevronRight, Heart, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation, Pagination, Autoplay, EffectFade } from "swiper/modules";
@@ -9,8 +9,10 @@ import "swiper/css";
 import "swiper/css/navigation";
 import "swiper/css/pagination";
 import "swiper/css/effect-fade";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import { HeroBannerSkeleton, MovieCardSkeleton } from "@/components/Skeleton";
+import { useFavorites } from "@/hooks/useFavorites";
+import { useToast } from "@/contexts/ToastContext";
 
 export default function Home() {
   const [newMovies, setNewMovies] = useState<any[]>([]);
@@ -27,6 +29,39 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [heroSwiper, setHeroSwiper] = useState<any>(null);
   const [activeHeroIndex, setActiveHeroIndex] = useState(0);
+  const [showTrailer, setShowTrailer] = useState(false);
+  const [currentTrailerUrl, setCurrentTrailerUrl] = useState("");
+  
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const { showToast } = useToast();
+
+  const handlePlayTrailer = (trailerUrl: string) => {
+    if (!trailerUrl) {
+      showToast("Trailer không khả dụng cho phim này.", "error");
+      return;
+    }
+    
+    let embedUrl = trailerUrl;
+    if (trailerUrl.includes('youtube.com/watch?v=')) {
+      embedUrl = trailerUrl.replace('watch?v=', 'embed/');
+    } else if (trailerUrl.includes('youtu.be/')) {
+      embedUrl = trailerUrl.replace('youtu.be/', 'youtube.com/embed/');
+    }
+    
+    // Xử lý tham số URL
+    if (embedUrl.includes('?')) {
+      embedUrl += '&autoplay=1&mute=0';
+    } else {
+      embedUrl += '?autoplay=1&mute=0';
+    }
+    
+    setCurrentTrailerUrl(embedUrl);
+    setShowTrailer(true);
+  };
+
+  const handleToggleFavorite = (movie: any) => {
+    toggleFavorite(movie);
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -107,7 +142,9 @@ export default function Home() {
               return { 
                 ...movie, 
                 content: detail.movie?.content || movie.content,
-                highQualityBanner: highQualityBanner
+                highQualityBanner: highQualityBanner,
+                trailer_url: detail.movie?.trailer_url || movie.trailer_url,
+                _id: detail.movie?._id || movie._id
               };
             } catch (e) {
               return movie;
@@ -213,20 +250,39 @@ export default function Home() {
                         <span className="text-white font-bold border border-white/20 px-1.5 py-0.5 rounded text-[10px] md:text-xs">{movie.quality || 'HD'}</span>
                       </div>
                       
-                      <div className="movie-actions flex flex-wrap items-center gap-3 md:gap-4">
+                      <div className="movie-actions flex flex-wrap items-center gap-2 md:gap-3">
                         <Link
                           to={`/watch/${movie.slug}`}
-                          className="btn flex items-center justify-center gap-2 bg-[#E50914] text-white px-6 py-2.5 md:px-[32px] md:py-[12px] rounded-[40px] font-bold text-sm md:text-[16px] transition-all hover:scale-105 shadow-[0_4px_15px_rgba(229,9,20,0.5)]"
+                          className="btn flex items-center justify-center gap-1.5 bg-[#E50914] text-white px-4 py-2 md:px-6 md:py-2.5 rounded-[40px] font-bold text-xs md:text-sm transition-all hover:scale-105 shadow-[0_4px_15px_rgba(229,9,20,0.5)]"
                         >
-                          <Play className="w-4 h-4 md:w-5 md:h-5" fill="currentColor" />
+                          <Play className="w-3 h-3 md:w-4 md:h-4" fill="currentColor" />
                           Xem ngay
                         </Link>
+                        
+                        {movie.trailer_url && (
+                          <button
+                            onClick={() => handlePlayTrailer(movie.trailer_url)}
+                            className="btn flex items-center justify-center gap-1.5 bg-transparent backdrop-blur-[8px] !border !border-solid !border-[#4f4444] text-white px-4 py-2 md:px-6 md:py-2.5 rounded-[40px] md:rounded-[8px] font-bold text-xs md:text-sm transition-all hover:bg-white/20"
+                          >
+                            <Play className="w-3 h-3 md:w-4 md:h-4 text-[#E50914]" fill="currentColor" />
+                            Trailer
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => handleToggleFavorite(movie)}
+                          className={`btn flex items-center justify-center gap-1.5 bg-transparent backdrop-blur-[8px] !border !border-solid !border-[#4f4444] px-4 py-2 md:px-6 md:py-2.5 rounded-[40px] md:rounded-[8px] font-bold text-xs md:text-sm transition-all hover:bg-white/20 ${isFavorite(movie._id || movie.slug) ? 'text-[#E50914]' : 'text-white'}`}
+                        >
+                          <Heart className={`w-3 h-3 md:w-4 md:h-4 ${isFavorite(movie._id || movie.slug) ? 'fill-current' : ''}`} />
+                          <span className="hidden sm:inline">{isFavorite(movie._id || movie.slug) ? 'Bỏ yêu thích' : 'Yêu thích'}</span>
+                        </button>
+
                         <Link
                           to={`/movie/${movie.slug}`}
-                          className="btn flex items-center justify-center gap-2 bg-transparent backdrop-blur-[8px] !border !border-solid !border-[#4f4444] text-white px-6 py-2.5 md:px-[32px] md:py-[12px] rounded-[8px] font-bold text-sm md:text-[16px] transition-all hover:bg-white/20"
+                          className="btn flex items-center justify-center gap-1.5 bg-transparent backdrop-blur-[8px] !border !border-solid !border-[#4f4444] text-white px-4 py-2 md:px-6 md:py-2.5 rounded-[40px] md:rounded-[8px] font-bold text-xs md:text-sm transition-all hover:bg-white/20"
                         >
-                          <Info className="w-4 h-4 md:w-5 md:h-5" />
-                          Chi tiết phim
+                          <Info className="w-3 h-3 md:w-4 md:h-4" />
+                          <span className="hidden sm:inline">Chi tiết</span>
                         </Link>
                       </div>
                     </div>
@@ -599,6 +655,41 @@ export default function Home() {
           </section>
         )}
       </div>
+
+      {/* Trailer Modal */}
+      <AnimatePresence>
+        {showTrailer && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4"
+            onClick={() => setShowTrailer(false)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative w-full max-w-5xl aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-white/10"
+              onClick={e => e.stopPropagation()}
+            >
+              <button 
+                onClick={() => setShowTrailer(false)}
+                className="absolute top-4 right-4 z-10 p-2 bg-black/50 hover:bg-[#E50914] text-white rounded-full transition-colors backdrop-blur-md"
+              >
+                <X className="w-6 h-6" />
+              </button>
+              <iframe
+                src={currentTrailerUrl}
+                title="Trailer"
+                className="w-full h-full"
+                allowFullScreen
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              ></iframe>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
