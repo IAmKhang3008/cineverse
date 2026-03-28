@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { api, getImageUrl } from "@/lib/api";
-import { Play, Plus, Star, Clock, Calendar, Globe, Heart, X, ArrowLeft } from "lucide-react";
+import { Play, Plus, Star, Clock, Calendar, Globe, Heart, X, ArrowLeft, Share2, Copy, Facebook, Twitter, Link as LinkIcon } from "lucide-react";
 import MovieCard from "@/components/MovieCard";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
@@ -23,11 +23,42 @@ export default function Detail() {
   const [images, setImages] = useState<any[]>([]);
   const [loadingImages, setLoadingImages] = useState(false);
   const [rating, setRating] = useState<{ source: string, score: string, votes: string } | null>(null);
+  const [showShareMenu, setShowShareMenu] = useState(false);
+  const shareMenuRef = useRef<HTMLDivElement>(null);
   const { isFavorite, toggleFavorite } = useFavorites();
   const { showToast } = useToast();
   const location = useLocation();
   const navigate = useNavigate();
   const fromSearch = location.state?.fromSearch;
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (shareMenuRef.current && !shareMenuRef.current.contains(event.target as Node)) {
+        setShowShareMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleShare = (platform: 'copy' | 'facebook' | 'twitter') => {
+    const url = window.location.href;
+    const text = `Xem phim ${movie?.name} trên Cineverse!`;
+    
+    switch (platform) {
+      case 'copy':
+        navigator.clipboard.writeText(url);
+        showToast("Đã sao chép liên kết vào clipboard!", "success");
+        break;
+      case 'facebook':
+        window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, '_blank');
+        break;
+      case 'twitter':
+        window.open(`https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`, '_blank');
+        break;
+    }
+    setShowShareMenu(false);
+  };
 
   useEffect(() => {
     const fetchDetail = async () => {
@@ -373,6 +404,52 @@ export default function Detail() {
                 <Heart className={`w-4 h-4 md:w-5 md:h-5 ${favorite ? 'fill-current text-[#E50914]' : ''}`} />
                 {favorite ? 'Bỏ yêu thích' : 'Yêu thích'}
               </button>
+
+              <div className="relative" ref={shareMenuRef}>
+                <button 
+                  onClick={() => setShowShareMenu(!showShareMenu)}
+                  className="flex items-center justify-center gap-2 bg-transparent border-2 border-[#666666] text-gray-300 hover:border-white hover:text-white px-6 md:px-8 py-3 md:py-4 rounded-xl font-semibold transition-all text-base md:text-lg w-full sm:w-auto min-w-[160px] md:min-w-[180px]"
+                >
+                  <Share2 className="w-4 h-4 md:w-5 md:h-5" />
+                  Chia sẻ
+                </button>
+
+                <AnimatePresence>
+                  {showShareMenu && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute bottom-full left-0 md:left-1/2 md:-translate-x-1/2 mb-3 w-48 bg-[#1A1A1A] border border-[#333333] rounded-xl shadow-xl overflow-hidden z-50"
+                    >
+                      <div className="flex flex-col">
+                        <button 
+                          onClick={() => handleShare('copy')}
+                          className="flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:text-white hover:bg-white/10 transition-colors text-left"
+                        >
+                          <LinkIcon className="w-4 h-4" />
+                          Sao chép liên kết
+                        </button>
+                        <button 
+                          onClick={() => handleShare('facebook')}
+                          className="flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:text-white hover:bg-[#1877F2]/20 transition-colors text-left"
+                        >
+                          <Facebook className="w-4 h-4 text-[#1877F2]" />
+                          Chia sẻ Facebook
+                        </button>
+                        <button 
+                          onClick={() => handleShare('twitter')}
+                          className="flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:text-white hover:bg-[#1DA1F2]/20 transition-colors text-left"
+                        >
+                          <Twitter className="w-4 h-4 text-[#1DA1F2]" />
+                          Chia sẻ Twitter
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
             
               {/* Detailed Info Tabs */}
