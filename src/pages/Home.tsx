@@ -536,7 +536,7 @@ export default function Home() {
             <div className="flex items-center justify-between mb-6 md:mb-8">
               <h2 className="text-xl md:text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-2 md:gap-3">
                 <span className="w-1.5 h-6 md:h-8 bg-[#F59E0B] rounded-full inline-block"></span>
-                Phim Hồng Kong
+                Phim Hồng Kông
               </h2>
               <Link to="/genres?country=hong-kong" className="text-xs md:text-sm text-[#3B82F6] hover:text-white transition-colors flex items-center gap-1">
                 Xem tất cả <ChevronRight className="w-3 h-3 md:w-4 md:h-4" />

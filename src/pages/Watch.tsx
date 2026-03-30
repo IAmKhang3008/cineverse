@@ -180,7 +180,7 @@ export default function Watch() {
             className="inline-flex items-center gap-2 text-gray-400 hover:text-white mb-4 md:mb-6 transition-colors font-medium relative z-50 text-sm md:text-base"
           >
             <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
-            Quay lại trang chủ
+            Quay lại
           </Link>
         )}
         
