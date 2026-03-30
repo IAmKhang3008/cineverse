@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import { api, getImageUrl } from "@/lib/api";
-import MovieCard from "@/components/MovieCard";
 import { Play, Info, ChevronRight, Heart, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Swiper, SwiperSlide } from "swiper/react";
@@ -13,6 +12,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { HeroBannerSkeleton, MovieCardSkeleton } from "@/components/Skeleton";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
+
+const MovieCard = React.lazy(() => import("@/components/MovieCard"));
 
 export default function Home() {
   const [newMovies, setNewMovies] = useState<any[]>([]);
@@ -64,37 +65,19 @@ export default function Home() {
   };
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchEssentialData = async () => {
       try {
-        const [
-          newRes, trendingRes, seriesRes, hoatHinhRes, tvShowsRes, 
-          thaiLanRes, hongKongRes, auMyRes, vietNamRes, kinhDiRes,
-          chieuRapRes, hanQuocRes
-        ] = await Promise.all([
+        const [newRes, trendingRes, chieuRapRes, hanQuocRes, vietNamRes] = await Promise.all([
           api.getNewUpdated(1),
           api.getByCategory("phim-le", 1),
-          api.getByCategory("phim-bo", 1),
-          api.getByCategory("hoat-hinh", 1),
-          api.getByCategory("tv-shows", 1),
-          api.getByCountry("thai-lan", 1),
-          api.getByCountry("hong-kong", 1),
-          api.getByCountry("au-my", 1),
-          api.getByCountry("viet-nam", 1),
-          api.getByGenre("kinh-di", 1),
           api.getByCategory("phim-chieu-rap", 1),
           api.getByCountry("han-quoc", 1),
+          api.getByCountry("viet-nam", 1),
         ]);
         
         setNewMovies(newRes.items || []);
         setTrending(trendingRes.items || []);
-        setSeries(seriesRes.items || []);
-        setHoatHinh(hoatHinhRes.items || []);
-        setTvShows(tvShowsRes.items || []);
-        setThaiLan(thaiLanRes.items || []);
-        setHongKong(hongKongRes.items || []);
-        setAuMy(auMyRes.items || []);
         setVietNam(vietNamRes.items || []);
-        setKinhDi(kinhDiRes.items || []);
 
         const heroList = [
           { ...(newRes.items?.[0] || {}), badge: "🔥 PHIM MỚI CẬP NHẬT" },
@@ -153,12 +136,38 @@ export default function Home() {
         );
         setHeroMovies(heroDetails);
       } catch (error) {
-        console.error("Failed to fetch data", error);
+        console.error("Failed to fetch essential data", error);
       } finally {
         setLoading(false);
       }
     };
-    fetchData();
+
+    const fetchSecondaryData = async () => {
+      try {
+        const [seriesRes, hoatHinhRes, tvShowsRes, thaiLanRes, hongKongRes, auMyRes, kinhDiRes] = await Promise.all([
+          api.getByCategory("phim-bo", 1),
+          api.getByCategory("hoat-hinh", 1),
+          api.getByCategory("tv-shows", 1),
+          api.getByCountry("thai-lan", 1),
+          api.getByCountry("hong-kong", 1),
+          api.getByCountry("au-my", 1),
+          api.getByGenre("kinh-di", 1),
+        ]);
+        
+        setSeries(seriesRes.items || []);
+        setHoatHinh(hoatHinhRes.items || []);
+        setTvShows(tvShowsRes.items || []);
+        setThaiLan(thaiLanRes.items || []);
+        setHongKong(hongKongRes.items || []);
+        setAuMy(auMyRes.items || []);
+        setKinhDi(kinhDiRes.items || []);
+      } catch (error) {
+        console.error("Failed to fetch secondary data", error);
+      }
+    };
+
+    fetchEssentialData();
+    fetchSecondaryData();
   }, []);
 
   if (loading) {
@@ -212,6 +221,7 @@ export default function Home() {
                     src={movie.highQualityBanner || getImageUrl(movie.thumb_url || movie.poster_url, 'banner')}
                     alt={movie.name}
                     className="w-full h-full object-cover"
+                    loading={index === 0 ? "eager" : "lazy"}
                   />
                   {/* Gradient overlay from left to right (70% -> 30%) */}
                   <div className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/60 to-black/20" />
@@ -316,6 +326,7 @@ export default function Home() {
                   src={movie.highQualityBanner || getImageUrl(movie.thumb_url || movie.poster_url, 'banner')} 
                   alt={movie.name}
                   className="w-full h-full object-cover"
+                  loading="lazy"
                 />
               </button>
             ))}
@@ -347,7 +358,7 @@ export default function Home() {
           >
             {trending.slice(0, 15).map((movie, index) => (
               <SwiperSlide key={`${movie.slug || movie._id || 'trending'}-${index}`}>
-                <MovieCard movie={movie} />
+                <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} /></Suspense>
               </SwiperSlide>
             ))}
           </Swiper>
@@ -379,7 +390,7 @@ export default function Home() {
           >
             {newMovies.slice(1, 16).map((movie, index) => (
               <SwiperSlide key={`${movie.slug || movie._id || 'new'}-${index}`}>
-                <MovieCard movie={movie} />
+                <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} /></Suspense>
               </SwiperSlide>
             ))}
           </Swiper>
@@ -411,7 +422,7 @@ export default function Home() {
           >
             {series.slice(0, 15).map((movie, index) => (
               <SwiperSlide key={`${movie.slug || movie._id || 'series'}-${index}`}>
-                <MovieCard movie={movie} />
+                <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} /></Suspense>
               </SwiperSlide>
             ))}
           </Swiper>
@@ -444,7 +455,7 @@ export default function Home() {
             >
               {hoatHinh.slice(0, 15).map((movie, index) => (
                 <SwiperSlide key={`${movie.slug || movie._id || 'hoathinh'}-${index}`}>
-                  <MovieCard movie={movie} />
+                  <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} /></Suspense>
                 </SwiperSlide>
               ))}
             </Swiper>
@@ -478,7 +489,7 @@ export default function Home() {
             >
               {tvShows.slice(0, 15).map((movie, index) => (
                 <SwiperSlide key={`${movie.slug || movie._id || 'tvshows'}-${index}`}>
-                  <MovieCard movie={movie} />
+                  <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} /></Suspense>
                 </SwiperSlide>
               ))}
             </Swiper>
@@ -512,7 +523,7 @@ export default function Home() {
             >
               {thaiLan.slice(0, 15).map((movie, index) => (
                 <SwiperSlide key={`${movie.slug || movie._id || 'thailan'}-${index}`}>
-                  <MovieCard movie={movie} />
+                  <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} /></Suspense>
                 </SwiperSlide>
               ))}
             </Swiper>
@@ -546,7 +557,7 @@ export default function Home() {
             >
               {hongKong.slice(0, 15).map((movie, index) => (
                 <SwiperSlide key={`${movie.slug || movie._id || 'hongkong'}-${index}`}>
-                  <MovieCard movie={movie} />
+                  <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} /></Suspense>
                 </SwiperSlide>
               ))}
             </Swiper>
@@ -580,7 +591,7 @@ export default function Home() {
             >
               {auMy.slice(0, 15).map((movie, index) => (
                 <SwiperSlide key={`${movie.slug || movie._id || 'aumy'}-${index}`}>
-                  <MovieCard movie={movie} />
+                  <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} /></Suspense>
                 </SwiperSlide>
               ))}
             </Swiper>
@@ -614,7 +625,7 @@ export default function Home() {
             >
               {vietNam.slice(0, 15).map((movie, index) => (
                 <SwiperSlide key={`${movie.slug || movie._id || 'vietnam'}-${index}`}>
-                  <MovieCard movie={movie} />
+                  <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} /></Suspense>
                 </SwiperSlide>
               ))}
             </Swiper>
@@ -648,7 +659,7 @@ export default function Home() {
             >
               {kinhDi.slice(0, 15).map((movie, index) => (
                 <SwiperSlide key={`${movie.slug || movie._id || 'kinhdi'}-${index}`}>
-                  <MovieCard movie={movie} />
+                  <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} /></Suspense>
                 </SwiperSlide>
               ))}
             </Swiper>
