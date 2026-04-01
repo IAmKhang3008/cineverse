@@ -6,7 +6,7 @@ import { ArrowLeft, Lock, Heart } from "lucide-react";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 export default function Favorites() {
-  useDocumentTitle("Phim yêu thích | Cineverse");
+  useDocumentTitle("Yêu thích | Cineverse");
   
   const { favorites } = useFavorites();
   const [isLoggedIn, setIsLoggedIn] = useState(false);

@@ -6,7 +6,7 @@ import { getImageUrl } from "@/lib/api";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 export default function History() {
-  useDocumentTitle("Lịch sử xem | Cineverse");
+  useDocumentTitle("Lịch Sử | Cineverse");
   
   const { history, removeFromHistory, clearHistory } = useHistory();
   const [isLoggedIn, setIsLoggedIn] = useState(false);

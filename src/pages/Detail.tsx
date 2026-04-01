@@ -20,6 +20,10 @@ export default function Detail() {
   useDocumentTitle(pageTitle);
 
   const [relatedMovies, setRelatedMovies] = useState<any[]>([]);
+  const [loadingRelated, setLoadingRelated] = useState(false);
+  const [hasFetchedRelated, setHasFetchedRelated] = useState(false);
+  const relatedMoviesRef = useRef<HTMLDivElement>(null);
+  
   const [loading, setLoading] = useState(true);
   const [showTrailer, setShowTrailer] = useState(false);
   const [activeTab, setActiveTab] = useState<'details' | 'cast' | 'images'>('details');
@@ -69,17 +73,12 @@ export default function Detail() {
     const fetchDetail = async () => {
       if (!slug) return;
       setLoading(true);
+      // Reset related movies state when slug changes
+      setHasFetchedRelated(false);
+      setRelatedMovies([]);
       try {
         const res = await api.getMovieDetail(slug);
         setMovie(res.movie);
-        
-        // Fetch related movies based on the first category
-        if (res.movie?.category?.[0]?.slug) {
-          const relatedRes = await api.getByGenre(res.movie.category[0].slug, 1);
-          // Filter out current movie and take 10
-          const filtered = (relatedRes.items || []).filter((m: any) => m.slug !== slug);
-          setRelatedMovies(filtered.slice(0, 10));
-        }
       } catch (error) {
         console.error("Failed to fetch movie detail", error);
       } finally {
@@ -88,6 +87,47 @@ export default function Detail() {
     };
     fetchDetail();
   }, [slug]);
+
+  useEffect(() => {
+    if (!movie || hasFetchedRelated) return;
+
+    const fetchRelatedMovies = async () => {
+      if (!movie?.category?.[0]?.slug) {
+        setHasFetchedRelated(true);
+        return;
+      }
+      
+      setLoadingRelated(true);
+      try {
+        const relatedRes = await api.getByGenre(movie.category[0].slug, 1);
+        const filtered = (relatedRes.items || []).filter((m: any) => m.slug !== slug);
+        setRelatedMovies(filtered.slice(0, 10));
+      } catch (error) {
+        console.error("Failed to fetch related movies", error);
+      } finally {
+        setLoadingRelated(false);
+        setHasFetchedRelated(true);
+      }
+    };
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          fetchRelatedMovies();
+          if (relatedMoviesRef.current) {
+            observer.unobserve(relatedMoviesRef.current);
+          }
+        }
+      },
+      { rootMargin: "200px" }
+    );
+
+    if (relatedMoviesRef.current) {
+      observer.observe(relatedMoviesRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [movie, hasFetchedRelated, slug]);
 
   useEffect(() => {
     const fetchRating = async () => {
@@ -617,19 +657,25 @@ export default function Detail() {
           <CommentsSection movieId={movie._id || movie.slug} />
 
           {/* Related Movies */}
-          {relatedMovies.length > 0 && (
-            <div className="mt-16 md:mt-24">
-              <h2 className="text-xl md:text-2xl font-heading font-bold text-white tracking-wider mb-6 md:mb-8 flex items-center gap-2 md:gap-3">
-                 <span className="w-1.5 h-6 md:h-8 bg-[#E50914] rounded-full inline-block"></span>
-                Phim Liên Quan
-              </h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6 gap-y-8 md:gap-y-10">
-                {relatedMovies.map((m, index) => (
-                  <MovieCard key={`${m.slug || m._id || 'related'}-${index}`} movie={m} />
-                ))}
+          <div ref={relatedMoviesRef} className="mt-16 md:mt-24 min-h-[200px]">
+            {loadingRelated ? (
+              <div className="flex justify-center py-10">
+                <div className="w-8 h-8 border-4 border-[#E50914] border-t-transparent rounded-full animate-spin"></div>
               </div>
-            </div>
-          )}
+            ) : relatedMovies.length > 0 ? (
+              <>
+                <h2 className="text-xl md:text-2xl font-heading font-bold text-white tracking-wider mb-6 md:mb-8 flex items-center gap-2 md:gap-3">
+                   <span className="w-1.5 h-6 md:h-8 bg-[#E50914] rounded-full inline-block"></span>
+                  Phim Liên Quan
+                </h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6 gap-y-8 md:gap-y-10">
+                  {relatedMovies.map((m, index) => (
+                    <MovieCard key={`${m.slug || m._id || 'related'}-${index}`} movie={m} />
+                  ))}
+                </div>
+              </>
+            ) : null}
+          </div>
         </div>
       </motion.div>
     );
