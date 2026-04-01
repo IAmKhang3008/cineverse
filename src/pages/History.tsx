@@ -3,8 +3,11 @@ import { useHistory } from "@/hooks/useHistory";
 import { Link } from "react-router-dom";
 import { Play, Trash2, ArrowLeft, Clock } from "lucide-react";
 import { getImageUrl } from "@/lib/api";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 export default function History() {
+  useDocumentTitle("Lịch sử xem | Cineverse");
+  
   const { history, removeFromHistory, clearHistory } = useHistory();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 

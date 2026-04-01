@@ -5,9 +5,12 @@ import { cn } from "@/lib/utils";
 import { motion } from "motion/react";
 import { useToast } from "@/contexts/ToastContext";
 import { loginWithSocial, googleProvider, facebookProvider } from "@/lib/firebase";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 export default function Login() {
   const [isLogin, setIsLogin] = useState(true);
+  useDocumentTitle(isLogin ? "Đăng nhập | Cineverse" : "Đăng ký | Cineverse");
+  
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [shake, setShake] = useState(false);
 

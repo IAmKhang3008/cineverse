@@ -12,10 +12,13 @@ import { motion, AnimatePresence } from "motion/react";
 import { HeroBannerSkeleton, MovieCardSkeleton } from "@/components/Skeleton";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const MovieCard = React.lazy(() => import("@/components/MovieCard"));
 
 export default function Home() {
+  useDocumentTitle("Cineverse - Vũ trụ điện ảnh của bạn");
+  
   const [newMovies, setNewMovies] = useState<any[]>([]);
   const [trending, setTrending] = useState<any[]>([]);
   const [series, setSeries] = useState<any[]>([]);

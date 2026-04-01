@@ -4,6 +4,7 @@ import MovieCard from "@/components/MovieCard";
 import { Filter, RotateCcw, ChevronDown, ArrowLeft, Search } from "lucide-react";
 import { Link } from "react-router-dom";
 import { MovieCardSkeleton } from "@/components/Skeleton";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const YEARS = Array.from({ length: 25 }, (_, i) => (2026 - i).toString());
 const GENRES = [
@@ -42,6 +43,8 @@ const COUNTRIES = [
 ];
 
 export default function Movies() {
+  useDocumentTitle("Phim Lẻ | Cineverse");
+  
   const [movies, setMovies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);

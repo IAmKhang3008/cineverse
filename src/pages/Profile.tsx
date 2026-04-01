@@ -5,8 +5,11 @@ import { useFavorites } from "@/hooks/useFavorites";
 import { useHistory } from "@/hooks/useHistory";
 import MovieCard from "@/components/MovieCard";
 import { DEFAULT_USER_AVATAR } from "@/lib/utils";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 export default function Profile() {
+  useDocumentTitle("Hồ sơ cá nhân | Cineverse");
+  
   const { favorites } = useFavorites();
   const { history } = useHistory();
   const [activeTab, setActiveTab] = useState<'favorites' | 'history'>('favorites');

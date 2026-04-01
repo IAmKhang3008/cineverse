@@ -3,10 +3,14 @@ import { useSearchParams } from "react-router-dom";
 import { api } from "@/lib/api";
 import MovieCard from "@/components/MovieCard";
 import { motion } from "motion/react";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 export default function Search() {
   const [searchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
+  
+  useDocumentTitle(`Tìm kiếm: ${query} | Cineverse`);
+
   const [movies, setMovies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 

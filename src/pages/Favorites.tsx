@@ -3,8 +3,11 @@ import { useFavorites } from "@/hooks/useFavorites";
 import MovieCard from "@/components/MovieCard";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Lock, Heart } from "lucide-react";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 export default function Favorites() {
+  useDocumentTitle("Phim yêu thích | Cineverse");
+  
   const { favorites } = useFavorites();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 

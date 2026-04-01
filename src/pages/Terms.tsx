@@ -1,6 +1,9 @@
 import React, { useState } from "react";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 export default function Terms() {
+  useDocumentTitle("Pháp lý & Điều khoản | Cineverse");
+  
   const [activeSection, setActiveSection] = useState('terms');
 
   const scrollToSection = (id: string) => {

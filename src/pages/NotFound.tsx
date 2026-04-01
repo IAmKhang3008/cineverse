@@ -1,7 +1,10 @@
 import { Link } from "react-router-dom";
 import { Home, Compass } from "lucide-react";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 export default function NotFound() {
+  useDocumentTitle("Không tìm thấy trang | Cineverse");
+  
   return (
     <div className="flex flex-col items-center justify-center min-h-[80vh] text-center px-6 relative overflow-hidden">
       {/* Background Elements */}

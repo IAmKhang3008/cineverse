@@ -4,6 +4,7 @@ import MovieCard from "@/components/MovieCard";
 import { Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { MovieCardSkeleton } from "@/components/Skeleton";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const GENRES = [
   { name: "Hành Động", slug: "hanh-dong" },
@@ -31,6 +32,10 @@ const GENRES = [
 
 export default function Genres() {
   const [selectedGenre, setSelectedGenre] = useState(GENRES[0].slug);
+  
+  const currentGenreName = GENRES.find(g => g.slug === selectedGenre)?.name || "Thể Loại";
+  useDocumentTitle(`Phim ${currentGenreName} | Cineverse`);
+
   const [movies, setMovies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);

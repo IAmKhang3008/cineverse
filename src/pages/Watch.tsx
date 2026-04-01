@@ -7,12 +7,24 @@ import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
 import { decodeHtml, cn } from "@/lib/utils";
 import { motion } from "motion/react";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 export default function Watch() {
   const { slug } = useParams<{ slug: string }>();
   const [movie, setMovie] = useState<any>(null);
   const [episodes, setEpisodes] = useState<any[]>([]);
   const [currentEpisode, setCurrentEpisode] = useState<any>(null);
+  
+  const epDisplay = movie?.type === 'series' 
+    ? `Tập ${currentEpisode?.name || ''}` 
+    : 'Full';
+    
+  const pageTitle = movie 
+    ? `Xem ${movie.name} - ${epDisplay} | Cineverse` 
+    : "Đang tải... | Cineverse";
+
+  useDocumentTitle(pageTitle);
+
   const [currentServer, setCurrentServer] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [cinemaMode, setCinemaMode] = useState(false);

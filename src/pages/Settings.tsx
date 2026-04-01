@@ -1,7 +1,10 @@
 import { useState, useEffect } from "react";
 import { User, Shield, Moon, Bell, Save, ChevronRight, Loader2 } from "lucide-react";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 export default function Settings() {
+  useDocumentTitle("Cài đặt | Cineverse");
+  
   const [activeTab, setActiveTab] = useState<'account' | 'security' | 'appearance' | 'notifications'>('account');
   const [isSaving, setIsSaving] = useState(false);
 
