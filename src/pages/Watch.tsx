@@ -59,12 +59,13 @@ export default function Watch() {
         }
       } catch (error) {
         console.error("Failed to fetch movie detail", error);
+        showToast("Không thể tải dữ liệu phim. Vui lòng kiểm tra kết nối mạng.", "error");
       } finally {
         setLoading(false);
       }
     };
     fetchDetail();
-  }, [slug]);
+  }, [slug, showToast]);
 
   useEffect(() => {
     if (movie && currentEpisode) {

@@ -5,6 +5,7 @@ import { Filter, RotateCcw, ChevronDown, ArrowLeft } from "lucide-react";
 import { Link } from "react-router-dom";
 import { MovieCardSkeleton } from "@/components/Skeleton";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { useToast } from "@/contexts/ToastContext";
 
 const YEARS = Array.from({ length: 25 }, (_, i) => (2024 - i).toString());
 const GENRES = [
@@ -51,6 +52,7 @@ export default function Series() {
   const [selectedYear, setSelectedYear] = useState<string>("");
   const [selectedGenre, setSelectedGenre] = useState<string>("");
   const [selectedCountry, setSelectedCountry] = useState<string>("");
+  const { showToast } = useToast();
 
   useEffect(() => {
     const fetchMovies = async () => {
@@ -82,12 +84,13 @@ export default function Series() {
         setMovies(filteredItems);
       } catch (error) {
         console.error("Failed to fetch series", error);
+        showToast("Không thể tải danh sách phim. Vui lòng kiểm tra kết nối mạng.", "error");
       } finally {
         setLoading(false);
       }
     };
     fetchMovies();
-  }, [page, selectedYear, selectedGenre, selectedCountry]);
+  }, [page, selectedYear, selectedGenre, selectedCountry, showToast]);
 
   return (
     <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-8 md:py-12 mt-16">

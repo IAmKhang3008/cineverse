@@ -81,12 +81,13 @@ export default function Detail() {
         setMovie(res.movie);
       } catch (error) {
         console.error("Failed to fetch movie detail", error);
+        showToast("Không thể tải thông tin phim. Vui lòng thử lại sau.", "error");
       } finally {
         setLoading(false);
       }
     };
     fetchDetail();
-  }, [slug]);
+  }, [slug, showToast]);
 
   useEffect(() => {
     if (!movie || hasFetchedRelated) return;
@@ -104,6 +105,7 @@ export default function Detail() {
         setRelatedMovies(filtered.slice(0, 10));
       } catch (error) {
         console.error("Failed to fetch related movies", error);
+        // Silently fail for related movies to not spam the user
       } finally {
         setLoadingRelated(false);
         setHasFetchedRelated(true);

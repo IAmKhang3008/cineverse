@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import MovieCard from "@/components/MovieCard";
 import { motion } from "motion/react";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { useToast } from "@/contexts/ToastContext";
 
 export default function Search() {
   const [searchParams] = useSearchParams();
@@ -13,6 +14,7 @@ export default function Search() {
 
   const [movies, setMovies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const { showToast } = useToast();
 
   useEffect(() => {
     const fetchSearch = async () => {
@@ -23,12 +25,13 @@ export default function Search() {
         setMovies(res.items || []);
       } catch (error) {
         console.error("Failed to search movies", error);
+        showToast("Không thể tải kết quả tìm kiếm. Vui lòng kiểm tra kết nối mạng.", "error");
       } finally {
         setLoading(false);
       }
     };
     fetchSearch();
-  }, [query]);
+  }, [query, showToast]);
 
   return (
     <motion.div 

@@ -140,6 +140,7 @@ export default function Home() {
         setHeroMovies(heroDetails);
       } catch (error) {
         console.error("Failed to fetch essential data", error);
+        showToast("Không thể tải dữ liệu trang chủ. Vui lòng kiểm tra kết nối mạng.", "error");
       } finally {
         setLoading(false);
       }
@@ -166,12 +167,13 @@ export default function Home() {
         setKinhDi(kinhDiRes.items || []);
       } catch (error) {
         console.error("Failed to fetch secondary data", error);
+        // Silently fail for secondary data to not spam the user
       }
     };
 
     fetchEssentialData();
     fetchSecondaryData();
-  }, []);
+  }, [showToast]);
 
   if (loading) {
     return (

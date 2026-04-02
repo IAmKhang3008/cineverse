@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { MovieCardSkeleton } from "@/components/Skeleton";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { useToast } from "@/contexts/ToastContext";
 
 const GENRES = [
   { name: "Hành Động", slug: "hanh-dong" },
@@ -39,6 +40,7 @@ export default function Genres() {
   const [movies, setMovies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
+  const { showToast } = useToast();
 
   useEffect(() => {
     const fetchMovies = async () => {
@@ -48,12 +50,13 @@ export default function Genres() {
         setMovies(res.items || []);
       } catch (error) {
         console.error("Failed to fetch movies by genre", error);
+        showToast("Không thể tải danh sách phim. Vui lòng kiểm tra kết nối mạng.", "error");
       } finally {
         setLoading(false);
       }
     };
     fetchMovies();
-  }, [selectedGenre, page]);
+  }, [selectedGenre, page, showToast]);
 
   return (
     <div className="max-w-[1280px] mx-auto px-4 sm:px-6 py-8 md:py-12 mt-16">

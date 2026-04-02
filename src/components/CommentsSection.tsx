@@ -30,6 +30,8 @@ interface Comment {
   likes: string[]; // Lưu danh sách ID những người đã like
 }
 
+import { useToast } from "@/contexts/ToastContext";
+
 export default function CommentsSection({ movieId }: { movieId: string }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
@@ -39,6 +41,7 @@ export default function CommentsSection({ movieId }: { movieId: string }) {
   const [editContent, setEditContent] = useState("");
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
+  const { showToast } = useToast();
 
   // 1. LẤY THÔNG TIN USER ĐÃ ĐĂNG NHẬP
   useEffect(() => {
@@ -53,7 +56,7 @@ export default function CommentsSection({ movieId }: { movieId: string }) {
 
   const checkAuth = () => {
     if (!firebaseUser) {
-      alert("Vui lòng đăng nhập để thực hiện chức năng này!");
+      showToast("Vui lòng đăng nhập để thực hiện chức năng này!", "error");
       return false;
     }
     return true;
@@ -105,6 +108,7 @@ export default function CommentsSection({ movieId }: { movieId: string }) {
       setNewComment("");
     } catch (error) {
       console.error("Lỗi khi đăng bình luận:", error);
+      showToast("Không thể đăng bình luận. Vui lòng thử lại sau.", "error");
       handleFirestoreError(error, OperationType.CREATE, "comments");
     } finally {
       setIsSubmitting(false);
@@ -125,6 +129,7 @@ export default function CommentsSection({ movieId }: { movieId: string }) {
       });
     } catch (error) {
       console.error("Lỗi khi like:", error);
+      showToast("Không thể thực hiện thao tác. Vui lòng thử lại sau.", "error");
       handleFirestoreError(error, OperationType.UPDATE, `comments/${commentId}`);
     }
   };
@@ -136,8 +141,10 @@ export default function CommentsSection({ movieId }: { movieId: string }) {
     try {
       await deleteDoc(doc(db, "comments", deletingCommentId));
       setDeletingCommentId(null);
+      showToast("Đã xóa bình luận.", "success");
     } catch (error) {
       console.error("Lỗi khi xóa:", error);
+      showToast("Không thể xóa bình luận. Vui lòng thử lại sau.", "error");
       handleFirestoreError(error, OperationType.DELETE, `comments/${deletingCommentId}`);
     }
   };
@@ -158,8 +165,10 @@ export default function CommentsSection({ movieId }: { movieId: string }) {
       });
       setEditingCommentId(null);
       setEditContent("");
+      showToast("Đã cập nhật bình luận.", "success");
     } catch (error) {
       console.error("Lỗi khi sửa:", error);
+      showToast("Không thể sửa bình luận. Vui lòng thử lại sau.", "error");
       handleFirestoreError(error, OperationType.UPDATE, `comments/${editingCommentId}`);
     }
   };

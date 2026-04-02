@@ -5,6 +5,7 @@ import { Filter, RotateCcw, ChevronDown, ArrowLeft, Search } from "lucide-react"
 import { Link } from "react-router-dom";
 import { MovieCardSkeleton } from "@/components/Skeleton";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { useToast } from "@/contexts/ToastContext";
 
 const YEARS = Array.from({ length: 25 }, (_, i) => (2026 - i).toString());
 const GENRES = [
@@ -48,6 +49,7 @@ export default function Movies() {
   const [movies, setMovies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
+  const { showToast } = useToast();
   
   // State tạm thời (Dùng cho các ô Select)
   const [tempGenre, setTempGenre] = useState("");
@@ -86,10 +88,11 @@ export default function Movies() {
       setMovies(items);
     } catch (error) {
       console.error("Lỗi khi tải phim:", error);
+      showToast("Không thể tải danh sách phim. Vui lòng kiểm tra kết nối mạng.", "error");
     } finally {
       setLoading(false);
     }
-  }, [page, filters]);
+  }, [page, filters, showToast]);
 
   // Gọi lại API khi filters hoặc page thay đổi
   useEffect(() => {
