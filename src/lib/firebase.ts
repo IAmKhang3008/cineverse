@@ -77,8 +77,10 @@ export const loginWithSocial = async (provider: any) => {
     localStorage.setItem("cineverse_settings", JSON.stringify(userData));
     window.dispatchEvent(new Event("local-storage-update"));
     return userData;
-  } catch (error) {
-    console.error("Social Login Error", error);
+  } catch (error: any) {
+    if (error.code !== 'auth/popup-closed-by-user') {
+      console.error("Social Login Error", error);
+    }
     throw error;
   }
 };

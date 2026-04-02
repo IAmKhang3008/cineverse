@@ -64,10 +64,11 @@ export default function Login() {
       showToast(`Chào mừng ${userData.name} quay trở lại!`, "success");
       navigate("/");
     } catch (error: any) {
-      console.error("Lỗi đăng nhập:", error);
       if (error.code === 'auth/popup-closed-by-user') {
+         // Silently fail or show a subtle toast, but don't log as error
          showToast("Bạn đã đóng cửa sổ đăng nhập", "error");
       } else {
+         console.error("Lỗi đăng nhập:", error);
          showToast("Đăng nhập thất bại, vui lòng thử lại", "error");
       }
     }
