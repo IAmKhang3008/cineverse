@@ -17,11 +17,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     localStorage.setItem('cineverse-theme', theme);
-    if (theme === 'light') {
-      document.documentElement.classList.add('light');
-    } else {
-      document.documentElement.classList.remove('light');
-    }
+    document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
   const toggleTheme = () => {
