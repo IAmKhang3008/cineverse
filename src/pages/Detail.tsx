@@ -326,34 +326,56 @@ export default function Detail() {
       )}
 
       {/* Backdrop */}
-      <div className="relative w-full bg-[#0A0A0A] overflow-hidden aspect-[3840/2160] max-h-[85vh] min-h-[50vh]">
+      <div className="relative w-full bg-[#0A0A0A] overflow-hidden min-h-[60vh] md:min-h-[75vh] max-h-[90vh]">
+
+        {/* Nút Quay lại */}
         <div className="absolute top-20 md:top-24 left-4 md:left-6 z-50">
           {fromSearch ? (
-            <button 
+            <button
               onClick={() => navigate(-1)}
-              className="inline-flex items-center gap-2 text-white/80 hover:text-white bg-black/40 hover:bg-black/60 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-sm transition-all font-medium cursor-pointer text-sm md:text-base"
+              className="inline-flex items-center gap-2 text-white/80 hover:text-white bg-black/40 hover:bg-black/60 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-md border border-white/10 transition-all font-medium cursor-pointer text-sm md:text-base"
             >
               <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
               Quay lại
             </button>
           ) : (
-            <Link 
-              to="/" 
-              className="inline-flex items-center gap-2 text-white/80 hover:text-white bg-black/40 hover:bg-black/60 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-sm transition-all font-medium text-sm md:text-base"
+            <Link
+              to="/"
+              className="inline-flex items-center gap-2 text-white/80 hover:text-white bg-black/40 hover:bg-black/60 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-md border border-white/10 transition-all font-medium text-sm md:text-base"
             >
               <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
               Quay lại trang chủ
             </Link>
           )}
         </div>
-        <div className="absolute inset-0 animate-in fade-in duration-1000">
+
+        <div className="absolute inset-0 animate-in fade-in duration-700">
           <img
             src={getImageUrl(movie.thumb_url || movie.poster_url, 'banner')}
             alt={movie.name}
-            className="w-full h-full object-cover opacity-30 scale-105 animate-[pulse_10s_ease-in-out_infinite_alternate] aspect-video"
+            className="w-full h-full object-cover object-top"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0A]  via-[#0A0A0A]/80  to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-r from-[#0A0A0A]  via-[#0A0A0A]/40  to-transparent" />
+
+          {/* Overlay tối nhẹ */}
+          <div className="absolute inset-0 bg-black/40" />
+
+          {/* Gradient dưới — mờ dần mượt mà */}
+          <div className="absolute inset-0 bg-gradient-to-t
+            from-[#0A0A0A] from-0%
+            via-[#0A0A0A]/70 via-30%
+            via-transparent via-60%
+            to-transparent to-100%"
+          />
+
+          {/* Gradient trái — chữ dễ đọc */}
+          <div className="absolute inset-0 bg-gradient-to-r
+            from-[#0A0A0A]/80 from-0%
+            via-[#0A0A0A]/20 via-50%
+            to-transparent to-100%"
+          />
+
+          {/* Hòa với header */}
+          <div className="absolute top-0 inset-x-0 h-28 bg-gradient-to-b from-[#0A0A0A]/60 to-transparent" />
         </div>
       </div>
 

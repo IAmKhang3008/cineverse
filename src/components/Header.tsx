@@ -6,7 +6,6 @@ import { api, getImageUrl } from "@/lib/api";
 import { SearchSuggestionSkeleton, Skeleton } from "@/components/Skeleton";
 
 export default function Header() {
-  const [scrolled, setScrolled] = useState(false);
   const [atTop, setAtTop] = useState(true);
   const [isAvatarOpen, setIsAvatarOpen] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -114,10 +113,8 @@ export default function Header() {
       const bannerHeight = banner ? banner.offsetHeight : 0;
       if (bannerHeight > 0 && scrollPosition < bannerHeight) {
         setAtTop(true);
-        setScrolled(false);
       } else {
         setAtTop(false);
-        setScrolled(true);
       }
     };
     handleScroll();
@@ -169,9 +166,10 @@ export default function Header() {
   return (
     <header
       className={cn(
-        "fixed top-0 left-0 right-0 z-50 transition-all duration-300 header",
-        atTop ? "bg-[rgba(10,10,10,0.05)] backdrop-blur-[4px] border-b border-transparent" : "",
-        scrolled ? "bg-background/95 backdrop-blur-[10px] border-b border-card-border shadow-[0_4px_20px_rgba(0,0,0,0.5)]" : ""
+        "fixed top-0 left-0 right-0 z-50 transition-all duration-500 header",
+        atTop
+          ? "bg-black/5 backdrop-blur-[2px] border-b border-white/0"
+          : "bg-[#0a0a0a]/95 backdrop-blur-[12px] border-b border-white/10 shadow-[0_2px_24px_rgba(0,0,0,0.6)]"
       )}
     >
       <div className="max-w-[1280px] mx-auto px-4 md:px-6 h-16 md:h-20 flex items-center justify-between container">
@@ -206,15 +204,15 @@ export default function Header() {
             </div>
           </Link>
 
-          {/* Desktop nav */}
-          <nav className="hidden lg:flex items-center gap-6 desktop-nav nav-menu">
+          {/* Desktop nav — text only, không icon để tránh vỡ layout */}
+          <nav className="hidden lg:flex items-center gap-7 desktop-nav nav-menu">
             {navLinks.map((link) => (
               <NavLink
                 key={link.path}
                 to={link.path}
                 className={({ isActive }) =>
                   cn(
-                    "flex items-center gap-1.5 text-sm font-medium transition-all duration-300 relative py-2 group",
+                    "text-sm font-medium transition-all duration-300 relative py-2 group whitespace-nowrap",
                     isActive
                       ? atTop ? "text-white" : "text-foreground"
                       : atTop ? "text-gray-300 hover:text-[#F5C518]" : "text-secondary-text hover:text-[#F5C518]"
@@ -223,10 +221,6 @@ export default function Header() {
               >
                 {({ isActive }) => (
                   <>
-                    <link.icon className={cn(
-                      "w-4 h-4 flex-shrink-0 transition-colors duration-300",
-                      isActive ? "text-[#E50914]" : "group-hover:text-[#F5C518]"
-                    )} />
                     {link.name}
                     <span className={cn(
                       "absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 bg-[#F5C518] transition-all duration-300",
@@ -248,7 +242,7 @@ export default function Header() {
                 ? "w-full md:w-72 border-[#3B82F6] shadow-[0_0_10px_rgba(59,130,246,0.2)]"
                 : "w-full md:w-56 border-transparent"
             )}>
-              <Search className="w-4 h-4 text-secondary-text mr-2 flex-shrink-0 search-btn" />
+              <Search className="w-4 h-4 text-secondary-text mr-2 flex-shrink-0 search-btn" title="Tìm kiếm" />
               <input
                 type="text"
                 placeholder="Tìm kiếm..."
@@ -268,7 +262,7 @@ export default function Header() {
                     {searchHistory.length > 0 ? (
                       <div>
                         <div className="px-4 py-2 flex justify-between items-center text-[11px] font-bold text-secondary-text uppercase tracking-wider">
-                          <span className="flex items-center gap-1.5"><History className="w-3 h-3" /> Tìm kiếm gần đây</span>
+                          <span className="flex items-center gap-1.5"><History className="w-3 h-3" title="Lịch sử" /> Tìm kiếm gần đây</span>
                           <button
                             onMouseDown={(e) => { e.preventDefault(); setSearchHistory([]); localStorage.removeItem("search_history"); }}
                             className="hover:text-red-500 transition-colors"
@@ -375,7 +369,7 @@ export default function Header() {
                     onMouseDown={(e) => { e.preventDefault(); handleSearch(e as any); }}
                     className="w-full py-3 text-sm text-[#3B82F6] font-bold hover:bg-foreground/5 border-t border-card-border transition-colors flex items-center justify-center gap-2"
                   >
-                    <Search className="w-4 h-4" /> Xem tất cả kết quả cho "{searchQuery}"
+                    <Search className="w-4 h-4" title="Tìm kiếm" /> Xem tất cả kết quả cho "{searchQuery}"
                   </button>
                 )}
               </div>
@@ -384,7 +378,7 @@ export default function Header() {
 
           {isLoggedIn && (
             <button className={cn("relative p-2 hover:text-[#F5C518] transition-colors group", atTop ? "text-gray-300" : "text-secondary-text")}>
-              <Bell className="w-6 h-6" />
+              <Bell className="w-6 h-6" title="Thông báo" />
               <span className="absolute top-2 right-2 w-2 h-2 bg-[#E50914] rounded-full border-2 border-card group-hover:scale-125 transition-transform" />
             </button>
           )}
@@ -420,20 +414,20 @@ export default function Header() {
                       </div>
                     </div>
                     <Link to="/profile" onClick={() => setIsAvatarOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm text-secondary-text hover:bg-foreground/5 hover:text-foreground transition-colors">
-                      <User className="w-4 h-4 text-[#3B82F6]" /> Hồ sơ của tôi
+                      <User className="w-4 h-4 text-[#3B82F6]" title="Hồ sơ người dùng" /> Hồ sơ của tôi
                     </Link>
                     <Link to="/settings" onClick={() => setIsAvatarOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm text-secondary-text hover:bg-foreground/5 hover:text-foreground transition-colors">
                       <Settings className="w-4 h-4 text-secondary-text" /> Cài đặt
                     </Link>
                     <Link to="/favorites" onClick={() => setIsAvatarOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm text-secondary-text hover:bg-foreground/5 hover:text-foreground transition-colors">
-                      <Heart className="w-4 h-4 text-[#E50914]" /> Danh sách yêu thích
+                      <Heart className="w-4 h-4 text-[#E50914]" title="Yêu thích" /> Danh sách yêu thích
                     </Link>
                     <div className="h-px bg-card-border my-2" />
                     <button
                       onClick={handleLogout}
                       className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-500 hover:bg-red-500/10 transition-colors font-medium"
                     >
-                      <LogOut className="w-4 h-4" /> Đăng xuất
+                      <LogOut className="w-4 h-4" title="Đăng xuất" /> Đăng xuất
                     </button>
                   </div>
                 )}
@@ -511,7 +505,7 @@ export default function Header() {
                 className="w-full flex items-center gap-3 px-2 py-2.5 rounded-xl text-red-500 hover:bg-red-500/10 transition-all duration-200"
               >
                 <span className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center flex-shrink-0">
-                  <LogOut className="w-4 h-4" />
+                  <LogOut className="w-4 h-4" title="Đăng xuất" />
                 </span>
                 <span className="text-sm font-medium">Đăng xuất</span>
               </button>
