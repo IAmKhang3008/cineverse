@@ -12,8 +12,6 @@ interface MovieCardProps {
   fromSearch?: boolean;
 }
 
-const LONG_PRESS_MS = 450; // ms giữ để kích hoạt
-
 export default function MovieCard({ movie, fromSearch }: MovieCardProps) {
   const { isFavorite, toggleFavorite } = useFavorites();
   const favorite = movie ? isFavorite(movie.slug) : false;
@@ -22,33 +20,17 @@ export default function MovieCard({ movie, fromSearch }: MovieCardProps) {
 
   // State overlay cho mobile (long-press)
   const [mobileActive, setMobileActive] = useState(false);
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const touchMovedRef = useRef(false);
 
-  // Đóng overlay khi chạm ra ngoài
-  useEffect(() => {
-    if (!mobileActive) return;
-    const close = () => setMobileActive(false);
-    document.addEventListener('touchstart', close, { passive: true });
-    return () => document.removeEventListener('touchstart', close);
-  }, [mobileActive]);
-
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    touchMovedRef.current = false;
-    longPressTimer.current = setTimeout(() => {
-      if (!touchMovedRef.current) {
-        setMobileActive(true);
-      }
-    }, LONG_PRESS_MS);
+  const handleTouchStart = useCallback(() => {
+    setMobileActive(true);
   }, []);
 
   const handleTouchMove = useCallback(() => {
-    touchMovedRef.current = true;
-    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    setMobileActive(false);
   }, []);
 
   const handleTouchEnd = useCallback(() => {
-    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    setMobileActive(false);
   }, []);
 
   useEffect(() => {
@@ -140,13 +122,6 @@ export default function MovieCard({ movie, fromSearch }: MovieCardProps) {
           `}>
             <Play className="w-4 h-4 md:w-6 md:h-6 text-white ml-1" fill="currentColor" />
           </div>
-
-          {/* Hint giữ lâu — chỉ hiện trên mobile khi chưa active */}
-          {!isOverlayVisible && (
-            <span className="absolute bottom-3 left-0 right-0 text-center text-[10px] text-white/50 md:hidden">
-              Giữ để xem thêm
-            </span>
-          )}
         </div>
 
         {/* Rating (bottom-left) */}
@@ -159,7 +134,7 @@ export default function MovieCard({ movie, fromSearch }: MovieCardProps) {
           `}
         >
           <Star className="w-3.5 h-3.5 text-[#F5C518]" fill="currentColor" />
-          <span className="text-[#F5C518] font-bold text-xs">{rating || 'N/A'}</span>
+          <span className="text-[#F5C518] font-bold text-xs">{rating || 'Đang cập nhật'}</span>
         </div>
 
         {/* Favorite button (top-right) */}
