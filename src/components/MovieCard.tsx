@@ -75,7 +75,8 @@ export default function MovieCard({ movie, fromSearch }: MovieCardProps) {
 
   return (
     <div
-      className="group relative block w-full flex flex-col items-center md:items-start"
+      className="group relative block w-full flex flex-col items-center md:items-start select-none"
+      style={{ WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
