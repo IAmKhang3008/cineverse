@@ -442,11 +442,11 @@ export default function Detail() {
               <p className="text-[#A0A0A0]  leading-relaxed text-sm md:text-base max-w-3xl" dangerouslySetInnerHTML={{ __html: movie.content }} />
             </div>
             
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-4">
+            <div className="flex items-center md:flex-wrap gap-3 overflow-x-auto no-scrollbar pb-2 md:pb-0 -mx-4 px-4 md:mx-0 md:px-0 snap-x">
               <Link
                 to={`/watch/${movie.slug}`}
                 state={{ fromSearch }}
-                className="flex items-center justify-center gap-2 bg-[#E50914] hover:bg-[#b80710] text-white px-6 md:px-8 py-3 md:py-4 rounded-xl font-semibold transition-all text-base md:text-lg shadow-[0_4px_14px_rgba(229,9,20,0.4)] hover:shadow-[0_6px_20px_rgba(229,9,20,0.6)] hover:-translate-y-0.5 w-full sm:w-auto min-w-[160px] md:min-w-[180px]"
+                className="flex-shrink-0 snap-start flex items-center justify-center gap-2 bg-[#E50914] hover:bg-[#b80710] text-white px-6 md:px-8 py-3 md:py-4 rounded-xl font-semibold transition-all text-sm md:text-lg shadow-[0_4px_14px_rgba(229,9,20,0.4)] hover:shadow-[0_6px_20px_rgba(229,9,20,0.6)] md:hover:-translate-y-0.5"
               >
                 <Play className="w-4 h-4 md:w-5 md:h-5" fill="currentColor" />
                 Xem Ngay
@@ -455,7 +455,7 @@ export default function Detail() {
               {movie.trailer_url && (
                 <button 
                   onClick={() => setShowTrailer(true)}
-                  className="flex items-center justify-center gap-2 bg-transparent border-2 border-[#666666] text-white  hover:bg-black/50 hover:border-[#E50914]/50 px-6 md:px-8 py-3 md:py-4 rounded-xl font-semibold transition-all text-base md:text-lg w-full sm:w-auto min-w-[160px] md:min-w-[180px]"
+                  className="flex-shrink-0 snap-start flex items-center justify-center gap-2 bg-white/10 md:bg-transparent border border-transparent md:border-2 md:border-[#666666] text-white hover:bg-white/20 md:hover:bg-black/50 md:hover:border-[#E50914]/50 px-5 md:px-8 py-3 md:py-4 rounded-xl font-semibold transition-all text-sm md:text-lg"
                 >
                   <Play className="w-4 h-4 md:w-5 md:h-5 text-[#E50914]" fill="currentColor" />
                   Trailer
@@ -464,20 +464,20 @@ export default function Detail() {
 
               <button 
                 onClick={handleFavoriteClick}
-                className={`flex items-center justify-center gap-2 px-6 md:px-8 py-3 md:py-4 rounded-xl font-semibold transition-all text-base md:text-lg w-full sm:w-auto min-w-[160px] md:min-w-[180px] border-2 ${
+                className={`flex-shrink-0 snap-start flex items-center justify-center gap-2 px-5 md:px-8 py-3 md:py-4 rounded-xl font-semibold transition-all text-sm md:text-lg border md:border-2 ${
                   favorite 
-                  ? 'bg-transparent border-gray-500 text-gray-400 hover:border-white hover:text-white' 
-                  : 'bg-transparent border-gray-500 text-gray-300 hover:border-[#E50914] hover:text-[#E50914]'
+                  ? 'bg-white/10 md:bg-transparent border-transparent md:border-gray-500 text-white md:text-gray-400 hover:bg-white/20 md:hover:border-white md:hover:text-white' 
+                  : 'bg-white/10 md:bg-transparent border-transparent md:border-gray-500 text-gray-200 md:text-gray-300 hover:bg-white/20 md:hover:border-[#E50914] md:hover:text-[#E50914]'
                 }`}
               >
                 <Heart className={`w-4 h-4 md:w-5 md:h-5 ${favorite ? 'fill-current text-[#E50914]' : ''}`} />
                 {favorite ? 'Bỏ yêu thích' : 'Yêu thích'}
               </button>
 
-              <div className="relative" ref={shareMenuRef}>
+              <div className="relative flex-shrink-0 snap-start" ref={shareMenuRef}>
                 <button 
                   onClick={() => setShowShareMenu(!showShareMenu)}
-                  className="flex items-center justify-center gap-2 bg-transparent border-2 border-[#666666] text-gray-300 hover:border-white hover:text-white px-6 md:px-8 py-3 md:py-4 rounded-xl font-semibold transition-all text-base md:text-lg w-full sm:w-auto min-w-[160px] md:min-w-[180px]"
+                  className="flex items-center justify-center gap-2 bg-white/10 md:bg-transparent border border-transparent md:border-2 md:border-[#666666] text-gray-200 md:text-gray-300 hover:bg-white/20 md:hover:border-white md:hover:text-white px-5 md:px-8 py-3 md:py-4 rounded-xl font-semibold transition-all text-sm md:text-lg"
                 >
                   <Share2 className="w-4 h-4 md:w-5 md:h-5" />
                   Chia sẻ
@@ -562,46 +562,50 @@ export default function Detail() {
                     transition={{ duration: 0.2 }}
                   >
                     {activeTab === 'details' && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-12 text-sm md:text-base">
-                        <div className="flex">
-                          <span className="w-32 font-bold text-white flex-shrink-0">Tình trạng:</span>
-                          <span className="text-gray-400">{movie.episode_current || 'N/A'}</span>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 md:gap-4 text-sm md:text-base">
+                        <div className="bg-[#1A1A1A] p-3 md:p-4 rounded-xl border border-white/5 flex flex-col justify-center">
+                          <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Tình trạng</span>
+                          <span className="text-white font-medium">{movie.episode_current || 'N/A'}</span>
                         </div>
-                        <div className="flex">
-                          <span className="w-32 font-bold text-white flex-shrink-0">Số tập:</span>
-                          <span className="text-gray-400">{movie.episode_total || 'N/A'}</span>
+                        <div className="bg-[#1A1A1A] p-3 md:p-4 rounded-xl border border-white/5 flex flex-col justify-center">
+                          <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Số tập</span>
+                          <span className="text-white font-medium">{movie.episode_total || 'N/A'}</span>
                         </div>
-                        <div className="flex">
-                          <span className="w-32 font-bold text-white flex-shrink-0">Thời lượng:</span>
-                          <span className="text-gray-400">{movie.time || 'N/A'}</span>
+                        <div className="bg-[#1A1A1A] p-3 md:p-4 rounded-xl border border-white/5 flex flex-col justify-center">
+                          <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Thời lượng</span>
+                          <span className="text-white font-medium">{movie.time || 'N/A'}</span>
                         </div>
-                        <div className="flex">
-                          <span className="w-32 font-bold text-white flex-shrink-0">Năm:</span>
-                          <span className="text-gray-400">{movie.year || 'N/A'}</span>
+                        <div className="bg-[#1A1A1A] p-3 md:p-4 rounded-xl border border-white/5 flex flex-col justify-center">
+                          <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Năm</span>
+                          <span className="text-white font-medium">{movie.year || 'N/A'}</span>
                         </div>
-                        <div className="flex">
-                          <span className="w-32 font-bold text-white flex-shrink-0">Chất lượng:</span>
-                          <span className="text-gray-400">{movie.quality || 'N/A'}</span>
+                        <div className="bg-[#1A1A1A] p-3 md:p-4 rounded-xl border border-white/5 flex flex-col justify-center">
+                          <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Chất lượng</span>
+                          <span className="text-white font-medium">{movie.quality || 'N/A'}</span>
                         </div>
-                        <div className="flex">
-                          <span className="w-32 font-bold text-white flex-shrink-0">Ngôn ngữ:</span>
-                          <span className="text-gray-400">{movie.lang || 'N/A'}</span>
+                        <div className="bg-[#1A1A1A] p-3 md:p-4 rounded-xl border border-white/5 flex flex-col justify-center">
+                          <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Ngôn ngữ</span>
+                          <span className="text-white font-medium">{movie.lang || 'N/A'}</span>
                         </div>
-                        <div className="flex">
-                          <span className="w-32 font-bold text-white flex-shrink-0">Đạo diễn:</span>
-                          <span className="text-gray-400">{movie.director?.join(', ') || 'Đang cập nhật'}</span>
+                        <div className="bg-[#1A1A1A] p-3 md:p-4 rounded-xl border border-white/5 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-2">
+                          <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Đạo diễn</span>
+                          <span className="text-white font-medium">{movie.director?.join(', ') || 'Đang cập nhật'}</span>
                         </div>
-                        <div className="flex">
-                          <span className="w-32 font-bold text-white flex-shrink-0">Thể loại:</span>
-                          <span className="text-gray-400">
-                            {movie.category && (Array.isArray(movie.category) ? movie.category : Object.values(movie.category)).map((c: any) => c.name).join(', ')}
-                          </span>
-                        </div>
-                        <div className="flex">
-                          <span className="w-32 font-bold text-white flex-shrink-0">Quốc gia:</span>
-                          <span className="text-gray-400">
+                        <div className="bg-[#1A1A1A] p-3 md:p-4 rounded-xl border border-white/5 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-2">
+                          <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Quốc gia</span>
+                          <span className="text-white font-medium">
                             {movie.country && (Array.isArray(movie.country) ? movie.country : Object.values(movie.country)).map((c: any) => c.name).join(', ')}
                           </span>
+                        </div>
+                        <div className="bg-[#1A1A1A] p-3 md:p-4 rounded-xl border border-white/5 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-4">
+                          <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Thể loại</span>
+                          <div className="flex flex-wrap gap-2 mt-1.5">
+                            {movie.category && (Array.isArray(movie.category) ? movie.category : Object.values(movie.category)).map((c: any, idx: number) => (
+                              <span key={idx} className="bg-[#2A2A2A] text-gray-300 text-xs px-2.5 py-1.5 rounded-md border border-white/5">
+                                {c.name}
+                              </span>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     )}

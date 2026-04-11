@@ -35,6 +35,7 @@ export default function Home() {
   const [activeHeroIndex, setActiveHeroIndex] = useState(0);
   const [showTrailer, setShowTrailer] = useState(false);
   const [currentTrailerUrl, setCurrentTrailerUrl] = useState("");
+  const [isCardHolding, setIsCardHolding] = useState(false);
   
   const { isFavorite, toggleFavorite } = useFavorites();
   const { showToast } = useToast();
@@ -215,6 +216,7 @@ export default function Home() {
               nextEl: '.hero-next',
               prevEl: '.hero-prev',
             }}
+            allowTouchMove={!isCardHolding}
             autoplay={{ delay: 5000, disableOnInteraction: false }}
             loop={true}
             className="h-full w-full"
@@ -353,6 +355,7 @@ export default function Home() {
             spaceBetween={16}
             slidesPerView={2}
             navigation
+            allowTouchMove={!isCardHolding}
             autoplay={{ delay: 4000, disableOnInteraction: false }}
             breakpoints={{
               640: { slidesPerView: 3, spaceBetween: 20 },
@@ -363,7 +366,7 @@ export default function Home() {
           >
             {trending.slice(0, 15).map((movie, index) => (
               <SwiperSlide key={`${movie.slug || movie._id || 'trending'}-${index}`}>
-                <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} /></Suspense>
+                <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} onHoldChange={setIsCardHolding} /></Suspense>
               </SwiperSlide>
             ))}
           </Swiper>
@@ -385,6 +388,7 @@ export default function Home() {
             spaceBetween={16}
             slidesPerView={2}
             navigation
+            allowTouchMove={!isCardHolding}
             autoplay={{ delay: 5000, disableOnInteraction: false }}
             breakpoints={{
               640: { slidesPerView: 3, spaceBetween: 20 },
@@ -395,7 +399,7 @@ export default function Home() {
           >
             {newMovies.slice(1, 16).map((movie, index) => (
               <SwiperSlide key={`${movie.slug || movie._id || 'new'}-${index}`}>
-                <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} /></Suspense>
+                <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} onHoldChange={setIsCardHolding} /></Suspense>
               </SwiperSlide>
             ))}
           </Swiper>
@@ -417,6 +421,7 @@ export default function Home() {
             spaceBetween={16}
             slidesPerView={2}
             navigation
+            allowTouchMove={!isCardHolding}
             autoplay={{ delay: 6000, disableOnInteraction: false }}
             breakpoints={{
               640: { slidesPerView: 3, spaceBetween: 20 },
@@ -427,7 +432,7 @@ export default function Home() {
           >
             {series.slice(0, 15).map((movie, index) => (
               <SwiperSlide key={`${movie.slug || movie._id || 'series'}-${index}`}>
-                <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} /></Suspense>
+                <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} onHoldChange={setIsCardHolding} /></Suspense>
               </SwiperSlide>
             ))}
           </Swiper>
@@ -450,6 +455,7 @@ export default function Home() {
               spaceBetween={16}
               slidesPerView={2}
               navigation
+              allowTouchMove={!isCardHolding}
               autoplay={{ delay: 5500, disableOnInteraction: false }}
               breakpoints={{
                 640: { slidesPerView: 3, spaceBetween: 20 },
@@ -460,7 +466,7 @@ export default function Home() {
             >
               {hoatHinh.slice(0, 15).map((movie, index) => (
                 <SwiperSlide key={`${movie.slug || movie._id || 'hoathinh'}-${index}`}>
-                  <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} /></Suspense>
+                  <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} onHoldChange={setIsCardHolding} /></Suspense>
                 </SwiperSlide>
               ))}
             </Swiper>
@@ -484,6 +490,7 @@ export default function Home() {
               spaceBetween={16}
               slidesPerView={2}
               navigation
+              allowTouchMove={!isCardHolding}
               autoplay={{ delay: 6500, disableOnInteraction: false }}
               breakpoints={{
                 640: { slidesPerView: 3, spaceBetween: 20 },
@@ -494,7 +501,7 @@ export default function Home() {
             >
               {tvShows.slice(0, 15).map((movie, index) => (
                 <SwiperSlide key={`${movie.slug || movie._id || 'tvshows'}-${index}`}>
-                  <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} /></Suspense>
+                  <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} onHoldChange={setIsCardHolding} /></Suspense>
                 </SwiperSlide>
               ))}
             </Swiper>
@@ -518,6 +525,7 @@ export default function Home() {
               spaceBetween={16}
               slidesPerView={2}
               navigation
+              allowTouchMove={!isCardHolding}
               autoplay={{ delay: 4500, disableOnInteraction: false }}
               breakpoints={{
                 640: { slidesPerView: 3, spaceBetween: 20 },
@@ -528,7 +536,7 @@ export default function Home() {
             >
               {thaiLan.slice(0, 15).map((movie, index) => (
                 <SwiperSlide key={`${movie.slug || movie._id || 'thailan'}-${index}`}>
-                  <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} /></Suspense>
+                  <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} onHoldChange={setIsCardHolding} /></Suspense>
                 </SwiperSlide>
               ))}
             </Swiper>
@@ -552,6 +560,7 @@ export default function Home() {
               spaceBetween={16}
               slidesPerView={2}
               navigation
+              allowTouchMove={!isCardHolding}
               autoplay={{ delay: 5000, disableOnInteraction: false }}
               breakpoints={{
                 640: { slidesPerView: 3, spaceBetween: 20 },
@@ -562,7 +571,7 @@ export default function Home() {
             >
               {hongKong.slice(0, 15).map((movie, index) => (
                 <SwiperSlide key={`${movie.slug || movie._id || 'hongkong'}-${index}`}>
-                  <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} /></Suspense>
+                  <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} onHoldChange={setIsCardHolding} /></Suspense>
                 </SwiperSlide>
               ))}
             </Swiper>
@@ -586,6 +595,7 @@ export default function Home() {
               spaceBetween={16}
               slidesPerView={2}
               navigation
+              allowTouchMove={!isCardHolding}
               autoplay={{ delay: 6000, disableOnInteraction: false }}
               breakpoints={{
                 640: { slidesPerView: 3, spaceBetween: 20 },
@@ -596,7 +606,7 @@ export default function Home() {
             >
               {auMy.slice(0, 15).map((movie, index) => (
                 <SwiperSlide key={`${movie.slug || movie._id || 'aumy'}-${index}`}>
-                  <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} /></Suspense>
+                  <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} onHoldChange={setIsCardHolding} /></Suspense>
                 </SwiperSlide>
               ))}
             </Swiper>
@@ -620,6 +630,7 @@ export default function Home() {
               spaceBetween={16}
               slidesPerView={2}
               navigation
+              allowTouchMove={!isCardHolding}
               autoplay={{ delay: 4000, disableOnInteraction: false }}
               breakpoints={{
                 640: { slidesPerView: 3, spaceBetween: 20 },
@@ -630,7 +641,7 @@ export default function Home() {
             >
               {vietNam.slice(0, 15).map((movie, index) => (
                 <SwiperSlide key={`${movie.slug || movie._id || 'vietnam'}-${index}`}>
-                  <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} /></Suspense>
+                  <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} onHoldChange={setIsCardHolding} /></Suspense>
                 </SwiperSlide>
               ))}
             </Swiper>
@@ -654,6 +665,7 @@ export default function Home() {
               spaceBetween={16}
               slidesPerView={2}
               navigation
+              allowTouchMove={!isCardHolding}
               autoplay={{ delay: 5500, disableOnInteraction: false }}
               breakpoints={{
                 640: { slidesPerView: 3, spaceBetween: 20 },
@@ -664,7 +676,7 @@ export default function Home() {
             >
               {kinhDi.slice(0, 15).map((movie, index) => (
                 <SwiperSlide key={`${movie.slug || movie._id || 'kinhdi'}-${index}`}>
-                  <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} /></Suspense>
+                  <Suspense fallback={<MovieCardSkeleton />}><MovieCard movie={movie} onHoldChange={setIsCardHolding} /></Suspense>
                 </SwiperSlide>
               ))}
             </Swiper>
