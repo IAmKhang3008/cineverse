@@ -1,7 +1,7 @@
 # 🎬 CINEVERSE – NỀN TẢNG XEM PHIM MIỄN PHÍ
 
 <div align="center">
-  <img width="1200" height="475" alt="Cineverse Banner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+  <img width="1200" height="475" alt="Cineverse Banner" src="https://wallpapercave.com/wp/wp10615910.jpg" />
   
   <h3>✨ Trải nghiệm điện ảnh đỉnh cao ngay tại nhà ✨</h3>
   
