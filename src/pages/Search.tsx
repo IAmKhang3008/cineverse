@@ -17,20 +17,23 @@ export default function Search() {
   const { showToast } = useToast();
 
   useEffect(() => {
+    let isMounted = true;
     const fetchSearch = async () => {
       if (!query) return;
       setLoading(true);
       try {
         const res = await api.search(query);
-        setMovies(res.items || []);
+        if (isMounted) setMovies(res.items || []);
       } catch (error) {
+        if (!isMounted) return;
         console.error("Failed to search movies", error);
         showToast("Không thể tải kết quả tìm kiếm. Vui lòng kiểm tra kết nối mạng.", "error");
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
     fetchSearch();
+    return () => { isMounted = false };
   }, [query, showToast]);
 
   return (

@@ -70,45 +70,54 @@ export default function Detail() {
   };
 
   useEffect(() => {
+    let isMounted = true;
     const fetchDetail = async () => {
       if (!slug) return;
       setLoading(true);
       // Reset related movies state when slug changes
-      setHasFetchedRelated(false);
-      setRelatedMovies([]);
+      if (isMounted) {
+        setHasFetchedRelated(false);
+        setRelatedMovies([]);
+      }
       try {
         const res = await api.getMovieDetail(slug);
-        setMovie(res.movie);
+        if (isMounted) setMovie(res.movie);
       } catch (error) {
+        if (!isMounted) return;
         console.error("Failed to fetch movie detail", error);
         showToast("Không thể tải thông tin phim. Vui lòng thử lại sau.", "error");
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
     fetchDetail();
+    return () => { isMounted = false; };
   }, [slug, showToast]);
 
   useEffect(() => {
+    let isMounted = true;
     if (!movie || hasFetchedRelated) return;
 
     const fetchRelatedMovies = async () => {
       if (!movie?.category?.[0]?.slug) {
-        setHasFetchedRelated(true);
+        if (isMounted) setHasFetchedRelated(true);
         return;
       }
       
-      setLoadingRelated(true);
+      if (isMounted) setLoadingRelated(true);
       try {
         const relatedRes = await api.getByGenre(movie.category[0].slug, 1);
         const filtered = (relatedRes.items || []).filter((m: any) => m.slug !== slug);
-        setRelatedMovies(filtered.slice(0, 10));
+        if (isMounted) setRelatedMovies(filtered.slice(0, 10));
       } catch (error) {
+        if (!isMounted) return;
         console.error("Failed to fetch related movies", error);
         // Silently fail for related movies to not spam the user
       } finally {
-        setLoadingRelated(false);
-        setHasFetchedRelated(true);
+        if (isMounted) {
+          setLoadingRelated(false);
+          setHasFetchedRelated(true);
+        }
       }
     };
 
@@ -128,7 +137,10 @@ export default function Detail() {
       observer.observe(relatedMoviesRef.current);
     }
 
-    return () => observer.disconnect();
+    return () => {
+      isMounted = false;
+      observer.disconnect();
+    };
   }, [movie, hasFetchedRelated, slug]);
 
   useEffect(() => {
@@ -271,7 +283,11 @@ export default function Detail() {
   const favorite = isFavorite(movie.slug);
 
   const handleFavoriteClick = () => {
-    toggleFavorite(movie);
+    const success = toggleFavorite(movie);
+    if (!success) {
+      showToast("Bạn cần đăng nhập để thêm phim vào yêu thích!", "error");
+      return;
+    }
     if (!favorite) {
       showToast("Đã thêm vào danh sách yêu thích", "success");
     } else {

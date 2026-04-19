@@ -11,13 +11,13 @@ interface MovieCardProps {
   key?: React.Key;
   fromSearch?: boolean;
   onHoldChange?: (holding: boolean) => void; // callback báo lên Home
+  rating?: string;
 }
 
-export default function MovieCard({ movie, fromSearch, onHoldChange }: MovieCardProps) {
+export default function MovieCard({ movie, fromSearch, onHoldChange, rating }: MovieCardProps) {
   const { isFavorite, toggleFavorite } = useFavorites();
   const favorite = movie ? isFavorite(movie.slug) : false;
   const { showToast } = useToast();
-  const [rating, setRating] = useState<string | null>(null);
   const [mobileActive, setMobileActive] = useState(false);
 
   // Báo trạng thái hold lên component cha (Home)
@@ -40,35 +40,16 @@ export default function MovieCard({ movie, fromSearch, onHoldChange }: MovieCard
     if (mobileActive) e.stopPropagation();
   }, [mobileActive]);
 
-  useEffect(() => {
-    if (!movie) return;
-    if (movie.tmdb?.vote_average) {
-      setRating(movie.tmdb.vote_average.toFixed(1));
-      return;
-    }
-    const fetchRating = async () => {
-      try {
-        const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
-        const searchRes = await fetch(`https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.name)}&language=vi-VN`);
-        const searchData = await searchRes.json();
-        if (searchData.results?.length > 0) {
-          const tmdbId = searchData.results[0].id;
-          const tmdbType = searchData.results[0].media_type || (searchData.results[0].first_air_date ? 'tv' : 'movie');
-          const detailsRes = await fetch(`https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=vi-VN`);
-          const detailsData = await detailsRes.json();
-          if (detailsData.vote_average) setRating(detailsData.vote_average.toFixed(1));
-        }
-      } catch {}
-    };
-    fetchRating();
-  }, [movie]);
-
   if (!movie) return null;
 
   const handleFavoriteClick = (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    toggleFavorite(movie);
+    const success = toggleFavorite(movie);
+    if (!success) {
+      showToast("Bạn cần đăng nhập để thêm phim vào yêu thích!", "error");
+      return;
+    }
     showToast(
       favorite ? "Đã xóa khỏi danh sách yêu thích" : "Đã thêm vào danh sách yêu thích",
       favorite ? "info" : "success"
@@ -102,6 +83,7 @@ export default function MovieCard({ movie, fromSearch, onHoldChange }: MovieCard
           className="w-full h-full object-cover transition-opacity duration-300 group-hover:opacity-40 movie-poster"
           style={mobileActive ? { opacity: 0.4 } : {}}
           loading="lazy"
+          decoding="async"
           draggable={false}
         />
 
@@ -136,7 +118,7 @@ export default function MovieCard({ movie, fromSearch, onHoldChange }: MovieCard
           ${mobileActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}
         `}>
           <Star className="w-3.5 h-3.5 text-[#F5C518]" fill="currentColor" />
-          <span className="text-[#F5C518] font-bold text-xs">{rating || 'Đang cập nhật'}</span>
+          <span className="text-[#F5C518] font-bold text-xs">{rating || movie?.tmdb?.vote_average?.toFixed?.(1) || 'Đang cập nhật'}</span>
         </div>
 
         {/* Favorite button (top-right) */}

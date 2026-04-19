@@ -289,38 +289,7 @@ body.cinema-mode .two-column-layout {
   margin: 6px 0;
   transition: 0.3s;
 }
-.mobile-nav {
-  display: none;
-  position: fixed;
-  top: 64px;
-  left: 0;
-  width: 100%;
-  background: rgba(10, 10, 10, 0.98);
-  backdrop-filter: blur(10px);
-  padding: 20px;
-  z-index: 999;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-.mobile-nav.active {
-  display: block;
-  animation: slideDown 0.3s ease;
-}
-.mobile-nav-link {
-  display: block;
-  padding: 12px 0;
-  color: white;
-  text-decoration: none;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: 16px;
-}
-.mobile-nav-link:hover {
-  color: #E50914;
-  padding-left: 10px;
-}
-@keyframes slideDown {
-  from { opacity: 0; transform: translateY(-10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+
 @media (max-width: 1024px) {
   .mobile-menu-btn { display: block; }
 }
@@ -338,117 +307,6 @@ body.cinema-mode .two-column-layout {
   }
 }
 
-/* Profile Editor Styles */
-.profile-editor {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 24px;
-  background: #121212;
-  border-radius: 16px;
-  border: 1px solid rgba(255,255,255,0.05);
-}
-.avatar-section {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 32px;
-}
-.avatar-preview {
-  width: 120px;
-  height: 120px;
-  border-radius: 50%;
-  overflow: hidden;
-  position: relative;
-  cursor: pointer;
-  border: 2px solid #2A2A2A;
-}
-.avatar-preview img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.avatar-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0,0,0,0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-.avatar-preview:hover .avatar-overlay {
-  opacity: 1;
-}
-.form-group {
-  margin-bottom: 20px;
-}
-.form-group label {
-  display: block;
-  margin-bottom: 8px;
-  color: #A0A0A0;
-  font-size: 14px;
-}
-.input-with-action {
-  display: flex;
-  gap: 12px;
-}
-.input-with-action input, .form-group input {
-  flex: 1;
-  background: #2A2A2A;
-  border: 1px solid transparent;
-  padding: 12px 16px;
-  border-radius: 8px;
-  color: white;
-  width: 100%;
-}
-.input-with-action input:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-.btn-edit {
-  background: #2A2A2A;
-  border: none;
-  border-radius: 8px;
-  width: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 0.3s;
-}
-.btn-edit:hover {
-  background: #333;
-}
-.password-section {
-  margin-top: 40px;
-  padding-top: 32px;
-  border-top: 1px solid rgba(255,255,255,0.1);
-}
-.password-strength {
-  height: 4px;
-  background: #2A2A2A;
-  border-radius: 2px;
-  margin-top: 8px;
-  overflow: hidden;
-}
-.strength-bar {
-  height: 100%;
-  width: 0;
-  transition: all 0.3s;
-}
-.strength-text {
-  font-size: 12px;
-  color: #A0A0A0;
-  margin-top: 4px;
-  display: block;
-}
-.profile-actions {
-  display: flex;
-  gap: 16px;
-  margin-top: 32px;
-}
 .btn {
   padding: 12px 24px;
   border-radius: 8px;
@@ -608,16 +466,6 @@ body.cinema-mode .two-column-layout {
   background: rgba(0, 0, 0, 0.35);
 }
 
-/* Mobile nav */
-[data-theme='light'] .mobile-nav {
-  background: rgba(255, 255, 255, 0.98);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-}
-[data-theme='light'] .mobile-nav-link {
-  color: #1a1a1a;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.07);
-}
-
 /* Swiper buttons */
 [data-theme='light'] .swiper-button-next,
 [data-theme='light'] .swiper-button-prev {
@@ -632,40 +480,6 @@ body.cinema-mode .two-column-layout {
 }
 [data-theme='light'] .swiper-pagination-bullet {
   background: #555 !important;
-}
-
-/* Profile editor */
-[data-theme='light'] .profile-editor {
-  background: #ffffff;
-  border: 1px solid rgba(0,0,0,0.08);
-}
-[data-theme='light'] .input-with-action input,
-[data-theme='light'] .form-group input {
-  background: #f1f3f5;
-  border: 1px solid #e2e8f0;
-  color: #1a1a1a;
-}
-[data-theme='light'] .btn-edit {
-  background: #e9ecef;
-}
-[data-theme='light'] .btn-edit:hover {
-  background: #dee2e6;
-}
-[data-theme='light'] .btn-outline {
-  border: 1px solid rgba(0,0,0,0.2);
-  color: #1a1a1a;
-}
-[data-theme='light'] .btn-outline:hover {
-  background: rgba(0,0,0,0.07);
-}
-[data-theme='light'] .password-section {
-  border-top: 1px solid rgba(0,0,0,0.1);
-}
-[data-theme='light'] .password-strength {
-  background: #dee2e6;
-}
-[data-theme='light'] .avatar-preview {
-  border: 2px solid #dee2e6;
 }
 
 /* Header navbar (nếu dùng class cứng) */

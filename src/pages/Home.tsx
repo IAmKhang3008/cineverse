@@ -65,10 +65,15 @@ export default function Home() {
   };
 
   const handleToggleFavorite = (movie: any) => {
-    toggleFavorite(movie);
+    const success = toggleFavorite(movie);
+    if (!success) {
+      showToast("Bạn cần đăng nhập để thêm phim vào yêu thích!", "error");
+    }
   };
 
   useEffect(() => {
+    let isMounted = true;
+
     const fetchEssentialData = async () => {
       try {
         const [newRes, trendingRes, chieuRapRes, hanQuocRes, vietNamRes] = await Promise.all([
@@ -79,6 +84,8 @@ export default function Home() {
           api.getByCountry("viet-nam", 1),
         ]);
         
+        if (!isMounted) return;
+
         setNewMovies(newRes.items || []);
         setTrending(trendingRes.items || []);
         setVietNam(vietNamRes.items || []);
@@ -138,12 +145,13 @@ export default function Home() {
             }
           })
         );
-        setHeroMovies(heroDetails);
+        if (isMounted) setHeroMovies(heroDetails);
       } catch (error) {
+        if (!isMounted) return;
         console.error("Failed to fetch essential data", error);
         showToast("Không thể tải dữ liệu trang chủ. Vui lòng kiểm tra kết nối mạng.", "error");
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
 
@@ -159,6 +167,7 @@ export default function Home() {
           api.getByGenre("kinh-di", 1),
         ]);
         
+        if (!isMounted) return;
         setSeries(seriesRes.items || []);
         setHoatHinh(hoatHinhRes.items || []);
         setTvShows(tvShowsRes.items || []);
@@ -167,6 +176,7 @@ export default function Home() {
         setAuMy(auMyRes.items || []);
         setKinhDi(kinhDiRes.items || []);
       } catch (error) {
+        if (!isMounted) return;
         console.error("Failed to fetch secondary data", error);
         // Silently fail for secondary data to not spam the user
       }
@@ -174,6 +184,10 @@ export default function Home() {
 
     fetchEssentialData();
     fetchSecondaryData();
+
+    return () => {
+      isMounted = false;
+    };
   }, [showToast]);
 
   if (loading) {
@@ -229,6 +243,7 @@ export default function Home() {
                     alt={movie.name}
                     className="w-full h-full object-cover"
                     loading={index === 0 ? "eager" : "lazy"}
+                    fetchPriority={index === 0 ? "high" : "auto"}
                   />
                   {/* Gradient overlay from left to right (70% -> 30%) */}
                   <div className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/60 to-black/20" />

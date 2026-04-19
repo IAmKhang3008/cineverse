@@ -138,7 +138,11 @@ export default function Watch() {
 
   const favorite = isFavorite(movie.slug);
   const handleFavoriteClick = () => {
-    toggleFavorite(movie);
+    const success = toggleFavorite(movie);
+    if (!success) {
+      showToast("Bạn cần đăng nhập để thêm phim vào yêu thích!", "error");
+      return;
+    }
     if (!favorite) {
       showToast("Đã thêm vào danh sách yêu thích", "success");
     } else {
