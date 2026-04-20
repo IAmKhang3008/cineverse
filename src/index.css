@@ -494,3 +494,54 @@ body.cinema-mode .two-column-layout {
 [data-theme='light'] .mobile-menu-btn span {
   background: #1a1a1a;
 }
+
+/* ============================================================
+   SKELETON → CONTENT TRANSITION
+   ============================================================ */
+
+/* Tất cả ảnh fade-in khi load xong — tránh flash trắng */
+img {
+  transition: opacity 0.3s ease;
+}
+img[src] {
+  animation: imageFadeIn 0.4s ease forwards;
+}
+@keyframes imageFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* MovieCard: khi content thay thế skeleton, fade-in toàn bộ card */
+.movie-card-content {
+  animation: contentFadeIn 0.35s ease forwards;
+}
+
+/* Hero banner content fade-in từ dưới lên */
+.banner-info {
+  animation: bannerSlideUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes bannerSlideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+
+@keyframes contentFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+/* Skeleton shimmer — mượt hơn animate-pulse mặc định */
+@keyframes skeletonShimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position:  600px 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    #2A2A2A 25%,
+    #3A3A3A 50%,
+    #2A2A2A 75%
+  );
+  background-size: 600px 100%;
+  animation: skeletonShimmer 1.4s ease infinite;
+}

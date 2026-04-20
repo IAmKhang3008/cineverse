@@ -13,6 +13,7 @@ import { HeroBannerSkeleton, MovieCardSkeleton } from "@/components/Skeleton";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { fetchWithCache, TTL } from "@/lib/cache";
 
 const MovieCard = React.lazy(() => import("@/components/MovieCard"));
 
@@ -112,8 +113,7 @@ export default function Home() {
                 
                 if (!tmdbId) {
                   const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.name)}&language=vi-VN`;
-                  const searchRes = await fetch(searchUrl);
-                  const searchData = await searchRes.json();
+                  const searchData = await fetchWithCache(`tmdb_search_${movie.slug}`, () => fetch(searchUrl).then(r => r.json()), TTL.TMDB_STATIC);
                   if (searchData.results && searchData.results.length > 0) {
                     tmdbId = searchData.results[0].id;
                     tmdbType = searchData.results[0].media_type || (searchData.results[0].first_air_date ? 'tv' : 'movie');
@@ -122,8 +122,7 @@ export default function Home() {
 
                 if (tmdbId) {
                   const imagesUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}/images?api_key=${apiKey}`;
-                  const imagesRes = await fetch(imagesUrl);
-                  const imagesData = await imagesRes.json();
+                  const imagesData = await fetchWithCache(`tmdb_images_${tmdbType}_${tmdbId}`, () => fetch(imagesUrl).then(r => r.json()), TTL.TMDB_STATIC);
                   if (imagesData.backdrops && imagesData.backdrops.length > 0) {
                     const sorted = imagesData.backdrops.sort((a: any, b: any) => b.width - a.width);
                     highQualityBanner = `https://image.tmdb.org/t/p/original${sorted[0].file_path}`;
@@ -260,7 +259,7 @@ export default function Home() {
 
                 <div className="absolute inset-0 flex items-center">
                   <div className="max-w-[1440px] w-full mx-auto px-6 md:px-16 lg:px-24 mt-10 md:mt-0">
-                    <div className="banner-info max-w-2xl animate-in slide-in-from-left-8 duration-1000 rounded-xl">
+                    <div className="banner-info max-w-2xl rounded-xl">
                       <span className="inline-block bg-[#E50914] text-white text-[10px] md:text-[12px] font-bold px-2 py-1 md:px-3 md:py-1 rounded-sm tracking-[1px] mb-3 md:mb-4">
                         {movie.badge}
                       </span>

@@ -3,36 +3,7 @@ const FALLBACK_BASE_URL = "https://ophim1.com";
 
 let currentBaseUrl = PRIMARY_BASE_URL;
 
-const cache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_TTL = 5 * 60 * 1000;   // data hết hạn sau 5 phút
-const MAX_ENTRIES = 100;             // tối đa 100 entries
-
-// Dọn rác mỗi 10 phút
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, value] of cache.entries()) {
-    if (now - value.timestamp > CACHE_TTL) {
-      cache.delete(key);
-    }
-  }
-}, 10 * 60 * 1000);
-
-export async function fetchWithCache(key: string, fetcher: () => Promise<any>) {
-  const cached = cache.get(key);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return cached.data;
-  }
-
-  const data = await fetcher();
-
-  if (cache.size >= MAX_ENTRIES) {
-    const firstKey = cache.keys().next().value;
-    if (firstKey !== undefined) cache.delete(firstKey);
-  }
-
-  cache.set(key, { data, timestamp: Date.now() });
-  return data;
-}
+import { fetchWithCache, TTL } from './cache';
 
 const fetchWithFallback = async (endpoint: string) => {
   let attemptUrl = currentBaseUrl;
@@ -88,48 +59,48 @@ export const api = {
     return fetchWithCache(`new-updated-${page}`, async () => {
       const res = await fetchWithFallback(`/danh-sach/phim-moi-cap-nhat?page=${page}`);
       return await res.json();
-    });
+    }, TTL.NEW_UPDATED);
   },
   getByCategory: async (slug: string, page = 1) => {
     return fetchWithCache(`category-${slug}-${page}`, async () => {
       const res = await fetchWithFallback(`/v1/api/danh-sach/${slug}?page=${page}`);
       const data = await res.json();
       return { items: data.data?.items || [], pagination: data.data?.pagination };
-    });
+    }, TTL.CATEGORY_LIST);
   },
   getMovieDetail: async (slug: string) => {
     return fetchWithCache(`detail-${slug}`, async () => {
       const res = await fetchWithFallback(`/phim/${slug}`);
       return await res.json();
-    });
+    }, TTL.MOVIE_DETAIL);
   },
   getByGenre: async (slug: string, page = 1) => {
     return fetchWithCache(`genre-${slug}-${page}`, async () => {
       const res = await fetchWithFallback(`/v1/api/the-loai/${slug}?page=${page}`);
       const data = await res.json();
       return { items: data.data?.items || [], pagination: data.data?.pagination };
-    });
+    }, TTL.CATEGORY_LIST);
   },
   getByCountry: async (slug: string, page = 1) => {
     return fetchWithCache(`country-${slug}-${page}`, async () => {
       const res = await fetchWithFallback(`/v1/api/quoc-gia/${slug}?page=${page}`);
       const data = await res.json();
       return { items: data.data?.items || [], pagination: data.data?.pagination };
-    });
+    }, TTL.CATEGORY_LIST);
   },
   getByYear: async (year: string, page = 1) => {
     return fetchWithCache(`year-${year}-${page}`, async () => {
       const res = await fetchWithFallback(`/v1/api/nam/${year}?page=${page}`);
       const data = await res.json();
       return { items: data.data?.items || [], pagination: data.data?.pagination };
-    });
+    }, TTL.CATEGORY_LIST);
   },
   search: async (keyword: string, page = 1) => {
     return fetchWithCache(`search-${keyword}-${page}`, async () => {
       const res = await fetchWithFallback(`/v1/api/tim-kiem?keyword=${keyword}&page=${page}`);
       const data = await res.json();
       return { items: data.data?.items || [], pagination: data.data?.pagination };
-    });
+    }, TTL.SEARCH);
   },
   getTrendingFromTMDB: async () => {
     try {

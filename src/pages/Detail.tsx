@@ -6,7 +6,7 @@ import MovieCard from "@/components/MovieCard";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
 import { decodeHtml, DEFAULT_AVATAR } from "@/lib/utils";
-import { fetchWithCache } from "@/lib/tmdb";
+import { fetchWithCache, TTL } from "@/lib/cache";
 import { motion, AnimatePresence } from "motion/react";
 import CommentsSection from "@/components/CommentsSection";
 import { MovieDetailSkeleton } from "@/components/Skeleton";
@@ -156,7 +156,7 @@ export default function Detail() {
         if (!tmdbId) {
           const yearQuery = movie.year ? `&year=${movie.year}` : '';
           const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.origin_name || movie.name)}${yearQuery}&language=vi-VN`;
-          const searchData = await fetchWithCache(searchUrl, `tmdb_search_${movie.slug}`, 3600000);
+          const searchData = await fetchWithCache(`tmdb_search_${movie.slug}`, () => fetch(searchUrl).then(r => r.json()), TTL.TMDB_STATIC);
           if (searchData.results && searchData.results.length > 0) {
             tmdbId = searchData.results[0].id;
             tmdbType = searchData.results[0].media_type || (searchData.results[0].first_air_date ? 'tv' : 'movie');
@@ -165,7 +165,7 @@ export default function Detail() {
 
         if (tmdbId) {
           const detailsUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=vi-VN`;
-          const detailsData = await fetchWithCache(detailsUrl, `tmdb_details_${tmdbType}_${tmdbId}`, 3600000);
+          const detailsData = await fetchWithCache(`tmdb_details_${tmdbType}_${tmdbId}`, () => fetch(detailsUrl).then(r => r.json()), TTL.TMDB_STATIC);
           if (detailsData.vote_average) {
             let formattedVotes = '';
             if (detailsData.vote_count) {
@@ -204,7 +204,7 @@ export default function Detail() {
         if (!tmdbId) {
           const yearQuery = movie.year ? `&year=${movie.year}` : '';
           const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.origin_name || movie.name)}${yearQuery}&language=vi-VN`;
-          const searchData = await fetchWithCache(searchUrl, `tmdb_search_${movie.slug}`, 3600000);
+          const searchData = await fetchWithCache(`tmdb_search_${movie.slug}`, () => fetch(searchUrl).then(r => r.json()), TTL.TMDB_STATIC);
           if (searchData.results && searchData.results.length > 0) {
             tmdbId = searchData.results[0].id;
             tmdbType = searchData.results[0].media_type || (searchData.results[0].first_air_date ? 'tv' : 'movie');
@@ -213,7 +213,7 @@ export default function Detail() {
 
         if (tmdbId) {
           const creditsUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}/credits?api_key=${apiKey}&language=vi-VN`;
-          const creditsData = await fetchWithCache(creditsUrl, `tmdb_credits_${tmdbType}_${tmdbId}`, 3600000);
+          const creditsData = await fetchWithCache(`tmdb_credits_${tmdbType}_${tmdbId}`, () => fetch(creditsUrl).then(r => r.json()), TTL.TMDB_STATIC);
           if (creditsData.cast) {
             setCast(creditsData.cast.slice(0, 12));
           }
@@ -241,7 +241,7 @@ export default function Detail() {
         if (!tmdbId) {
           const yearQuery = movie.year ? `&year=${movie.year}` : '';
           const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.origin_name || movie.name)}${yearQuery}&language=vi-VN`;
-          const searchData = await fetchWithCache(searchUrl, `tmdb_search_${movie.slug}`, 3600000);
+          const searchData = await fetchWithCache(`tmdb_search_${movie.slug}`, () => fetch(searchUrl).then(r => r.json()), TTL.TMDB_STATIC);
           if (searchData.results && searchData.results.length > 0) {
             tmdbId = searchData.results[0].id;
             tmdbType = searchData.results[0].media_type || (searchData.results[0].first_air_date ? 'tv' : 'movie');
@@ -250,7 +250,7 @@ export default function Detail() {
 
         if (tmdbId) {
           const imagesUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}/images?api_key=${apiKey}`;
-          const imagesData = await fetchWithCache(imagesUrl, `tmdb_images_${tmdbType}_${tmdbId}`, 3600000);
+          const imagesData = await fetchWithCache(`tmdb_images_${tmdbType}_${tmdbId}`, () => fetch(imagesUrl).then(r => r.json()), TTL.TMDB_STATIC);
           if (imagesData.backdrops) {
             setImages(imagesData.backdrops.slice(0, 12));
           }

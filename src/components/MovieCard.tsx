@@ -59,7 +59,7 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating }: M
 
   return (
     <div
-      className="group relative block w-full flex flex-col items-center md:items-start select-none"
+      className="group relative block w-full flex flex-col items-center md:items-start select-none movie-card-content"
       style={{
         WebkitUserSelect: 'none',
         WebkitTouchCallout: 'none',
