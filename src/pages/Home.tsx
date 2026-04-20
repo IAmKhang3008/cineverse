@@ -77,12 +77,13 @@ export default function Home() {
 
     const fetchEssentialData = async () => {
       try {
+        const fallbackRes = { items: [] };
         const [newRes, trendingRes, chieuRapRes, hanQuocRes, vietNamRes] = await Promise.all([
-          api.getNewUpdated(1),
-          api.getByCategory("phim-le", 1),
-          api.getByCategory("phim-chieu-rap", 1),
-          api.getByCountry("han-quoc", 1),
-          api.getByCountry("viet-nam", 1),
+          api.getNewUpdated(1).catch(e => { console.warn("Failed new-updated", e); return fallbackRes; }),
+          api.getByCategory("phim-le", 1).catch(e => { console.warn("Failed phim-le", e); return fallbackRes; }),
+          api.getByCategory("phim-chieu-rap", 1).catch(e => { console.warn("Failed phim-chieu-rap", e); return fallbackRes; }),
+          api.getByCountry("han-quoc", 1).catch(e => { console.warn("Failed han-quoc", e); return fallbackRes; }),
+          api.getByCountry("viet-nam", 1).catch(e => { console.warn("Failed viet-nam", e); return fallbackRes; }),
         ]);
         
         if (!isMounted) return;
@@ -156,14 +157,15 @@ export default function Home() {
 
     const fetchSecondaryData = async () => {
       try {
+        const fallbackRes = { items: [] };
         const [seriesRes, hoatHinhRes, tvShowsRes, thaiLanRes, hongKongRes, auMyRes, kinhDiRes] = await Promise.all([
-          api.getByCategory("phim-bo", 1),
-          api.getByCategory("hoat-hinh", 1),
-          api.getByCategory("tv-shows", 1),
-          api.getByCountry("thai-lan", 1),
-          api.getByCountry("hong-kong", 1),
-          api.getByCountry("au-my", 1),
-          api.getByGenre("kinh-di", 1),
+          api.getByCategory("phim-bo", 1).catch(e => { console.warn("Failed phim-bo", e); return fallbackRes; }),
+          api.getByCategory("hoat-hinh", 1).catch(e => { console.warn("Failed hoat-hinh", e); return fallbackRes; }),
+          api.getByCategory("tv-shows", 1).catch(e => { console.warn("Failed tv-shows", e); return fallbackRes; }),
+          api.getByCountry("thai-lan", 1).catch(e => { console.warn("Failed thai-lan", e); return fallbackRes; }),
+          api.getByCountry("hong-kong", 1).catch(e => { console.warn("Failed hong-kong", e); return fallbackRes; }),
+          api.getByCountry("au-my", 1).catch(e => { console.warn("Failed au-my", e); return fallbackRes; }),
+          api.getByGenre("kinh-di", 1).catch(e => { console.warn("Failed kinh-di", e); return fallbackRes; }),
         ]);
         
         if (!isMounted) return;
@@ -177,7 +179,6 @@ export default function Home() {
       } catch (error) {
         if (!isMounted) return;
         console.error("Failed to fetch secondary data", error);
-        // Silently fail for secondary data to not spam the user
       }
     };
 

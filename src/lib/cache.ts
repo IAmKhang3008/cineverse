@@ -218,6 +218,6 @@ export const invalidate = {
 };
 
 // Monitor hit rate trong development
-if (import.meta.env.DEV) {
+if ((import.meta as any).env.DEV) {
   setInterval(() => console.table(cache.getStats()), 30_000);
 }
