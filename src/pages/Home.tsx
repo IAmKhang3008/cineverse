@@ -23,15 +23,14 @@ const MovieCard = React.lazy(() => import("@/components/MovieCard"));
 type TrendingWindow = 'day' | 'week';
 
 interface TrendingTab {
-  id:      TrendingWindow;
-  label:   string;
-  icon:    React.ReactNode;
-  emoji:   string;
+  id:    TrendingWindow;
+  label: string;
+  icon:  React.ReactNode;
 }
 
 const TRENDING_TABS: TrendingTab[] = [
-  { id: 'day',  label: 'Tiêu điểm ngày',      icon: <Flame      className="w-3.5 h-3.5" />, emoji: '🔥' },
-  { id: 'week', label: 'Bảng xếp hạng tuần',  icon: <TrendingUp className="w-3.5 h-3.5" />, emoji: '📈' },
+  { id: 'day',  label: 'Tiêu điểm ngày',     icon: <Flame      className="w-3.5 h-3.5" /> },
+  { id: 'week', label: 'Bảng xếp hạng tuần', icon: <TrendingUp className="w-3.5 h-3.5" /> },
 ];
 
 const TMDB_KEY = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
@@ -395,26 +394,32 @@ export default function Home() {
               Phim Thịnh Hành
             </h2>
 
-            {/* Toggle 2 tab — dùng style pill để cân đối */}
-            <div className="flex items-center bg-white/5 border border-white/10 rounded-full p-1 gap-1">
-              {TRENDING_TABS.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`
-                    flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold
-                    whitespace-nowrap transition-all duration-200
-                    ${activeTab === tab.id
-                      ? 'bg-[#F5C518] text-black shadow-[0_0_12px_rgba(245,197,24,0.35)]'
-                      : 'text-secondary-text hover:text-white'
-                    }
-                  `}
-                >
-                  {tab.icon}
-                  <span className="hidden sm:inline">{tab.label}</span>
-                  <span className="sm:hidden">{tab.emoji}</span>
-                </button>
-              ))}
+            {/* Toggle 2 tab — pill container, đối xứng */}
+            <div className="flex items-center bg-white/5 border border-white/10 rounded-full p-1 gap-0.5 flex-shrink-0">
+              {TRENDING_TABS.map((tab) => {
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`
+                      flex items-center justify-center gap-1.5
+                      min-h-[44px] sm:min-h-[36px] px-4 sm:px-5
+                      rounded-full text-xs font-bold whitespace-nowrap
+                      transition-all duration-250
+                      ${isActive
+                        ? 'bg-[#F5C518] text-black shadow-[0_0_14px_rgba(245,197,24,0.5)] scale-[1.03]'
+                        : 'text-secondary-text hover:text-white hover:bg-white/10 active:scale-95'
+                      }
+                    `}
+                  >
+                    <span className={`flex-shrink-0 ${isActive ? 'text-black' : 'text-[#F5C518]'}`}>
+                      {tab.icon}
+                    </span>
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
