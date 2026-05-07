@@ -1,9 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Search, User, LogOut, Settings, Heart, History, Play, Menu, X, LogIn, Bell, Clock, TrendingUp, Home, Film, Tv, Tag } from "lucide-react";
+import { Search, User as UserIcon, LogOut, Settings, Heart, History, Play, Menu, X, LogIn, Bell, Clock, TrendingUp, Home, Film, Tv, Tag } from "lucide-react";
 import { cn, DEFAULT_USER_AVATAR } from "@/lib/utils";
 import { api, getImageUrl } from "@/lib/api";
 import { SearchSuggestionSkeleton, Skeleton } from "@/components/Skeleton";
+import { useAuth } from "@/contexts/AuthContext";
+import LoginModal from "@/components/LoginModal";
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from "@/lib/firebase";
 
 export default function Header() {
   const [scrolled, setScrolled] = useState(false);
@@ -17,6 +21,7 @@ export default function Header() {
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const [trendingMovies, setTrendingMovies] = useState<any[]>([]);
   const [isFetchingTrending, setIsFetchingTrending] = useState(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
 
   // Ref để đo vị trí form và tính offset dropdown
   const searchFormRef = useRef<HTMLFormElement>(null);
@@ -25,7 +30,7 @@ export default function Header() {
   const navigate = useNavigate();
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const { user, logout } = useAuth();
   const [userData, setUserData] = useState({
     name: "Khách",
     email: "guest@cineverse.com",
@@ -106,30 +111,30 @@ export default function Header() {
   };
 
   useEffect(() => {
-    const checkAuth = () => {
-      const savedData = localStorage.getItem("cineverse_settings");
-      if (savedData) {
-        const parsed = JSON.parse(savedData);
-        setUserData({ name: parsed.name || "Người dùng", email: parsed.email || "", avatar: parsed.avatar || DEFAULT_USER_AVATAR });
-        setIsLoggedIn(true);
-      } else {
-        setIsLoggedIn(false);
-        setUserData({ name: "Khách", email: "guest@cineverse.com", avatar: DEFAULT_USER_AVATAR });
-      }
+    const loadUserData = async () => {
+        if (user) {
+            try {
+                const docRef = doc(db, 'users', user.uid);
+                const docSnap = await getDoc(docRef);
+                const data = docSnap.exists() ? docSnap.data() : null;
+                setUserData({ 
+                    name: data?.displayName || user.displayName || "Người dùng", 
+                    email: user.email || data?.email || "", 
+                    avatar: user.photoURL || DEFAULT_USER_AVATAR 
+                });
+            } catch (error) {
+                setUserData({ name: user.displayName || "Người dùng", email: user.email || "", avatar: user.photoURL || DEFAULT_USER_AVATAR });
+            }
+        } else {
+            setUserData({ name: "Khách", email: "guest@cineverse.com", avatar: DEFAULT_USER_AVATAR });
+        }
     };
-    checkAuth();
-    window.addEventListener("local-storage-update", checkAuth);
-    window.addEventListener("storage", checkAuth);
-    return () => {
-      window.removeEventListener("local-storage-update", checkAuth);
-      window.removeEventListener("storage", checkAuth);
-    };
-  }, []);
+    loadUserData();
+  }, [user]);
 
-  const handleLogout = () => {
-    localStorage.removeItem("cineverse_settings");
-    setIsLoggedIn(false);
+  const handleLogout = async () => {
     setIsAvatarOpen(false);
+    await logout();
     navigate("/");
   };
 
@@ -185,6 +190,7 @@ export default function Header() {
         ? "bg-black/5 backdrop-blur-[2px] border-b border-white/0"
         : "bg-background/95 backdrop-blur-[12px] border-b border-card-border shadow-[0_2px_24px_rgba(0,0,0,0.6)]"
     )}>
+      <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} />
       <div className="max-w-[1280px] mx-auto px-4 md:px-6 h-16 md:h-20 flex items-center justify-between container">
 
         {/* LEFT */}
@@ -392,7 +398,7 @@ export default function Header() {
           </form>
 
           {/* Bell */}
-          {isLoggedIn && (
+          {user && (
             <button className={cn("relative p-2 hover:text-[#F5C518] transition-colors group", atTop ? "text-gray-300" : "text-secondary-text")}>
               <Bell className="w-6 h-6" />
               <span className="absolute top-2 right-2 w-2 h-2 bg-[#E50914] rounded-full border-2 border-card group-hover:scale-125 transition-transform" />
@@ -401,11 +407,11 @@ export default function Header() {
 
           {/* Avatar / Login */}
           <div className="relative">
-            {!isLoggedIn ? (
-              <Link to="/login" className="flex items-center gap-2 bg-[#E50914] hover:bg-[#b80710] text-white px-4 py-2 rounded-lg text-sm font-bold transition-all active:scale-95 shadow-lg">
+            {!user ? (
+              <button onClick={() => setIsLoginModalOpen(true)} className="flex items-center gap-2 bg-[#E50914] hover:bg-[#b80710] text-white px-4 py-2 rounded-lg text-sm font-bold transition-all active:scale-95 shadow-lg cursor-pointer">
                 <LogIn className="w-4 h-4" />
                 <span className="hidden sm:inline">Đăng nhập</span>
-              </Link>
+              </button>
             ) : (
               <>
                 <button
@@ -424,9 +430,6 @@ export default function Header() {
                         <p className="text-[10px] text-secondary-text truncate">{userData.email}</p>
                       </div>
                     </div>
-                    <Link to="/profile" onClick={() => setIsAvatarOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm text-secondary-text hover:bg-foreground/5 hover:text-foreground transition-colors">
-                      <User className="w-4 h-4 text-[#3B82F6]" /> Hồ sơ của tôi
-                    </Link>
                     <Link to="/settings" onClick={() => setIsAvatarOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm text-secondary-text hover:bg-foreground/5 hover:text-foreground transition-colors">
                       <Settings className="w-4 h-4 text-secondary-text" /> Cài đặt
                     </Link>
@@ -448,7 +451,7 @@ export default function Header() {
       {/* Mobile / Tablet Menu */}
       <div className={cn("lg:hidden overflow-hidden transition-all duration-300 ease-in-out", isMobileMenuOpen ? "max-h-[600px] opacity-100" : "max-h-0 opacity-0 pointer-events-none")}>
         <div className="bg-background/[0.98] backdrop-blur-xl border-t border-card-border px-3 pb-4 pt-2">
-          {isLoggedIn && (
+          {user && (
             <div className="flex items-center gap-3 px-2 py-3 mb-1 border-b border-card-border">
               <img src={userData.avatar} className="w-10 h-10 rounded-full object-cover border-2 border-[#E50914]/40 flex-shrink-0" />
               <div className="min-w-0">
@@ -478,16 +481,16 @@ export default function Header() {
             ))}
           </nav>
           <div className="pt-2 border-t border-card-border">
-            {isLoggedIn ? (
+            {user ? (
               <button onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }} className="w-full flex items-center gap-3 px-2 py-2.5 rounded-xl text-red-500 hover:bg-red-500/10 transition-all duration-200">
                 <span className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center flex-shrink-0"><LogOut className="w-4 h-4" /></span>
                 <span className="text-sm font-medium">Đăng xuất</span>
               </button>
             ) : (
-              <Link to="/login" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-3 px-2 py-2.5 rounded-xl bg-[#E50914] text-white transition-all active:scale-95">
+              <button onClick={() => { setIsLoginModalOpen(true); setIsMobileMenuOpen(false); }} className="w-full flex items-center gap-3 px-2 py-2.5 rounded-xl bg-[#E50914] text-white transition-all active:scale-95">
                 <span className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0"><LogIn className="w-4 h-4" /></span>
                 <span className="text-sm font-bold">Đăng nhập</span>
-              </Link>
+              </button>
             )}
           </div>
         </div>

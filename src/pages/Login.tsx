@@ -4,8 +4,10 @@ import { Mail, Lock, User, ArrowRight, ShieldCheck, RefreshCw, CheckSquare, Squa
 import { cn } from "@/lib/utils";
 import { motion } from "motion/react";
 import { useToast } from "@/contexts/ToastContext";
-import { loginWithSocial, googleProvider, facebookProvider } from "@/lib/firebase";
+import { useAuth } from "@/contexts/AuthContext";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 
 export default function Login() {
   const [isLogin, setIsLogin] = useState(true);
@@ -29,6 +31,7 @@ export default function Login() {
 
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { signInWithGoogle } = useAuth();
 
   // 1. Tạo CAPTCHA ngẫu nhiên
   const generateCaptcha = useCallback(() => {
@@ -59,10 +62,13 @@ export default function Login() {
 
   const handleSocialLogin = async (providerName: 'google' | 'facebook') => {
     try {
-      const provider = providerName === 'google' ? googleProvider : facebookProvider;
-      const userData = await loginWithSocial(provider);
-      showToast(`Chào mừng ${userData.name} quay trở lại!`, "success");
-      navigate("/");
+      if (providerName === 'google') {
+          await signInWithGoogle();
+          showToast(`Đăng nhập Google thành công!`, "success");
+          navigate("/");
+      } else {
+          showToast(`Đăng nhập Facebook chưa được triển khai`, "error");
+      }
     } catch (error: any) {
       if (error.code === 'auth/popup-closed-by-user') {
          // Silently fail or show a subtle toast, but don't log as error
@@ -107,28 +113,20 @@ export default function Login() {
 
     setIsSubmitting(true);
 
-    // Giả lập "Cơ sở dữ liệu" người dùng trên LocalStorage
-    const usersDB = JSON.parse(localStorage.getItem("cineverse_users") || "[]");
-
     if (isLogin) {
       // LOGIC ĐĂNG NHẬP
-      setTimeout(() => {
-        const user = usersDB.find((u: any) => u.email === email && u.password === password);
-
-        if (user) {
-          // Thành công
-          if (rememberMe) {
-            localStorage.setItem("remembered_user", JSON.stringify({ email, pass: password }));
-          } else {
-            localStorage.removeItem("remembered_user");
-          }
-
-          localStorage.setItem("cineverse_settings", JSON.stringify(user));
-          window.dispatchEvent(new Event("local-storage-update"));
-          showToast("Đăng nhập thành công!", "success");
-          navigate('/');
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+        
+        if (rememberMe) {
+          localStorage.setItem("remembered_user", JSON.stringify({ email, pass: password }));
         } else {
-          // Thất bại
+          localStorage.removeItem("remembered_user");
+        }
+
+        showToast("Đăng nhập thành công!", "success");
+        navigate('/');
+      } catch (error: any) {
           const newAttempts = loginAttempts + 1;
           setLoginAttempts(newAttempts);
           triggerShake();
@@ -142,37 +140,28 @@ export default function Login() {
               setLoginAttempts(0);
             }, 30000);
           }
-          setIsSubmitting(false);
           generateCaptcha();
-        }
-      }, 1000);
+      } finally {
+          setIsSubmitting(false);
+      }
     } else {
       // LOGIC ĐĂNG KÝ
-      setTimeout(() => {
-        const userExists = usersDB.some((u: any) => u.email === email);
-        if (userExists) {
-          showToast("Email này đã được đăng ký!", "error");
-          setIsSubmitting(false);
-          triggerShake();
-          return;
-        }
-
-        const newUser = {
-          name: username,
-          email: email,
-          password: password, // Trong thực tế phải mã hóa hash
-          avatar: `https://ui-avatars.com/api/?name=${username}`,
-          theme: "dark"
-        };
-
-        usersDB.push(newUser);
-        localStorage.setItem("cineverse_users", JSON.stringify(usersDB));
-        localStorage.setItem("cineverse_settings", JSON.stringify(newUser));
-        window.dispatchEvent(new Event("local-storage-update"));
-
+      try {
+        await createUserWithEmailAndPassword(auth, email, password);
+        // Note: you can also update profile name here if needed using updateProfile.
+        
         showToast("Đăng ký tài khoản thành công!", "success");
         navigate('/');
-      }, 1500);
+      } catch (error: any) {
+        if (error.code === 'auth/email-already-in-use') {
+             showToast("Email này đã được đăng ký!", "error");
+        } else {
+             showToast("Lỗi đăng ký: " + error.message, "error");
+        }
+        triggerShake();
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 

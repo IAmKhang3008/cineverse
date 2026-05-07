@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext } from 'react';
 
-type Theme = 'dark' | 'light';
+type Theme = 'dark'; // Only 'dark' is supported now
 
 interface ThemeContextType {
   theme: Theme;
@@ -10,22 +10,13 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    const saved = localStorage.getItem('cineverse-theme');
-    return (saved as Theme) || 'dark';
-  });
-
-  useEffect(() => {
-    localStorage.setItem('cineverse-theme', theme);
-    document.documentElement.setAttribute('data-theme', theme);
-  }, [theme]);
-
   const toggleTheme = () => {
-    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+    // No-op since light mode is removed
+    console.warn("Theme switching is disabled. Cineverse only supports dark mode.");
   };
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme: 'dark', toggleTheme }}>
       {children}
     </ThemeContext.Provider>
   );

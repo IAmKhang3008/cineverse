@@ -13,6 +13,7 @@ import {
   serverTimestamp, 
   deleteDoc, 
   doc, 
+  getDoc,
   updateDoc, 
   arrayUnion, 
   arrayRemove 
@@ -32,6 +33,8 @@ interface Comment {
 
 import { useToast } from "@/contexts/ToastContext";
 
+import { useAuth } from "@/contexts/AuthContext";
+
 export default function CommentsSection({ movieId }: { movieId: string }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
@@ -40,19 +43,28 @@ export default function CommentsSection({ movieId }: { movieId: string }) {
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
-  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
+  const { user: firebaseUser } = useAuth();
   const { showToast } = useToast();
 
   // 1. LẤY THÔNG TIN USER ĐÃ ĐĂNG NHẬP
   useEffect(() => {
-    const savedUser = localStorage.getItem("cineverse_settings");
-    if (savedUser) setUserData(JSON.parse(savedUser));
-    
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setFirebaseUser(user);
-    });
-    return () => unsubscribe();
-  }, []);
+    const loadUserData = async () => {
+        if (firebaseUser) {
+            try {
+                const docRef = doc(db, 'users', firebaseUser.uid);
+                const docSnap = await getDoc(docRef);
+                const data = docSnap.exists() ? docSnap.data() : null;
+                setUserData({ 
+                    name: data?.displayName || firebaseUser.displayName || "Người dùng", 
+                    avatar: data?.photoURL || firebaseUser.photoURL || DEFAULT_USER_AVATAR
+                });
+            } catch (error) {
+                setUserData(null);
+            }
+        }
+    };
+    loadUserData();
+  }, [firebaseUser]);
 
   const checkAuth = () => {
     if (!firebaseUser) {

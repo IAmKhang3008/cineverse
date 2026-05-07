@@ -1,107 +1,81 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    //
-    // Collection: users
-    // Document ID: {userId}
-    // Fields:
-    //   - name: string (optional) - User's display name
-    //   - email: string (required) - User's email address
-    //   - avatar: string (optional) - User's avatar URL
-    //   - uid: string (required) - User's unique identifier
-    //   - isSocial: boolean (optional) - Whether the user logged in via social provider
-    //
-    // Collection: comments
-    // Document ID: {commentId}
-    // Fields:
-    //   - movieId: string (required) - ID of the movie being commented on
-    //   - userId: string (required) - ID of the user who made the comment
-    //   - userName: string (required) - Name of the user who made the comment
-    //   - userAvatar: string (required) - Avatar URL of the user who made the comment
-    //   - content: string (required) - Content of the comment
-    //   - likes: list (required) - Array of user IDs who liked the comment
-    //   - createdAt: timestamp (required) - Timestamp when the comment was created
-    //
-    // ===============================================================
     
-    // ===============================================================
-    // Helper Functions
-    // ===============================================================
-    function isAuthenticated() {
-       return request.auth != null;
-    }
-    
-    function isOwner(userId) {
-       return isAuthenticated() && request.auth.uid == userId;
-    }
-    
-    function uidUnchanged() {
-       return !('uid' in request.resource.data) ||
-         request.resource.data.uid == request.auth.uid;
-    }
-    
-    function uidNotModified() {
-       return !('uid' in request.resource.data) ||
-         request.resource.data.uid == resource.data.uid;
-    }
-    
-    function hasRequiredFields(fields) {
-       return request.resource.data.keys().hasAll(fields);
-    }
-    
-    function isValidEmail(email) {
-       return email is string &&
-         email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
-    }
-    
-    function hasOnlyAllowedFields(fields) {
-      return request.resource.data.keys().hasOnly(fields);
-    }
-    
-    // Domain Validators
-    function isValidUser(data) {
-      return hasOnlyAllowedFields(['name', 'email', 'avatar', 'uid', 'isSocial']) &&
-             (!('name' in data) || (data.name is string && data.name.size() < 100)) &&
-             data.email is string && isValidEmail(data.email) &&
-             (!('avatar' in data) || (data.avatar is string && data.avatar.size() < 2000)) &&
-             data.uid is string && data.uid.size() > 0 && data.uid.size() < 128 &&
-             (!('isSocial' in data) || data.isSocial is bool);
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
     }
 
-    function isValidComment(data) {
-      return hasOnlyAllowedFields(['movieId', 'userId', 'userName', 'userAvatar', 'content', 'likes', 'createdAt']) &&
-             data.movieId is string && data.movieId.size() > 0 && data.movieId.size() < 100 &&
-             data.userId is string && data.userId.size() > 0 && data.userId.size() < 128 &&
-             data.userName is string && data.userName.size() > 0 && data.userName.size() < 100 &&
-             data.userAvatar is string && data.userAvatar.size() < 2000 &&
-             data.content is string && data.content.size() > 0 && data.content.size() < 2000 &&
-             data.likes is list && data.likes.size() < 10000 &&
-             data.createdAt is timestamp;
+    // Primitives
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isSignedIn() { return request.auth != null; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+
+    // Validation Blueprint for User Document
+    function isValidUserConfig(data) {
+      return (
+        (!data.keys().hasAny(['email']) || (data.email is string && data.email.size() <= 200)) &&
+        (!data.keys().hasAny(['displayName']) || (data.displayName is string && data.displayName.size() <= 64)) &&
+        (!data.keys().hasAny(['theme']) || (data.theme == 'light' || data.theme == 'dark')) &&
+        (!data.keys().hasAny(['notifications']) || data.notifications is bool) &&
+        (!data.keys().hasAny(['emailNotifications']) || data.emailNotifications is bool) &&
+        (!data.keys().hasAny(['pushNotifications']) || data.pushNotifications is bool) &&
+        (!data.keys().hasAny(['twoFactor']) || data.twoFactor is bool) &&
+        (!data.keys().hasAny(['migrated']) || data.migrated is bool)
+      );
+    }
+
+    // Validation Blueprint for FavoriteItem
+    function isValidFavorite(data) {
+      return (
+        data.keys().hasAll(['movieId', 'name', 'poster_url', 'addedAt']) &&
+        data.movieId is string && data.movieId.size() > 0 && data.movieId.size() <= 128 &&
+        data.name is string && data.name.size() <= 200 &&
+        data.poster_url is string && data.poster_url.size() <= 2000 &&
+        data.addedAt is number
+      );
+    }
+
+    // Validation Blueprint for HistoryItem
+    function isValidHistory(data) {
+      return (
+        data.keys().hasAll(['movieId', 'name', 'poster_url', 'timestamp']) &&
+        data.movieId is string && data.movieId.size() > 0 && data.movieId.size() <= 128 &&
+        data.name is string && data.name.size() <= 200 &&
+        data.poster_url is string && data.poster_url.size() <= 2000 &&
+        data.timestamp is number &&
+        (!data.keys().hasAny(['progress']) || data.progress is number) &&
+        (!data.keys().hasAny(['currentEpisode']) || data.currentEpisode is string)
+      );
     }
 
     match /users/{userId} {
-      allow read: if isOwner(userId);
-      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && uidUnchanged();
-      allow update: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && uidNotModified();
-      allow delete: if isOwner(userId);
-    }
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId && isValidUserConfig(incoming());
+      allow update: if isSignedIn() && request.auth.uid == userId && isValidUserConfig(incoming());
+      allow delete: if false;
 
-    match /comments/{commentId} {
-      allow read: if true;
-      allow create: if isAuthenticated() && 
-                    request.resource.data.userId == request.auth.uid && 
-                    isValidComment(request.resource.data);
-      allow update: if isAuthenticated() && (
-                      (request.resource.data.userId == request.auth.uid && 
-                       resource.data.userId == request.auth.uid && 
-                       isValidComment(request.resource.data)) ||
-                      (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes']) && 
-                       request.resource.data.likes is list)
-                    );
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      match /favorites/{movieId} {
+        allow read: if isSignedIn() && request.auth.uid == userId;
+        allow list: if isSignedIn() && request.auth.uid == userId;
+        allow create: if isSignedIn() && request.auth.uid == userId && isValidId(movieId) && isValidFavorite(incoming());
+        allow update: if isSignedIn() && request.auth.uid == userId && isValidId(movieId) && isValidFavorite(incoming());
+        allow delete: if isSignedIn() && request.auth.uid == userId && isValidId(movieId);
+      }
+
+      match /history/{movieId} {
+        allow read: if isSignedIn() && request.auth.uid == userId;
+        allow list: if isSignedIn() && request.auth.uid == userId;
+        allow create: if isSignedIn() && request.auth.uid == userId && isValidId(movieId) && isValidHistory(incoming());
+        allow update: if isSignedIn() && request.auth.uid == userId && isValidId(movieId) && isValidHistory(incoming());
+        allow delete: if isSignedIn() && request.auth.uid == userId;
+      }
+      
+      match /settings/{settingId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
     }
   }
 }

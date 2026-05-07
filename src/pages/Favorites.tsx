@@ -1,20 +1,16 @@
-import { useEffect, useState } from "react";
 import { useFavorites } from "@/hooks/useFavorites";
 import MovieCard from "@/components/MovieCard";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Lock, Heart } from "lucide-react";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Favorites() {
   useDocumentTitle("Yêu thích | Cineverse");
   
   const { favorites } = useFavorites();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-
-  useEffect(() => {
-    const user = localStorage.getItem("cineverse_settings");
-    setIsLoggedIn(!!user);
-  }, []);
+  const { user } = useAuth();
+  const isLoggedIn = !!user;
 
   if (!isLoggedIn) {
     return (

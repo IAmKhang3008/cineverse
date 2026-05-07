@@ -3,10 +3,13 @@ import { User, Shield, Moon, Bell, Save, ChevronRight, Loader2, RotateCcw, Alert
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useToast } from "@/contexts/ToastContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from "@/lib/firebase";
 
 const DEFAULT_SETTINGS = {
-  email: "user@example.com",
-  name: "Người dùng",
+  email: "",
+  name: "",
   theme: "dark",
   emailNotifications: true,
   pushNotifications: false,
@@ -54,39 +57,6 @@ function validateDisplayName(name: string): string | null {
   return null;
 }
 
-function validateEmail(email: string): string | null {
-  const trimmed = email.trim();
-
-  if (!trimmed) return "Email không được để trống.";
-
-  // Kiểm tra có @ không
-  if (!trimmed.includes("@"))
-    return "Email thiếu ký tự @. Ví dụ: ten@gmail.com";
-
-  const [local, domain] = trimmed.split("@");
-
-  // Phần trước @ không được rỗng
-  if (!local || local.length === 0)
-    return "Email thiếu tên người dùng trước @. Ví dụ: ten@gmail.com";
-
-  // Phần domain phải có dấu chấm
-  if (!domain || !domain.includes("."))
-    return "Email thiếu tên miền. Ví dụ: ten@gmail.com";
-
-  const domainParts = domain.split(".");
-  // Phần sau dấu chấm cuối phải có ít nhất 2 ký tự
-  const tld = domainParts[domainParts.length - 1];
-  if (!tld || tld.length < 2)
-    return "Phần đuôi email không hợp lệ. Ví dụ: .com, .vn, .net";
-
-  // Regex tổng thể
-  const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-  if (!EMAIL_REGEX.test(trimmed))
-    return "Địa chỉ email không hợp lệ. Ví dụ: ten@gmail.com";
-
-  return null;
-}
-
 export default function Settings() {
   useDocumentTitle("Cài đặt | Cineverse");
   
@@ -94,18 +64,53 @@ export default function Settings() {
   const [isSaving, setIsSaving] = useState(false);
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
-  const [emailError, setEmailError] = useState<string | null>(null);
   const { showToast } = useToast();
   const { theme, toggleTheme } = useTheme();
+  const { user } = useAuth();
 
-  // 1. Khởi tạo state từ LocalStorage để dữ liệu không bị mất khi F5
-  const [settings, setSettings] = useState(() => {
-    const savedData = localStorage.getItem("cineverse_settings");
-    return savedData ? JSON.parse(savedData) : DEFAULT_SETTINGS;
-  });
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
 
-  // 2. Hàm lưu dữ liệu "thật"
-  const handleSave = () => {
+  useEffect(() => {
+    if (!user) {
+      setSettings({...DEFAULT_SETTINGS});
+      return;
+    }
+
+    const loadSettings = async () => {
+      try {
+        const docRef = doc(db, 'users', user.uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setSettings(prev => ({
+            ...prev,
+            email: user.email || data.email || "",
+            name: data.displayName || user.displayName || "Người dùng",
+            theme: data.theme || "dark",
+            emailNotifications: data.notifications ?? data.emailNotifications ?? true,
+            pushNotifications: data.pushNotifications ?? false,
+            twoFactor: data.twoFactor ?? false
+          }));
+        } else {
+           setSettings(prev => ({
+            ...prev,
+            email: user.email || "",
+            name: user.displayName || "Người dùng",
+          }));
+        }
+      } catch (err) {
+        handleFirestoreError(err, OperationType.GET, `users/${user.uid}`);
+      }
+    };
+    loadSettings();
+  }, [user]);
+
+  const handleSave = async () => {
+    if (!user) {
+        showToast("⚠️ Vui lòng đăng nhập để lưu cài đặt", "error");
+        return;
+    }
+
     // Validate tên
     const nameErr = validateDisplayName(settings.name);
     if (nameErr) {
@@ -116,34 +121,43 @@ export default function Settings() {
     }
     setNameError(null);
 
-    // Validate email
-    const emailErr = validateEmail(settings.email);
-    if (emailErr) {
-      setEmailError(emailErr);
-      showToast("⚠️ " + emailErr, "error");
-      setActiveTab("account");
-      return;
-    }
-    setEmailError(null);
-
-    // Lưu bình thường
     setIsSaving(true);
-    setTimeout(() => {
-      localStorage.setItem("cineverse_settings", JSON.stringify(settings));
-      document.documentElement.setAttribute("data-theme", settings.theme);
-      setIsSaving(false);
-      window.dispatchEvent(new Event("local-storage-update"));
+    try {
+      const docRef = doc(db, 'users', user.uid);
+      await setDoc(docRef, {
+        displayName: settings.name,
+        email: settings.email,
+        theme: settings.theme,
+        notifications: settings.emailNotifications,
+        emailNotifications: settings.emailNotifications,
+        pushNotifications: settings.pushNotifications,
+        twoFactor: settings.twoFactor
+      }, { merge: true });
+
       showToast("✅ Cài đặt đã được lưu!", "success");
-    }, 1000);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
+      showToast("❌ Lỗi khi lưu cài đặt", "error");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleReset = () => {
-    setSettings(DEFAULT_SETTINGS);
-    localStorage.removeItem("cineverse_settings");
-    if (theme !== 'dark') toggleTheme();
+  const handleReset = async () => {
+    setSettings({...DEFAULT_SETTINGS, email: user?.email || "", name: user?.displayName || "Người dùng"});
     setShowResetDialog(false);
     showToast("🔄 Đã khôi phục cài đặt mặc định!", "success");
+    // Could save automatically or let user click save
   };
+
+  if (!user) {
+     return (
+        <div className="max-w-[1024px] mx-auto px-4 py-12 mt-16 text-center text-white">
+            <h1 className="text-2xl font-bold mb-4">Cài đặt</h1>
+            <p className="text-secondary-text">Vui lòng đăng nhập để xem và thay đổi cài đặt.</p>
+        </div>
+     );
+  }
 
   return (
     <div className="max-w-[1024px] mx-auto px-4 sm:px-6 py-8 md:py-12 mt-16 text-white">
@@ -224,27 +238,14 @@ export default function Settings() {
                   {/* Input Email */}
                   <div>
                     <label className="block text-xs md:text-sm font-medium text-secondary-text mb-1.5 md:mb-2">
-                      Email
+                      Email (Được quản lý bởi tài khoản Google)
                     </label>
                     <input
                       type="email"
                       value={settings.email}
-                      onChange={(e) => {
-                        setSettings({ ...settings, email: e.target.value });
-                        setEmailError(null);
-                      }}
-                      className={`w-full bg-input-bg border rounded-xl px-3 md:px-4 py-2.5 md:py-3 text-sm md:text-base text-foreground outline-none transition-all ${
-                        emailError
-                          ? "border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-500"
-                          : "border-card-border focus:border-[#E50914] focus:ring-1 focus:ring-[#E50914]"
-                      }`}
+                      disabled
+                      className="w-full bg-input-bg border border-card-border rounded-xl px-3 md:px-4 py-2.5 md:py-3 text-sm md:text-base text-secondary-text outline-none opacity-70 cursor-not-allowed"
                     />
-                    {emailError && (
-                      <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1">
-                        <span className="inline-block w-3.5 h-3.5 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center font-bold flex-shrink-0">!</span>
-                        {emailError}
-                      </p>
-                    )}
                   </div>
                 </div>
               </div>
@@ -278,18 +279,13 @@ export default function Settings() {
             {activeTab === 'appearance' && (
               <div className="space-y-4 md:space-y-6">
                 <h2 className="text-xl md:text-2xl font-bold">Giao diện</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
-                   <button 
-                    onClick={() => setSettings({...settings, theme: 'dark'})}
-                    className={`p-4 md:p-6 rounded-2xl border-2 text-left transition-all ${settings.theme === 'dark' ? 'border-[#E50914] bg-[#E50914]/5' : 'border-white/5 bg-[#0A0A0A]'}`}
-                  >
-                    <Moon className="mb-3 md:mb-4 w-5 h-5 md:w-6 md:h-6" />
-                    <p className="font-bold text-sm md:text-base">Dark Mode</p>
-                  </button>
-                  {/* Light mode: Disabled như bản gốc */}
-                  <div className="p-4 md:p-6 rounded-2xl border-2 border-white/5 bg-[#0A0A0A] opacity-30 cursor-not-allowed">
-                    <Moon className="mb-3 md:mb-4 w-5 h-5 md:w-6 md:h-6" />
-                    <p className="font-bold text-sm md:text-base">Light Mode (Soon)</p>
+                <div className="bg-[#0A0A0A] p-4 md:p-5 rounded-2xl border border-[#E50914] bg-[#E50914]/5 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Moon className="w-5 h-5 md:w-6 md:h-6 text-[#E50914]" />
+                    <div>
+                      <p className="font-bold text-sm md:text-base text-white">Dark Mode (Mặc định)</p>
+                      <p className="text-xs md:text-sm text-[#A0A0A0]">Cineverse hiện tại chỉ hỗ trợ giao diện tối để trải nghiệm điện ảnh tốt nhất.</p>
+                    </div>
                   </div>
                 </div>
               </div>

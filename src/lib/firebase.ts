@@ -1,14 +1,38 @@
+/// <reference types="vite/client" />
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, FacebookAuthProvider, signInWithPopup } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-import firebaseConfig from "../../firebase-applet-config.json";
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
+import firebaseConfigJson from "../../firebase-applet-config.json";
 
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfigJson.apiKey,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfigJson.authDomain,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || firebaseConfigJson.projectId,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfigJson.storageBucket,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfigJson.messagingSenderId,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || firebaseConfigJson.appId,
+};
+
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-export const googleProvider = new GoogleAuthProvider();
-export const facebookProvider = new FacebookAuthProvider();
 
+// Initialize Auth
+export const auth = getAuth(app);
+export const googleProvider = new GoogleAuthProvider();
+
+// Initialize Firestore
+export const db = getFirestore(app, firebaseConfigJson.firestoreDatabaseId);
+
+// Enable offline persistence
+enableIndexedDbPersistence(db).catch((err) => {
+  if (err.code === "failed-precondition") {
+    console.warn("Multiple tabs open, persistence can only be enabled in one tab at a a time.");
+  } else if (err.code === "unimplemented") {
+    console.warn("The current browser does not support all of the features required to enable persistence");
+  }
+});
+
+// Common error handler helper
 export enum OperationType {
   CREATE = 'create',
   UPDATE = 'update',
@@ -23,17 +47,10 @@ export interface FirestoreErrorInfo {
   operationType: OperationType;
   path: string | null;
   authInfo: {
-    userId?: string;
+    userId?: string | null;
     email?: string | null;
-    emailVerified?: boolean;
-    isAnonymous?: boolean;
-    tenantId?: string | null;
-    providerInfo: {
-      providerId: string;
-      displayName: string | null;
-      email: string | null;
-      photoUrl: string | null;
-    }[];
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
   }
 }
 
@@ -45,42 +62,10 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
       email: auth.currentUser?.email,
       emailVerified: auth.currentUser?.emailVerified,
       isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData.map(provider => ({
-        providerId: provider.providerId,
-        displayName: provider.displayName,
-        email: provider.email,
-        photoUrl: provider.photoURL
-      })) || []
     },
     operationType,
     path
   };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  console.error('[Firebase Firestore Error]:', JSON.stringify(errInfo));
+  throw error;
 }
-
-export const loginWithSocial = async (provider: any) => {
-  try {
-    const result = await signInWithPopup(auth, provider);
-    const user = result.user;
-    
-    // Tạo object dữ liệu chuẩn cho Cineverse
-    const userData = {
-      name: user.displayName,
-      email: user.email,
-      avatar: user.photoURL, // Lấy ảnh đại diện trực tiếp từ Google/FB
-      uid: user.uid,
-      isSocial: true
-    };
-
-    localStorage.setItem("cineverse_settings", JSON.stringify(userData));
-    window.dispatchEvent(new Event("local-storage-update"));
-    return userData;
-  } catch (error: any) {
-    if (error.code !== 'auth/popup-closed-by-user') {
-      console.error("Social Login Error", error);
-    }
-    throw error;
-  }
-};

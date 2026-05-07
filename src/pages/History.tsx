@@ -1,20 +1,16 @@
-import { useEffect, useState } from "react";
 import { useHistory } from "@/hooks/useHistory";
 import { Link } from "react-router-dom";
 import { Play, Trash2, ArrowLeft, Clock } from "lucide-react";
 import { getImageUrl } from "@/lib/api";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function History() {
   useDocumentTitle("Lịch Sử | Cineverse");
   
   const { history, removeFromHistory, clearHistory } = useHistory();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-
-  useEffect(() => {
-    const user = localStorage.getItem("cineverse_settings");
-    setIsLoggedIn(!!user);
-  }, []);
+  const { user } = useAuth();
+  const isLoggedIn = !!user;
 
   if (!isLoggedIn) {
     return (

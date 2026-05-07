@@ -10,6 +10,7 @@ import Layout from "./components/Layout";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { ToastProvider } from "./contexts/ToastContext";
 import { FavoritesProvider } from "./contexts/FavoritesContext";
+import { AuthProvider } from "./contexts/AuthContext";
 import ScrollToTop from "./components/ScrollToTop";
 
 const Home = React.lazy(() => import("./pages/Home"));
@@ -68,12 +69,14 @@ export default function App() {
   return (
     <ThemeProvider>
       <ToastProvider>
-        <FavoritesProvider>
-          <BrowserRouter>
-            <ScrollToTop />
-            <AnimatedRoutes />
-          </BrowserRouter>
-        </FavoritesProvider>
+        <AuthProvider>
+          <FavoritesProvider>
+            <BrowserRouter>
+              <ScrollToTop />
+              <AnimatedRoutes />
+            </BrowserRouter>
+          </FavoritesProvider>
+        </AuthProvider>
       </ToastProvider>
     </ThemeProvider>
   );

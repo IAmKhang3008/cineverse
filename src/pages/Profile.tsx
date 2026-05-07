@@ -6,6 +6,9 @@ import { useHistory } from "@/hooks/useHistory";
 import MovieCard from "@/components/MovieCard";
 import { DEFAULT_USER_AVATAR } from "@/lib/utils";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { useAuth } from "@/contexts/AuthContext";
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from "@/lib/firebase";
 
 export default function Profile() {
   useDocumentTitle("Hồ sơ cá nhân | Cineverse");
@@ -17,6 +20,8 @@ export default function Profile() {
   
   // Ref để kích hoạt input chọn file ẩn
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { user, logout } = useAuth();
+  const isLoggedIn = !!user;
 
   // 1. Đồng bộ State từ LocalStorage
   const [userData, setUserData] = useState({
@@ -27,52 +32,43 @@ export default function Profile() {
   });
 
   useEffect(() => {
-    const savedData = localStorage.getItem("cineverse_settings");
-    if (savedData) {
-      const parsedData = JSON.parse(savedData);
-      setUserData(prev => ({
-        ...prev,
-        name: parsedData.name || prev.name,
-        email: parsedData.email || prev.email,
-        avatar: parsedData.avatar || prev.avatar, // Lấy avatar nếu có
-      }));
+    if (!isLoggedIn) {
+        navigate("/login");
+        return;
     }
-  }, []);
+    const loadUserData = async () => {
+        if (user) {
+            try {
+                const docRef = doc(db, 'users', user.uid);
+                const docSnap = await getDoc(docRef);
+                const data = docSnap.exists() ? docSnap.data() : null;
+                setUserData({ 
+                    name: data?.displayName || user.displayName || "Người dùng", 
+                    email: user.email || data?.email || "", 
+                    avatar: data?.photoURL || user.photoURL || DEFAULT_USER_AVATAR,
+                    joinDate: "Tháng 1, 2026", // could fetch from auth creation time
+                });
+            } catch (error) {
+                setUserData({ 
+                    name: user.displayName || "Người dùng", 
+                    email: user.email || "", 
+                    avatar: user.photoURL || DEFAULT_USER_AVATAR,
+                    joinDate: "Tháng 1, 2026", 
+                });
+            }
+        }
+    };
+    loadUserData();
+  }, [user, isLoggedIn, navigate]);
 
   // 2. Hàm xử lý đổi ảnh đại diện (PFP)
   const handleAvatarChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        
-        // Cập nhật state hiển thị ngay lập tức
-        const newUserData = { ...userData, avatar: base64String };
-        setUserData(newUserData);
-
-        // Lưu vào LocalStorage để trang Settings và Header cũng nhận được
-        const savedSettings = JSON.parse(localStorage.getItem("cineverse_settings") || "{}");
-        localStorage.setItem("cineverse_settings", JSON.stringify({
-          ...savedSettings,
-          avatar: base64String
-        }));
-        
-        // Bắn sự kiện để Header cập nhật
-        window.dispatchEvent(new Event("local-storage-update"));
-      };
-      reader.readAsDataURL(file);
-    }
+    // Left empty for now, should use firebase storage to upload images
+    alert("Tính năng cập nhật ảnh đại diện lên Firebase Storage đang được phát triển.");
   };
 
-  const handleLogout = () => {
-    // 1. Xóa dữ liệu
-    localStorage.removeItem("cineverse_settings");
-    
-    // 2. Bắn sự kiện đồng bộ
-    window.dispatchEvent(new Event("local-storage-update"));
-    
-    // 3. Chuyển hướng
+  const handleLogout = async () => {
+    await logout();
     navigate("/");
   };
 

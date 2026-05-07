@@ -58,8 +58,6 @@ function useTrendingMovies() {
     setMovies([]); // reset để hiện skeleton
 
     try {
-      const tmdbWindow = TRENDING_TABS.find(t => t.id === tab)?.tmdbKey || 'day';
-
       // Bước 1: Lấy danh sách trending từ TMDB — tab chính là time_window
       const tmdbCacheKey = `tmdb_trending_${tab}`;
       const tmdbData = await fetchWithCache(
