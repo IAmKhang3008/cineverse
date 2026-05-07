@@ -34,7 +34,7 @@ service cloud.firestore {
         data.movieId is string && data.movieId.size() > 0 && data.movieId.size() <= 128 &&
         data.name is string && data.name.size() <= 200 &&
         data.poster_url is string && data.poster_url.size() <= 2000 &&
-        data.addedAt is number
+        data.addedAt is timestamp
       );
     }
 
@@ -45,7 +45,7 @@ service cloud.firestore {
         data.movieId is string && data.movieId.size() > 0 && data.movieId.size() <= 128 &&
         data.name is string && data.name.size() <= 200 &&
         data.poster_url is string && data.poster_url.size() <= 2000 &&
-        data.timestamp is number &&
+        data.timestamp is timestamp &&
         (!data.keys().hasAny(['progress']) || data.progress is number) &&
         (!data.keys().hasAny(['currentEpisode']) || data.currentEpisode is string)
       );
@@ -65,11 +65,11 @@ service cloud.firestore {
         allow delete: if isSignedIn() && request.auth.uid == userId && isValidId(movieId);
       }
 
-      match /history/{movieId} {
+      match /history/{historyId} {
         allow read: if isSignedIn() && request.auth.uid == userId;
         allow list: if isSignedIn() && request.auth.uid == userId;
-        allow create: if isSignedIn() && request.auth.uid == userId && isValidId(movieId) && isValidHistory(incoming());
-        allow update: if isSignedIn() && request.auth.uid == userId && isValidId(movieId) && isValidHistory(incoming());
+        allow create: if isSignedIn() && request.auth.uid == userId && isValidId(historyId) && isValidHistory(incoming());
+        allow update: if isSignedIn() && request.auth.uid == userId && isValidId(historyId) && isValidHistory(incoming());
         allow delete: if isSignedIn() && request.auth.uid == userId;
       }
       

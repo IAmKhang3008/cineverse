@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { collection, doc, deleteDoc, setDoc, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, doc, deleteDoc, setDoc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from './AuthContext';
+import { useToast } from './ToastContext';
 
 interface FavoritesContextType {
   favorites: any[];
@@ -16,6 +17,7 @@ const FavoritesContext = createContext<FavoritesContextType | undefined>(undefin
 export const FavoritesProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
   const [favorites, setFavorites] = useState<any[]>([]);
+  const { showToast } = useToast();
 
   useEffect(() => {
     if (!user) {
@@ -29,10 +31,11 @@ export const FavoritesProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setFavorites(favs);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, `users/${user.uid}/favorites`);
+      showToast("Lỗi khi tải danh sách phim yêu thích", "error");
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, showToast]);
 
   const addFavorite = useCallback(async (movie: any) => {
     if (!user || !movie) return;
@@ -45,10 +48,11 @@ export const FavoritesProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         movieId: String(favId),
         name: movie.name || movie.origin_name || '',
         poster_url: movie.poster_url || movie.thumb_url || '',
-        addedAt: Date.now()
+        addedAt: serverTimestamp()
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `users/${user.uid}/favorites/${favId}`);
+      throw error;
     }
   }, [user]);
 
@@ -60,6 +64,7 @@ export const FavoritesProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       await deleteDoc(favRef);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `users/${user.uid}/favorites/${idOrSlug}`);
+      throw error;
     }
   }, [user]);
 
@@ -73,16 +78,34 @@ export const FavoritesProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const favId = movie._id || movie.slug;
     if (!favId) return false;
 
-    // Chưa đăng nhập → trả về false để component hiển thị toast
-    if (!user) return false;
-
-    if (isFavorite(favId)) {
-      removeFavorite(favId);
-    } else {
-      addFavorite(movie);
+    if (!user) {
+      showToast("Vui lòng đăng nhập để yêu thích phim", "error");
+      return false;
     }
-    return true;
-  }, [isFavorite, addFavorite, removeFavorite, user]);
+
+    const currentlyFavorite = !!favorites.find(m => String(m.movieId) === String(favId) || String(m.slug) === String(favId) || String(m._id) === String(favId));
+
+    (async () => {
+      try {
+        const favRef = doc(db, 'users', user.uid, 'favorites', String(favId));
+        if (currentlyFavorite) {
+          await deleteDoc(favRef);
+        } else {
+          await setDoc(favRef, {
+            movieId: String(favId),
+            name: movie.name || movie.origin_name || '',
+            poster_url: movie.poster_url || movie.thumb_url || '',
+            addedAt: serverTimestamp()
+          });
+        }
+      } catch (error) {
+        handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}/favorites/${favId}`);
+        showToast("Có lỗi xảy ra khi cập nhật phim yêu thích", "error");
+      }
+    })();
+
+    return true; // Success toggling
+  }, [user, favorites, showToast]);
 
   return (
     <FavoritesContext.Provider value={{ favorites, addFavorite, removeFavorite, isFavorite, toggleFavorite }}>
