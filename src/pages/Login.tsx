@@ -6,7 +6,6 @@ import { motion } from "motion/react";
 import { useToast } from "@/contexts/ToastContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 
 export default function Login() {
@@ -31,7 +30,7 @@ export default function Login() {
 
   const navigate = useNavigate();
   const { showToast } = useToast();
-  const { signInWithGoogle } = useAuth();
+  const { signInWithGoogle, signInWithEmailAndPassword, createUserWithEmailAndPassword } = useAuth();
 
   // 1. Tạo CAPTCHA ngẫu nhiên
   const generateCaptcha = useCallback(() => {
@@ -115,53 +114,42 @@ export default function Login() {
 
     if (isLogin) {
       // LOGIC ĐĂNG NHẬP
-      try {
-        await signInWithEmailAndPassword(auth, email, password);
-        
+      const success = await signInWithEmailAndPassword(email, password);
+      if (success) {
         if (rememberMe) {
           localStorage.setItem("remembered_user", JSON.stringify({ email, pass: password }));
         } else {
           localStorage.removeItem("remembered_user");
         }
-
         showToast("Đăng nhập thành công!", "success");
         navigate('/');
-      } catch (error: any) {
-          const newAttempts = loginAttempts + 1;
-          setLoginAttempts(newAttempts);
-          triggerShake();
-          showToast(`Sai email hoặc mật khẩu! (${newAttempts}/5)`, "error");
-          
-          if (newAttempts >= 5) {
-            setIsLocked(true);
-            showToast("Bạn đã nhập sai quá 5 lần. Vui lòng thử lại sau 30 giây.", "error");
-            setTimeout(() => {
-              setIsLocked(false);
-              setLoginAttempts(0);
-            }, 30000);
-          }
-          generateCaptcha();
-      } finally {
-          setIsSubmitting(false);
+      } else {
+        const newAttempts = loginAttempts + 1;
+        setLoginAttempts(newAttempts);
+        triggerShake();
+        showToast(`Sai email hoặc mật khẩu! (${newAttempts}/5)`, "error");
+        
+        if (newAttempts >= 5) {
+          setIsLocked(true);
+          showToast("Bạn đã nhập sai quá 5 lần. Vui lòng thử lại sau 30 giây.", "error");
+          setTimeout(() => {
+            setIsLocked(false);
+            setLoginAttempts(0);
+          }, 30000);
+        }
+        generateCaptcha();
       }
+      setIsSubmitting(false);
     } else {
       // LOGIC ĐĂNG KÝ
-      try {
-        await createUserWithEmailAndPassword(auth, email, password);
-        // Note: you can also update profile name here if needed using updateProfile.
-        
+      const success = await createUserWithEmailAndPassword(email, password);
+      if (success) {
         showToast("Đăng ký tài khoản thành công!", "success");
         navigate('/');
-      } catch (error: any) {
-        if (error.code === 'auth/email-already-in-use') {
-             showToast("Email này đã được đăng ký!", "error");
-        } else {
-             showToast("Lỗi đăng ký: " + error.message, "error");
-        }
+      } else {
         triggerShake();
-      } finally {
-        setIsSubmitting(false);
       }
+      setIsSubmitting(false);
     }
   };
 

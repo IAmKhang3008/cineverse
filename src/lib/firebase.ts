@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
-import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 import firebaseConfigJson from "../../firebase-applet-config.json";
 
 const firebaseConfig = {
@@ -21,16 +21,9 @@ export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
 // Initialize Firestore
-export const db = getFirestore(app, firebaseConfigJson.firestoreDatabaseId);
-
-// Enable offline persistence
-enableIndexedDbPersistence(db).catch((err) => {
-  if (err.code === "failed-precondition") {
-    console.warn("Multiple tabs open, persistence can only be enabled in one tab at a a time.");
-  } else if (err.code === "unimplemented") {
-    console.warn("The current browser does not support all of the features required to enable persistence");
-  }
-});
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+}, firebaseConfigJson.firestoreDatabaseId);
 
 // Common error handler helper
 export enum OperationType {

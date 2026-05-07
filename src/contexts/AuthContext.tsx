@@ -18,8 +18,8 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
-  signInWithEmailAndPassword: (email: string, pass: string) => Promise<void>;
-  createUserWithEmailAndPassword: (email: string, pass: string) => Promise<void>;
+  signInWithEmailAndPassword: (email: string, pass: string) => Promise<boolean>;
+  createUserWithEmailAndPassword: (email: string, pass: string) => Promise<boolean>;
   logout: () => Promise<void>;
 }
 
@@ -77,12 +77,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await signInWithRedirect(auth, googleProvider);
   };
 
-  const loginWithEmail = async (email: string, pass: string) => {
-    await signInWithEmailAndPassword(auth, email, pass);
+  const loginWithEmail = async (email: string, pass: string): Promise<boolean> => {
+    if (!email || !pass) {
+      showToast("Vui lòng nhập đầy đủ thông tin.", "error");
+      return false;
+    }
+    try {
+      await signInWithEmailAndPassword(auth, email, pass);
+      return true;
+    } catch (error: any) {
+      console.error('Login error:', error);
+      showToast("Đăng nhập thất bại.", "error");
+      return false;
+    }
   };
 
-  const registerWithEmail = async (email: string, pass: string) => {
-    await createUserWithEmailAndPassword(auth, email, pass);
+  const registerWithEmail = async (email: string, pass: string): Promise<boolean> => {
+    if (!email || !pass) {
+      showToast("Vui lòng nhập đầy đủ thông tin.", "error");
+      return false;
+    }
+    try {
+      await createUserWithEmailAndPassword(auth, email, pass);
+      return true;
+    } catch (error: any) {
+      if (error.code === 'auth/email-already-in-use') {
+        showToast("Email đã tồn tại.", "error");
+      } else {
+        showToast("Đăng ký thất bại.", "error");
+        console.error('Register error:', error);
+      }
+      return false;
+    }
   };
 
   const logout = async () => {
