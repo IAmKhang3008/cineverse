@@ -16,9 +16,9 @@ const TMDB_KEY     = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1
 // Bao nhiêu lần retry trước khi bỏ cuộc với primary
 const MAX_RETRIES   = 1;
 // Thời gian chờ tối đa cho mỗi request primary (ms)
-const PRIMARY_TIMEOUT = 10000;
+const PRIMARY_TIMEOUT = 12000;
 // Nếu primary không trả lời sau bao nhiêu ms thì dùng fallback song song
-const PARALLEL_THRESHOLD = 3000;
+const PARALLEL_THRESHOLD = 6000;
 // Health check mỗi 30 giây khi đang ở chế độ fallback
 const HEALTH_CHECK_INTERVAL = 30_000;
 
@@ -130,7 +130,12 @@ async function parallelFetch(endpoint: string): Promise<{ res: Response; source:
 
     // --- Nhánh PRIMARY ---
     const primaryPromise = retryWithJitter(() =>
-      fetchWithTimeout(`${PRIMARY_URL}${endpoint}`, PRIMARY_TIMEOUT).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r; })
+      fetchWithTimeout(`${PRIMARY_URL}${endpoint}`, PRIMARY_TIMEOUT).then(r => { 
+        // Lỗi 5xx nghĩa là server chết/lỗi → throw error để tính là fail.
+        // Lỗi 4xx (như 404 phim không tồn tại) vẫn là response hợp lệ từ server, không throw.
+        if (!r.ok && r.status >= 500) throw new Error(`HTTP ${r.status}`); 
+        return r; 
+      })
     );
 
     // Sau PARALLEL_THRESHOLD ms, nếu primary chưa xong → dùng fallback
@@ -141,7 +146,10 @@ async function parallelFetch(endpoint: string): Promise<{ res: Response; source:
         fallbackResult = { res: fRes, source: 'fallback' };
         // Chỉ dùng fallback nếu primary vẫn chưa xong
         primaryPromise.catch(() => {}); // tránh unhandled rejection
-        if (!settled) settle(fallbackResult);
+        if (!settled) {
+          console.info(`[API] Dùng fallback tạm thời cho ${endpoint} (Primary chậm hơn ${PARALLEL_THRESHOLD}ms)`);
+          settle(fallbackResult);
+        }
       } catch { /* fallback cũng chết, vẫn chờ primary */ }
     }, PARALLEL_THRESHOLD);
 
