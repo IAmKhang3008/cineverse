@@ -11,12 +11,13 @@ import { motion, AnimatePresence } from "motion/react";
 import CommentsSection from "@/components/CommentsSection";
 import { MovieDetailSkeleton } from "@/components/Skeleton";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { toMovieTitleCase } from "@/lib/utils";
 
 export default function Detail() {
   const { slug } = useParams<{ slug: string }>();
   const [movie, setMovie] = useState<any>(null);
   
-  const pageTitle = movie ? `${movie.name} | Cineverse` : "Đang tải... | Cineverse";
+  const pageTitle = movie ? `${toMovieTitleCase(movie.name)} | Cineverse` : "Đang tải... | Cineverse";
   useDocumentTitle(pageTitle);
 
   const [relatedMovies, setRelatedMovies] = useState<any[]>([]);

@@ -8,6 +8,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { decodeHtml, cn } from "@/lib/utils";
 import { motion } from "motion/react";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { toMovieTitleCase } from "@/lib/utils";
 
 export default function Watch() {
   const { slug } = useParams<{ slug: string }>();
@@ -20,7 +21,7 @@ export default function Watch() {
     : 'Full';
     
   const pageTitle = movie 
-    ? `Xem ${movie.name} - ${epDisplay} | Cineverse` 
+    ? `Xem ${toMovieTitleCase(movie.name)} - ${epDisplay} | Cineverse` 
     : "Đang tải... | Cineverse";
 
   useDocumentTitle(pageTitle);

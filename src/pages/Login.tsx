@@ -30,7 +30,7 @@ export default function Login() {
 
   const navigate = useNavigate();
   const { showToast } = useToast();
-  const { signInWithGoogle, signInWithEmailAndPassword, createUserWithEmailAndPassword } = useAuth();
+  const { signInWithGoogle, loginWithEmail, registerWithEmail } = useAuth();
 
   // 1. Tạo CAPTCHA ngẫu nhiên
   const generateCaptcha = useCallback(() => {
@@ -114,7 +114,7 @@ export default function Login() {
 
     if (isLogin) {
       // LOGIC ĐĂNG NHẬP
-      const success = await signInWithEmailAndPassword(email, password);
+      const success = await loginWithEmail(email, password);
       if (success) {
         if (rememberMe) {
           localStorage.setItem("remembered_user", JSON.stringify({ email, pass: password }));
@@ -142,7 +142,7 @@ export default function Login() {
       setIsSubmitting(false);
     } else {
       // LOGIC ĐĂNG KÝ
-      const success = await createUserWithEmailAndPassword(email, password);
+      const success = await registerWithEmail(email, password);
       if (success) {
         showToast("Đăng ký tài khoản thành công!", "success");
         navigate('/');
