@@ -7,7 +7,7 @@ import MovieCard from "@/components/MovieCard";
 import { DEFAULT_USER_AVATAR } from "@/lib/utils";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useAuth } from "@/contexts/AuthContext";
-import { doc, getDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, orderBy } from 'firebase/firestore';
 import { db } from "@/lib/firebase";
 
 export default function Profile() {
@@ -22,6 +22,8 @@ export default function Profile() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user, logout } = useAuth();
   const isLoggedIn = !!user;
+  
+  const [firestoreHistory, setFirestoreHistory] = useState<any[]>([]);
 
   // 1. Đồng bộ State từ LocalStorage
   const [userData, setUserData] = useState({
@@ -56,6 +58,13 @@ export default function Profile() {
                     joinDate: "Tháng 1, 2026", 
                 });
             }
+            
+            try {
+              const histRef = collection(db, 'users', user.uid, 'history');
+              const histSnap = await getDocs(query(histRef, orderBy('timestamp', 'desc')));
+              const histData = histSnap.docs.map(d => d.data());
+              setFirestoreHistory(histData);
+            } catch { /* fallback to context history */ }
         }
     };
     loadUserData();
@@ -72,9 +81,11 @@ export default function Profile() {
     navigate("/");
   };
 
+  const combinedHistory = firestoreHistory.length > 0 ? firestoreHistory : history;
+
   const stats = {
-    watched: history.length,
-    hours: Math.floor(history.length * 1.5),
+    watched: combinedHistory.length,
+    hours: Math.floor(combinedHistory.length * 1.5),
     favorites: favorites.length
   };
 

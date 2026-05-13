@@ -118,7 +118,7 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating }: M
           ${mobileActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}
         `}>
           <Star className="w-3.5 h-3.5 text-[#F5C518]" fill="currentColor" />
-          <span className="text-[#F5C518] font-bold text-xs">{rating || movie?.tmdb?.vote_average?.toFixed?.(1) || 'Đang cập nhật'}</span>
+          <span className="text-[#F5C518] font-bold text-xs">{rating || (movie?.tmdb?.vote_average && movie.tmdb.vote_average > 0 ? movie.tmdb.vote_average.toFixed(1) : null) || 'Đang cập nhật'}</span>
         </div>
 
         {/* Favorite button (top-right) */}

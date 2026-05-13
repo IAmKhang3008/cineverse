@@ -31,11 +31,11 @@ export default function Header() {
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const { user, logout } = useAuth();
-  const [userData, setUserData] = useState({
-    name: "Khách",
-    email: "guest@cineverse.com",
-    avatar: DEFAULT_USER_AVATAR,
-  });
+  const userData = {
+    name:   user?.displayName || 'Khách',
+    email:  user?.email       || (user ? '' : 'guest@cineverse.com'),
+    avatar: user?.photoURL    || DEFAULT_USER_AVATAR,
+  };
 
   const navLinks = [
     { name: "Trang chủ",  path: "/",          icon: Home    },
@@ -109,28 +109,6 @@ export default function Header() {
     setSearchHistory(newHistory);
     localStorage.setItem("search_history", JSON.stringify(newHistory));
   };
-
-  useEffect(() => {
-    const loadUserData = async () => {
-        if (user) {
-            try {
-                const docRef = doc(db, 'users', user.uid);
-                const docSnap = await getDoc(docRef);
-                const data = docSnap.exists() ? docSnap.data() : null;
-                setUserData({ 
-                    name: data?.displayName || user.displayName || "Người dùng", 
-                    email: user.email || data?.email || "", 
-                    avatar: user.photoURL || DEFAULT_USER_AVATAR 
-                });
-            } catch (error) {
-                setUserData({ name: user.displayName || "Người dùng", email: user.email || "", avatar: user.photoURL || DEFAULT_USER_AVATAR });
-            }
-        } else {
-            setUserData({ name: "Khách", email: "guest@cineverse.com", avatar: DEFAULT_USER_AVATAR });
-        }
-    };
-    loadUserData();
-  }, [user]);
 
   const handleLogout = async () => {
     setIsAvatarOpen(false);
@@ -305,7 +283,7 @@ export default function Header() {
                               </div>
                               <button
                                 onMouseDown={(e) => removeHistoryItem(e, item)}
-                                className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-foreground/10 rounded flex-shrink-0 ml-2"
+                                className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 p-1.5 hover:bg-foreground/10 active:bg-foreground/20 rounded flex-shrink-0 ml-2"
                               >
                                 <X className="w-3 h-3 text-secondary-text" />
                               </button>
