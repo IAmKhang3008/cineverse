@@ -537,166 +537,181 @@ export default function Detail() {
                 </AnimatePresence>
               </div>
             </div>
-            
-              {/* Detailed Info Tabs */}
-              <div className="mt-8 md:mt-12 bg-[#121212] rounded-2xl p-4 md:p-6 border border-white/5">
-                <div className="flex items-center gap-4 md:gap-6 border-b border-white/10 pb-4 mb-6 relative overflow-x-auto no-scrollbar whitespace-nowrap">
-                  <button 
-                    onClick={() => setActiveTab('details')}
-                    className={`font-heading font-bold text-sm md:text-lg pb-4 -mb-[17px] transition-colors relative flex-shrink-0 ${activeTab === 'details' ? 'text-white' : 'text-gray-400 hover:text-white'}`}
-                  >
-                    Chi tiết
-                    {activeTab === 'details' && (
-                      <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#E50914]" />
-                    )}
-                  </button>
-                  <button 
-                    onClick={() => setActiveTab('cast')}
-                    className={`font-heading font-bold text-sm md:text-lg pb-4 -mb-[17px] transition-colors relative flex-shrink-0 ${activeTab === 'cast' ? 'text-white' : 'text-gray-400 hover:text-white'}`}
-                  >
-                    Diễn viên
-                    {activeTab === 'cast' && (
-                      <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#E50914]" />
-                    )}
-                  </button>
-                  <button 
-                    onClick={() => setActiveTab('images')}
-                    className={`font-heading font-bold text-sm md:text-lg pb-4 -mb-[17px] transition-colors relative flex-shrink-0 ${activeTab === 'images' ? 'text-white' : 'text-gray-400 hover:text-white'}`}
-                  >
-                    Hình ảnh
-                    {activeTab === 'images' && (
-                      <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#E50914]" />
-                    )}
-                  </button>
-                </div>
-                
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={activeTab}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    {activeTab === 'details' && (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 md:gap-4 text-sm md:text-base">
-                        <div className="bg-[#1A1A1A] p-3 md:p-4 rounded-xl border border-white/5 flex flex-col justify-center">
-                          <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Tình trạng</span>
-                          <span className="text-white font-medium">{movie.episode_current || 'N/A'}</span>
-                        </div>
-                        <div className="bg-[#1A1A1A] p-3 md:p-4 rounded-xl border border-white/5 flex flex-col justify-center">
-                          <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Số tập</span>
-                          <span className="text-white font-medium">{movie.episode_total || 'N/A'}</span>
-                        </div>
-                        <div className="bg-[#1A1A1A] p-3 md:p-4 rounded-xl border border-white/5 flex flex-col justify-center">
-                          <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Thời lượng</span>
-                          <span className="text-white font-medium">{movie.time || 'N/A'}</span>
-                        </div>
-                        <div className="bg-[#1A1A1A] p-3 md:p-4 rounded-xl border border-white/5 flex flex-col justify-center">
-                          <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Năm</span>
-                          <span className="text-white font-medium">{movie.year || 'N/A'}</span>
-                        </div>
-                        <div className="bg-[#1A1A1A] p-3 md:p-4 rounded-xl border border-white/5 flex flex-col justify-center">
-                          <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Chất lượng</span>
-                          <span className="text-white font-medium">{movie.quality || 'N/A'}</span>
-                        </div>
-                        <div className="bg-[#1A1A1A] p-3 md:p-4 rounded-xl border border-white/5 flex flex-col justify-center">
-                          <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Ngôn ngữ</span>
-                          <span className="text-white font-medium">{movie.lang || 'N/A'}</span>
-                        </div>
-                        <div className="bg-[#1A1A1A] p-3 md:p-4 rounded-xl border border-white/5 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-2">
-                          <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Đạo diễn</span>
-                          <span className="text-white font-medium">{movie.director?.join(', ') || 'Đang cập nhật'}</span>
-                        </div>
-                        <div className="bg-[#1A1A1A] p-3 md:p-4 rounded-xl border border-white/5 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-2">
-                          <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Quốc gia</span>
-                          <span className="text-white font-medium">
-                            {movie.country && (Array.isArray(movie.country) ? movie.country : Object.values(movie.country)).map((c: any) => c.name).join(', ')}
-                          </span>
-                        </div>
-                        <div className="bg-[#1A1A1A] p-3 md:p-4 rounded-xl border border-white/5 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-4">
-                          <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Thể loại</span>
-                          <div className="flex flex-wrap gap-2 mt-1.5">
-                            {movie.category && (Array.isArray(movie.category) ? movie.category : Object.values(movie.category)).map((c: any, idx: number) => (
-                              <span key={idx} className="bg-[#2A2A2A] text-gray-300 text-xs px-2.5 py-1.5 rounded-md border border-white/5">
-                                {c.name}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {activeTab === 'cast' && (
-                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3 md:gap-5 py-5">
-                        {loadingCast ? (
-                          <div className="col-span-full flex justify-center py-10">
-                            <div className="w-8 h-8 border-4 border-[#E50914] border-t-transparent rounded-full animate-spin"></div>
-                          </div>
-                        ) : cast.length > 0 ? (
-                          cast.map((actor: any, idx: number) => (
-                            <div key={idx} className="text-center transition-transform duration-300 hover:-translate-y-1.5 flex flex-col items-center">
-                              <img 
-                                src={actor.profile_path ? `https://image.tmdb.org/t/p/w185${actor.profile_path}` : DEFAULT_AVATAR} 
-                                alt={actor.name}
-                                className="w-20 h-20 md:w-full md:h-auto md:aspect-[2/3] object-cover rounded-full md:rounded-xl mb-2.5 shadow-[0_5px_15px_rgba(0,0,0,0.5)] bg-[#2A2A2A]"
-                              />
-                              <div className="font-semibold text-white mb-1 text-xs md:text-sm line-clamp-1 w-full" title={decodeHtml(actor.name)}>{decodeHtml(actor.name)}</div>
-                              <div className="text-[10px] md:text-sm text-[#AAAAAA] line-clamp-1 w-full" title={decodeHtml(actor.character)}>{actor.character ? `Vai: ${decodeHtml(actor.character)}` : ''}</div>
-                            </div>
-                          ))
-                        ) : movie.actor && movie.actor.length > 0 && movie.actor[0] !== "Đang cập nhật" ? (
-                          // Fallback to PhimAPI actors if TMDB fails
-                          movie.actor.map((actorName: string, idx: number) => (
-                            <div key={idx} className="text-center transition-transform duration-300 hover:-translate-y-1.5 flex flex-col items-center">
-                              <img 
-                                src={DEFAULT_AVATAR} 
-                                alt={actorName}
-                                className="w-20 h-20 md:w-full md:h-auto md:aspect-[2/3] object-cover rounded-full md:rounded-xl mb-2.5 shadow-[0_5px_15px_rgba(0,0,0,0.5)] bg-[#2A2A2A]"
-                              />
-                              <div className="font-semibold text-white mb-1 text-xs md:text-sm line-clamp-1 w-full" title={decodeHtml(actorName)}>{decodeHtml(actorName)}</div>
-                            </div>
-                          ))
-                        ) : (
-                          <p className="col-span-full text-gray-400 text-sm">Đang cập nhật thông tin diễn viên.</p>
-                        )}
-                      </div>
-                    )}
-
-                    {activeTab === 'images' && (
-                      <div className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-4 py-5">
-                        {loadingImages ? (
-                          <div className="col-span-full flex justify-center py-10">
-                            <div className="w-8 h-8 border-4 border-[#E50914] border-t-transparent rounded-full animate-spin"></div>
-                          </div>
-                        ) : images.length > 0 ? (
-                          images.map((img: any, idx: number) => (
-                            <div key={idx} className="rounded-xl overflow-hidden aspect-video cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-[0_10px_25px_rgba(229,9,20,0.3)] bg-[#2A2A2A]">
-                              <img 
-                                src={`https://image.tmdb.org/t/p/w500${img.file_path}`} 
-                                alt={`Hình ảnh ${idx + 1}`}
-                                className="w-full h-full object-cover"
-                              />
-                            </div>
-                          ))
-                        ) : (
-                          <div className="col-span-full grid grid-cols-2 sm:grid-cols-3 gap-4">
-                            <div className="aspect-video rounded-xl overflow-hidden bg-[#2A2A2A]">
-                              <img src={getImageUrl(movie.thumb_url || movie.poster_url, 'banner')} className="w-full h-full object-cover" alt="Gallery 1" />
-                            </div>
-                            <div className="aspect-video rounded-xl overflow-hidden bg-[#2A2A2A]">
-                              <img src={getImageUrl(movie.poster_url || movie.thumb_url, 'banner')} className="w-full h-full object-cover" alt="Gallery 2" />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </motion.div>
-                </AnimatePresence>
-              </div>
-              
-            </div>
           </div>
+        </div> {/* Đóng flex container */}
+
+        {/* Detailed Info Tabs – GLASSMORPHISM PANEL */}
+        <div className="relative mt-8 md:mt-12 bg-white/5 backdrop-blur-2xl border border-white/20 rounded-3xl shadow-[0_8px_40px_rgba(0,0,0,0.4)] overflow-hidden">
+          {/* Subtle glow inside */}
+          <div className="absolute inset-0 bg-gradient-to-br from-red-500/5 to-transparent pointer-events-none rounded-3xl" />
+
+          {/* Tab header */}
+          <div className="relative flex items-center gap-4 md:gap-6 border-b border-white/10 pb-4 mb-6 overflow-x-auto no-scrollbar whitespace-nowrap p-6 md:p-8 pb-0">
+            <button 
+              onClick={() => setActiveTab('details')}
+              className={`font-heading font-bold text-sm md:text-lg pb-4 -mb-[17px] transition-colors relative flex-shrink-0 ${activeTab === 'details' ? 'text-white' : 'text-gray-400 hover:text-white'}`}
+            >
+              Chi tiết
+              {activeTab === 'details' && (
+                <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#E50914]" />
+              )}
+            </button>
+            <button 
+              onClick={() => setActiveTab('cast')}
+              className={`font-heading font-bold text-sm md:text-lg pb-4 -mb-[17px] transition-colors relative flex-shrink-0 ${activeTab === 'cast' ? 'text-white' : 'text-gray-400 hover:text-white'}`}
+            >
+              Diễn viên
+              {activeTab === 'cast' && (
+                <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#E50914]" />
+              )}
+            </button>
+            <button 
+              onClick={() => setActiveTab('images')}
+              className={`font-heading font-bold text-sm md:text-lg pb-4 -mb-[17px] transition-colors relative flex-shrink-0 ${activeTab === 'images' ? 'text-white' : 'text-gray-400 hover:text-white'}`}
+            >
+              Hình ảnh
+              {activeTab === 'images' && (
+                <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#E50914]" />
+              )}
+            </button>
+          </div>
+          
+          {/* Tab content – thêm padding tương ứng */}
+          <div className="relative px-6 md:px-8 pb-6 md:pb-8">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+              >
+                {activeTab === 'details' && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 md:gap-4 text-sm md:text-base">
+                    {/* Tình trạng */}
+                    <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg">
+                      <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Tình trạng</span>
+                      <span className="text-white font-medium">{movie.episode_current || 'N/A'}</span>
+                    </div>
+                    {/* Số tập */}
+                    <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg">
+                      <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Số tập</span>
+                      <span className="text-white font-medium">{movie.episode_total || 'N/A'}</span>
+                    </div>
+                    {/* Thời lượng */}
+                    <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg">
+                      <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Thời lượng</span>
+                      <span className="text-white font-medium">{movie.time || 'N/A'}</span>
+                    </div>
+                    {/* Năm */}
+                    <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg">
+                      <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Năm</span>
+                      <span className="text-white font-medium">{movie.year || 'N/A'}</span>
+                    </div>
+                    {/* Chất lượng */}
+                    <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg">
+                      <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Chất lượng</span>
+                      <span className="text-white font-medium">{movie.quality || 'N/A'}</span>
+                    </div>
+                    {/* Ngôn ngữ */}
+                    <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg">
+                      <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Ngôn ngữ</span>
+                      <span className="text-white font-medium">{movie.lang || 'N/A'}</span>
+                    </div>
+                    {/* Đạo diễn */}
+                    <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-2 shadow-lg">
+                      <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Đạo diễn</span>
+                      <span className="text-white font-medium">{movie.director?.join(', ') || 'Đang cập nhật'}</span>
+                    </div>
+                    {/* Quốc gia */}
+                    <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-2 shadow-lg">
+                      <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Quốc gia</span>
+                      <span className="text-white font-medium">
+                        {movie.country && (Array.isArray(movie.country) ? movie.country : Object.values(movie.country)).map((c: any) => c.name).join(', ')}
+                      </span>
+                    </div>
+                    {/* Thể loại */}
+                    <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-4 shadow-lg">
+                      <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Thể loại</span>
+                      <div className="flex flex-wrap gap-2 mt-1.5">
+                        {movie.category && (Array.isArray(movie.category) ? movie.category : Object.values(movie.category)).map((c: any, idx: number) => (
+                          <span key={idx} className="bg-white/10 backdrop-blur-sm text-gray-200 text-xs px-2.5 py-1.5 rounded-md border border-white/10">
+                            {c.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'cast' && (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3 md:gap-5 py-5">
+                    {loadingCast ? (
+                      <div className="col-span-full flex justify-center py-10">
+                        <div className="w-8 h-8 border-4 border-[#E50914] border-t-transparent rounded-full animate-spin"></div>
+                      </div>
+                    ) : cast.length > 0 ? (
+                      cast.map((actor: any, idx: number) => (
+                        <div key={idx} className="text-center transition-transform duration-300 hover:-translate-y-1.5 flex flex-col items-center">
+                          <img 
+                            src={actor.profile_path ? `https://image.tmdb.org/t/p/w185${actor.profile_path}` : DEFAULT_AVATAR} 
+                            alt={actor.name}
+                            className="w-20 h-20 md:w-full md:h-auto md:aspect-[2/3] object-cover rounded-full md:rounded-xl mb-2.5 shadow-[0_5px_15px_rgba(0,0,0,0.5)] bg-[#2A2A2A]"
+                          />
+                          <div className="font-semibold text-white mb-1 text-xs md:text-sm line-clamp-1 w-full" title={decodeHtml(actor.name)}>{decodeHtml(actor.name)}</div>
+                          <div className="text-[10px] md:text-sm text-[#AAAAAA] line-clamp-1 w-full" title={decodeHtml(actor.character)}>{actor.character ? `Vai: ${decodeHtml(actor.character)}` : ''}</div>
+                        </div>
+                      ))
+                    ) : movie.actor && movie.actor.length > 0 && movie.actor[0] !== "Đang cập nhật" ? (
+                      // Fallback to PhimAPI actors if TMDB fails
+                      movie.actor.map((actorName: string, idx: number) => (
+                        <div key={idx} className="text-center transition-transform duration-300 hover:-translate-y-1.5 flex flex-col items-center">
+                          <img 
+                            src={DEFAULT_AVATAR} 
+                            alt={actorName}
+                            className="w-20 h-20 md:w-full md:h-auto md:aspect-[2/3] object-cover rounded-full md:rounded-xl mb-2.5 shadow-[0_5px_15px_rgba(0,0,0,0.5)] bg-[#2A2A2A]"
+                          />
+                          <div className="font-semibold text-white mb-1 text-xs md:text-sm line-clamp-1 w-full" title={decodeHtml(actorName)}>{decodeHtml(actorName)}</div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="col-span-full text-gray-400 text-sm">Đang cập nhật thông tin diễn viên.</p>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'images' && (
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-4 py-5">
+                    {loadingImages ? (
+                      <div className="col-span-full flex justify-center py-10">
+                        <div className="w-8 h-8 border-4 border-[#E50914] border-t-transparent rounded-full animate-spin"></div>
+                      </div>
+                    ) : images.length > 0 ? (
+                      images.map((img: any, idx: number) => (
+                        <div key={idx} className="rounded-xl overflow-hidden aspect-video cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-[0_10px_25px_rgba(229,9,20,0.3)] bg-[#2A2A2A]">
+                          <img 
+                            src={`https://image.tmdb.org/t/p/w500${img.file_path}`} 
+                            alt={`Hình ảnh ${idx + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      ))
+                    ) : (
+                      <div className="col-span-full grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        <div className="aspect-video rounded-xl overflow-hidden bg-[#2A2A2A]">
+                          <img src={getImageUrl(movie.thumb_url || movie.poster_url, 'banner')} className="w-full h-full object-cover" alt="Gallery 1" />
+                        </div>
+                        <div className="aspect-video rounded-xl overflow-hidden bg-[#2A2A2A]">
+                          <img src={getImageUrl(movie.poster_url || movie.thumb_url, 'banner')} className="w-full h-full object-cover" alt="Gallery 2" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </div>
 
           {/* Comments Section */}
           <CommentsSection movieId={movie._id || movie.slug} />
