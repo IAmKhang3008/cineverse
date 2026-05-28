@@ -1,11 +1,11 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useLayoutEffect } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { api, getImageUrl } from "@/lib/api";
 import { Play, Plus, Star, Clock, Calendar, Globe, Heart, X, ArrowLeft, Share2, Copy, Facebook, Twitter, Link as LinkIcon } from "lucide-react";
 import MovieCard from "@/components/MovieCard";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
-import { decodeHtml, DEFAULT_AVATAR } from "@/lib/utils";
+import { decodeHtml, DEFAULT_AVATAR, CAST_PLACEHOLDER } from "@/lib/utils";
 import { fetchWithCache, TTL } from "@/lib/cache";
 import { motion, AnimatePresence } from "motion/react";
 import CommentsSection from "@/components/CommentsSection";
@@ -66,10 +66,54 @@ const extractSeriesName = (originName: string): string => {
     .trim();
 };
 
+// Component LazyImage dùng cho ảnh diễn viên
+const LazyImage = ({ src, alt, className }: { src: string; alt: string; className: string }) => {
+  const [loaded, setLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setLoaded(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "200px" }
+    );
+    if (imgRef.current) observer.observe(imgRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <img
+      ref={imgRef}
+      src={(loaded && src) ? src : CAST_PLACEHOLDER}
+      alt={alt}
+      className={className}
+    />
+  );
+};
+
 export default function Detail() {
   const { slug } = useParams<{ slug: string }>();
   const [movie, setMovie] = useState<any>(null);
   const [accentColor, setAccentColor] = useState('#E50914');
+  
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+  const [isDescriptionTruncated, setIsDescriptionTruncated] = useState(false);
+  const descriptionRef = useRef<HTMLParagraphElement>(null);
+
+  useLayoutEffect(() => {
+    const el = descriptionRef.current;
+    if (el) {
+      setIsDescriptionTruncated(el.scrollHeight > el.offsetHeight);
+    }
+  }, [movie]);
+
+  const toggleDescription = () => {
+    setIsDescriptionExpanded(!isDescriptionExpanded);
+  };
   
   const pageTitle = movie ? `${toMovieTitleCase(movie.name)} | Cineverse` : "Đang tải... | Cineverse";
   useDocumentTitle(pageTitle);
@@ -333,61 +377,17 @@ export default function Detail() {
     };
   }, [movie, hasFetchedRelated, slug]);
 
+  // 🚀 TỐI ƯU: Gộp 3 request TMDb thành 1 request duy nhất
   useEffect(() => {
-    const fetchRating = async () => {
-      if (!movie) return;
-      if (rating) return;
-      
-      try {
-        const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
-        let tmdbId = movie.tmdb?.id;
-        let tmdbType = movie.tmdb?.type || 'movie';
-        
-        if (!tmdbId) {
-          const yearQuery = movie.year ? `&year=${movie.year}` : '';
-          const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.origin_name || movie.name)}${yearQuery}&language=vi-VN`;
-          const searchData = await fetchWithCache(`tmdb_search_${movie.slug}`, () => fetch(searchUrl).then(r => r.json()), TTL.TMDB_STATIC);
-          if (searchData.results && searchData.results.length > 0) {
-            tmdbId = searchData.results[0].id;
-            tmdbType = searchData.results[0].media_type || (searchData.results[0].first_air_date ? 'tv' : 'movie');
-          }
-        }
-
-        if (tmdbId) {
-          const detailsUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=vi-VN`;
-          const detailsData = await fetchWithCache(`tmdb_details_${tmdbType}_${tmdbId}`, () => fetch(detailsUrl).then(r => r.json()), TTL.TMDB_STATIC);
-          if (detailsData.vote_average) {
-            let formattedVotes = '';
-            if (detailsData.vote_count) {
-              if (detailsData.vote_count >= 1000) {
-                formattedVotes = `${(detailsData.vote_count / 1000).toFixed(1)}K`;
-              } else {
-                formattedVotes = `${detailsData.vote_count}`;
-              }
-            }
-            
-            setRating({
-              source: 'TMDb',
-              score: detailsData.vote_average.toFixed(1),
-              votes: formattedVotes
-            });
-          }
-        }
-      } catch (error) {
-        // Silently fail to avoid console spam
-      }
-    };
-    fetchRating();
-  }, [movie]);
-
-  useEffect(() => {
-    const fetchCast = async () => {
-      if (!movie || activeTab !== 'cast') return;
-      if (cast.length > 0) return;
-      
+    if (!movie) return;
+    
+    const fetchTMDBData = async () => {
       setLoadingCast(true);
+      setLoadingImages(true);
+      const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
+      
       try {
-        const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
+        // Bước 1: Tìm tmdbId (chỉ 1 lần)
         let tmdbId = movie.tmdb?.id;
         let tmdbType = movie.tmdb?.type || 'movie';
         
@@ -395,64 +395,60 @@ export default function Detail() {
           const yearQuery = movie.year ? `&year=${movie.year}` : '';
           const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.origin_name || movie.name)}${yearQuery}&language=vi-VN`;
           const searchData = await fetchWithCache(`tmdb_search_${movie.slug}`, () => fetch(searchUrl).then(r => r.json()), TTL.TMDB_STATIC);
-          if (searchData.results && searchData.results.length > 0) {
+          if (searchData.results?.length > 0) {
             tmdbId = searchData.results[0].id;
             tmdbType = searchData.results[0].media_type || (searchData.results[0].first_air_date ? 'tv' : 'movie');
           }
         }
 
-        if (tmdbId) {
-          const creditsUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}/credits?api_key=${apiKey}&language=vi-VN`;
-          const creditsData = await fetchWithCache(`tmdb_credits_${tmdbType}_${tmdbId}`, () => fetch(creditsUrl).then(r => r.json()), TTL.TMDB_STATIC);
-          if (creditsData.cast) {
-            setCast(creditsData.cast.slice(0, 12));
-          }
+        if (!tmdbId) {
+          setLoadingCast(false);
+          setLoadingImages(false);
+          return;
         }
+
+        // Bước 2: GỌI 1 REQUEST DUY NHẤT với append_to_response
+        // Lấy details + credits + images trong cùng 1 lần gọi API
+        const combinedUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=vi-VN&append_to_response=credits,images`;
+        const combinedData = await fetchWithCache(`tmdb_combined_${tmdbType}_${tmdbId}`, () => fetch(combinedUrl).then(r => r.json()), TTL.TMDB_STATIC);
+
+        // Bước 3: Phân phối dữ liệu vào các state
+        
+        // Rating từ vote_average
+        if (combinedData.vote_average) {
+          let formattedVotes = '';
+          if (combinedData.vote_count) {
+            formattedVotes = combinedData.vote_count >= 1000 
+              ? `${(combinedData.vote_count / 1000).toFixed(1)}K` 
+              : `${combinedData.vote_count}`;
+          }
+          setRating({
+            source: 'TMDb',
+            score: combinedData.vote_average.toFixed(1),
+            votes: formattedVotes
+          });
+        }
+
+        // Cast từ credits
+        if (combinedData.credits?.cast) {
+          setCast(combinedData.credits.cast.slice(0, 12));
+        }
+
+        // Images từ backdrops
+        if (combinedData.images?.backdrops) {
+          setImages(combinedData.images.backdrops.slice(0, 12));
+        }
+
       } catch (error) {
-        // Silently fail to avoid console spam
+        // Silent fail — không làm gián đoạn trải nghiệm
       } finally {
         setLoadingCast(false);
-      }
-    };
-    fetchCast();
-  }, [movie, activeTab]);
-
-  useEffect(() => {
-    const fetchImages = async () => {
-      if (!movie || activeTab !== 'images') return;
-      if (images.length > 0) return;
-      
-      setLoadingImages(true);
-      try {
-        const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
-        let tmdbId = movie.tmdb?.id;
-        let tmdbType = movie.tmdb?.type || 'movie';
-        
-        if (!tmdbId) {
-          const yearQuery = movie.year ? `&year=${movie.year}` : '';
-          const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.origin_name || movie.name)}${yearQuery}&language=vi-VN`;
-          const searchData = await fetchWithCache(`tmdb_search_${movie.slug}`, () => fetch(searchUrl).then(r => r.json()), TTL.TMDB_STATIC);
-          if (searchData.results && searchData.results.length > 0) {
-            tmdbId = searchData.results[0].id;
-            tmdbType = searchData.results[0].media_type || (searchData.results[0].first_air_date ? 'tv' : 'movie');
-          }
-        }
-
-        if (tmdbId) {
-          const imagesUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}/images?api_key=${apiKey}`;
-          const imagesData = await fetchWithCache(`tmdb_images_${tmdbType}_${tmdbId}`, () => fetch(imagesUrl).then(r => r.json()), TTL.TMDB_STATIC);
-          if (imagesData.backdrops) {
-            setImages(imagesData.backdrops.slice(0, 12));
-          }
-        }
-      } catch (error) {
-        // Silently fail to avoid console spam
-      } finally {
         setLoadingImages(false);
       }
     };
-    fetchImages();
-  }, [movie, activeTab]);
+
+    fetchTMDBData();
+  }, [movie]);
 
   if (loading) {
     return (
@@ -556,14 +552,25 @@ export default function Detail() {
         </div>
 
         <div className="absolute inset-0 animate-in fade-in duration-700">
-          <motion.img
+          <motion.div
+            className="absolute inset-0 w-full h-full"
             initial={{ scale: 1.05 }}
             animate={{ scale: 1 }}
             transition={{ duration: 1.2, ease: "easeOut" }}
-            src={getImageUrl(movie.thumb_url || movie.poster_url, 'banner')}
-            alt={movie.name}
-            className="w-full h-full object-cover object-top"
-          />
+          >
+            <motion.div
+              className="w-full h-full"
+              animate={{ scale: [1, 1.02, 1] }}
+              transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+              style={{ willChange: "transform" }}
+            >
+              <img
+                src={getImageUrl(movie.thumb_url || movie.poster_url, 'banner')}
+                alt={movie.name}
+                className="w-full h-full object-cover object-top"
+              />
+            </motion.div>
+          </motion.div>
 
           {/* Overlay tối nhẹ */}
           <div className="absolute inset-0 bg-black/40" />
@@ -664,59 +671,119 @@ export default function Detail() {
               )}
             </div>
 
-            <div className="mb-8">
-              <p className="text-[#A0A0A0]  leading-relaxed text-sm md:text-base max-w-3xl" dangerouslySetInnerHTML={{ __html: movie.content }} />
-            </div>
+            {/* --- FLOATING DESCRIPTION CARD CHƯA SẮP ĐẶT ACCENT SHADOW (IDEA 1/3) --- */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.4 }}
+              className="relative max-w-3xl bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-[0_8px_40px_rgba(0,0,0,0.4)] mb-8 overflow-hidden"
+              style={{ boxShadow: `0 8px 40px rgba(0,0,0,0.4), 0 0 20px ${accentColor}11` }}
+            >
+              {/* --- EXPANDABLE DESCRIPTION (IDEA 2) --- */}
+              <div className="relative">
+                <p
+                  ref={descriptionRef}
+                  className={`text-[#A0A0A0] leading-relaxed text-sm md:text-base ${
+                    !isDescriptionExpanded ? 'line-clamp-3 md:line-clamp-4' : ''
+                  }`}
+                  style={{
+                    // --- GRADIENT TEXT FADE (IDEA 3) ---
+                    // Chỉ áp dụng khi văn bản bị truncate và đang ở trạng thái rút gọn
+                    WebkitMaskImage: (!isDescriptionExpanded && isDescriptionTruncated)
+                      ? 'linear-gradient(to bottom, white 70%, transparent 100%)'
+                      : 'none',
+                    maskImage: (!isDescriptionExpanded && isDescriptionTruncated)
+                      ? 'linear-gradient(to bottom, white 70%, transparent 100%)'
+                      : 'none',
+                  }}
+                  dangerouslySetInnerHTML={{ __html: movie.content }}
+                />
+
+                {/* Nút "Xem thêm" chỉ hiển thị khi nội dung bị truncate */}
+                {isDescriptionTruncated && (
+                  <button
+                    onClick={toggleDescription}
+                    className="mt-2 text-[#E50914] hover:text-red-400 text-sm font-semibold transition-colors duration-300 flex items-center gap-1 cursor-pointer"
+                  >
+                    {isDescriptionExpanded ? 'Thu gọn ▲' : 'Xem thêm ▼'}
+                  </button>
+                )}
+              </div>
+            </motion.div>
             
+            {/* --- CỤM NÚT HÀNH ĐỘNG PHÂN CẤP --- */}
             <motion.div 
               variants={buttonContainerVariants}
               initial="hidden"
               animate="show"
-              className="flex items-center md:flex-wrap gap-3 overflow-x-auto no-scrollbar pb-2 md:pb-0 -mx-4 px-4 md:mx-0 md:px-0 snap-x"
+              className="relative z-20 flex items-center md:flex-wrap gap-3 overflow-x-auto md:overflow-visible no-scrollbar pb-2 md:pb-0 -mx-4 px-4 md:mx-0 md:px-0 snap-x mt-6"
             >
-              <motion.div variants={buttonVariants} whileHover={{ y: -2 }} className="flex-shrink-0 snap-start">
+              {/* ========== PRIMARY BUTTON: XEM NGAY ========== */}
+              <motion.div variants={buttonVariants} whileHover={{ y: -2, scale: 1.02 }} className="flex-shrink-0 snap-start">
                 <Link
                   to={`/watch/${movie.slug}`}
                   state={{ fromSearch }}
-                  className="flex items-center justify-center gap-2 bg-[#E50914] hover:bg-[#b80710] text-white px-6 md:px-8 py-3 md:py-4 rounded-xl font-semibold transition-all text-sm md:text-lg shadow-[0_4px_14px_rgba(229,9,20,0.4)] hover:shadow-[0_6px_20px_rgba(229,9,20,0.6)]"
+                  className="relative inline-flex items-center justify-center gap-2 bg-[#E50914] text-white px-8 md:px-10 py-3.5 md:py-4 rounded-xl font-bold transition-all text-sm md:text-lg shadow-[0_4px_20px_rgba(229,9,20,0.5)] overflow-hidden group"
+                  style={{ boxShadow: `0 4px 20px rgba(229,9,20,0.5), 0 0 25px ${accentColor}33` }}
                 >
-                  <Play className="w-4 h-4 md:w-5 md:h-5" fill="currentColor" />
-                  Xem Ngay
+                  {/* Light sweep pseudo-element */}
+                  <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out"></span>
+                  <Play className="w-5 h-5 md:w-6 md:h-6 relative z-10" fill="currentColor" />
+                  <span className="relative z-10">Xem Ngay</span>
                 </Link>
               </motion.div>
               
+              {/* ========== SECONDARY BUTTON: TRAILER ========== */}
               {movie.trailer_url && (
-                <motion.div variants={buttonVariants} whileHover={{ y: -2 }} className="flex-shrink-0 snap-start">
+                <motion.div variants={buttonVariants} whileHover={{ y: -2, scale: 1.02 }} className="flex-shrink-0 snap-start">
                   <button 
                     onClick={() => setShowTrailer(true)}
-                    className="flex items-center justify-center gap-2 bg-white/10 md:bg-transparent border border-transparent md:border-2 md:border-[#666666] text-white hover:bg-white/20 md:hover:bg-black/50 md:hover:border-[#E50914]/50 px-5 md:px-8 py-3 md:py-4 rounded-xl font-semibold transition-all text-sm md:text-lg"
+                    className="relative inline-flex items-center justify-center gap-2 bg-white/5 backdrop-blur-md border border-white/10 text-white px-8 md:px-10 py-3.5 md:py-4 rounded-xl font-bold transition-all text-sm md:text-lg group cursor-pointer"
+                    style={{ boxShadow: `0 0 15px ${accentColor}22` }}
+                    onMouseEnter={e => e.currentTarget.style.boxShadow = `0 0 25px ${accentColor}55`}
+                    onMouseLeave={e => e.currentTarget.style.boxShadow = `0 0 15px ${accentColor}22`}
                   >
-                    <Play className="w-4 h-4 md:w-5 md:h-5 text-[#E50914]" fill="currentColor" />
+                    <motion.div
+                      whileHover={{ rotate: [0, -15, 15, 0], scale: 1.2 }}
+                      transition={{ duration: 0.4 }}
+                    >
+                      <Play className="w-5 h-5 md:w-6 md:h-6 text-[#E50914] group-hover:text-red-400 transition-colors" fill="currentColor" />
+                    </motion.div>
                     Trailer
                   </button>
                 </motion.div>
               )}
 
+              {/* ========== TERTIARY BUTTON: YÊU THÍCH ========== */}
               <motion.div variants={buttonVariants} whileHover={{ y: -2 }} className="flex-shrink-0 snap-start">
                 <button 
                   onClick={handleFavoriteClick}
-                  className={`flex items-center justify-center gap-2 px-5 md:px-8 py-3 md:py-4 rounded-xl font-semibold transition-all text-sm md:text-lg border md:border-2 ${
-                    favorite 
-                    ? 'bg-white/10 md:bg-transparent border-transparent md:border-gray-500 text-white md:text-gray-400 hover:bg-white/20 md:hover:border-white md:hover:text-white' 
-                    : 'bg-white/10 md:bg-transparent border-transparent md:border-gray-500 text-gray-200 md:text-gray-300 hover:bg-white/20 md:hover:border-[#E50914] md:hover:text-[#E50914]'
+                  className={`relative inline-flex items-center justify-center gap-2 bg-white/5 backdrop-blur-md border border-white/10 text-gray-200 px-5 md:px-6 py-3.5 md:py-4 rounded-xl font-semibold transition-all text-sm md:text-base group cursor-pointer ${
+                    favorite ? 'text-[#E50914]' : ''
                   }`}
+                  style={favorite ? { boxShadow: `0 0 20px ${accentColor}44` } : {}}
                 >
-                  <Heart className={`w-4 h-4 md:w-5 md:h-5 ${favorite ? 'fill-current text-[#E50914]' : ''}`} />
+                  <motion.div
+                    key={favorite ? 'active' : 'inactive'}
+                    initial={{ scale: 0.8 }}
+                    animate={{ scale: [0.8, 1.3, 1] }}
+                    transition={{ duration: 0.4 }}
+                  >
+                    <Heart className={`w-4 h-4 md:w-5 md:h-5 ${favorite ? 'fill-current' : ''}`} />
+                  </motion.div>
                   {favorite ? 'Bỏ yêu thích' : 'Yêu thích'}
                 </button>
               </motion.div>
 
+              {/* ========== TERTIARY BUTTON: CHIA SẺ ========== */}
               <motion.div variants={buttonVariants} whileHover={{ y: -2 }} className="relative flex-shrink-0 snap-start" ref={shareMenuRef}>
                 <button 
                   onClick={() => setShowShareMenu(!showShareMenu)}
-                  className="flex items-center justify-center gap-2 bg-white/10 md:bg-transparent border border-transparent md:border-2 md:border-[#666666] text-gray-200 md:text-gray-300 hover:bg-white/20 md:hover:border-white md:hover:text-white px-5 md:px-8 py-3 md:py-4 rounded-xl font-semibold transition-all text-sm md:text-lg"
+                  className="relative inline-flex items-center justify-center gap-2 bg-white/5 backdrop-blur-md border border-white/10 text-gray-200 px-5 md:px-6 py-3.5 md:py-4 rounded-xl font-semibold transition-all text-sm md:text-base group cursor-pointer"
                 >
-                  <Share2 className="w-4 h-4 md:w-5 md:h-5" />
+                  <motion.div whileHover={{ scale: 1.2, rotate: 15 }} transition={{ type: "spring", stiffness: 300 }}>
+                    <Share2 className="w-4 h-4 md:w-5 md:h-5" />
+                  </motion.div>
                   Chia sẻ
                 </button>
 
@@ -727,26 +794,26 @@ export default function Detail() {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 10, scale: 0.95 }}
                       transition={{ duration: 0.15 }}
-                      className="absolute bottom-full left-0 md:left-1/2 md:-translate-x-1/2 mb-3 w-48 bg-[#1A1A1A] border border-[#333333] rounded-xl shadow-xl overflow-hidden z-50"
+                      className="absolute bottom-full left-0 md:left-1/2 md:-translate-x-1/2 mb-3 w-48 bg-[#1A1A1A] backdrop-blur-xl border border-[#333333] rounded-xl shadow-2xl overflow-hidden z-50"
                     >
                       <div className="flex flex-col">
                         <button 
                           onClick={() => handleShare('copy')}
-                          className="flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:text-white hover:bg-white/10 transition-colors text-left"
+                          className="flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:text-white hover:bg-white/10 transition-colors text-left cursor-pointer"
                         >
                           <LinkIcon className="w-4 h-4" />
                           Sao chép liên kết
                         </button>
                         <button 
                           onClick={() => handleShare('facebook')}
-                          className="flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:text-white hover:bg-[#1877F2]/20 transition-colors text-left"
+                          className="flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:text-white hover:bg-[#1877F2]/20 transition-colors text-left cursor-pointer"
                         >
                           <Facebook className="w-4 h-4 text-[#1877F2]" />
                           Chia sẻ Facebook
                         </button>
                         <button 
                           onClick={() => handleShare('twitter')}
-                          className="flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:text-white hover:bg-[#1DA1F2]/20 transition-colors text-left"
+                          className="flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:text-white hover:bg-[#1DA1F2]/20 transition-colors text-left cursor-pointer"
                         >
                           <Twitter className="w-4 h-4 text-[#1DA1F2]" />
                           Chia sẻ Twitter
@@ -896,8 +963,8 @@ export default function Detail() {
                     ) : cast.length > 0 ? (
                       cast.map((actor: any, idx: number) => (
                         <motion.div key={idx} variants={itemVariants} className="text-center transition-transform duration-300 hover:-translate-y-1.5 flex flex-col items-center">
-                          <img 
-                            src={actor.profile_path ? `https://image.tmdb.org/t/p/w185${actor.profile_path}` : DEFAULT_AVATAR} 
+                          <LazyImage 
+                            src={actor.profile_path ? `https://image.tmdb.org/t/p/w185${actor.profile_path}` : ""} 
                             alt={actor.name}
                             className="w-20 h-20 md:w-full md:h-auto md:aspect-[2/3] object-cover rounded-full md:rounded-xl mb-2.5 shadow-[0_5px_15px_rgba(0,0,0,0.5)] bg-[#2A2A2A]"
                           />
@@ -909,8 +976,8 @@ export default function Detail() {
                       // Fallback to PhimAPI actors if TMDB fails
                       movie.actor.map((actorName: string, idx: number) => (
                         <motion.div key={idx} variants={itemVariants} className="text-center transition-transform duration-300 hover:-translate-y-1.5 flex flex-col items-center">
-                          <img 
-                            src={DEFAULT_AVATAR} 
+                          <LazyImage 
+                            src="" 
                             alt={actorName}
                             className="w-20 h-20 md:w-full md:h-auto md:aspect-[2/3] object-cover rounded-full md:rounded-xl mb-2.5 shadow-[0_5px_15px_rgba(0,0,0,0.5)] bg-[#2A2A2A]"
                           />
