@@ -12,7 +12,6 @@ import CommentsSection from "@/components/CommentsSection";
 import { MovieDetailSkeleton } from "@/components/Skeleton";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { toMovieTitleCase } from "@/lib/utils";
-import { Vibrant } from "node-vibrant/browser";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -199,16 +198,24 @@ export default function Detail() {
     let isMounted = true;
     const imageUrl = getImageUrl(movie.thumb_url || movie.poster_url, "banner");
 
-    Vibrant.from(imageUrl)
-      .getPalette()
-      .then(palette => {
+    import("node-vibrant/browser")
+      .then((mod) => {
         if (!isMounted) return;
-        const color = palette.Vibrant?.hex || palette.DarkVibrant?.hex || "#E50914";
-        setAccentColor(color);
+        mod.Vibrant.from(imageUrl)
+          .getPalette()
+          .then(palette => {
+            if (!isMounted) return;
+            const color = palette.Vibrant?.hex || palette.DarkVibrant?.hex || "#E50914";
+            setAccentColor(color);
+          })
+          .catch(() => {
+            if (!isMounted) return;
+            setAccentColor("#E50914");
+          });
       })
-      .catch(() => {
-        if (!isMounted) return;
-        setAccentColor("#E50914");
+      .catch((err) => {
+        console.error("Failed to dynamically import node-vibrant:", err);
+        if (isMounted) setAccentColor("#E50914");
       });
 
     return () => {
@@ -377,7 +384,7 @@ export default function Detail() {
     };
   }, [movie, hasFetchedRelated, slug]);
 
-  // 🚀 TỐI ƯU: Gộp 3 request TMDb thành 1 request duy nhất
+  // 🚀 TỐI ƯU: Gộp 3 request TMDb thành 1 request duy nhất và mở rộng kho ảnh quốc tế
   useEffect(() => {
     if (!movie) return;
     
@@ -407,14 +414,11 @@ export default function Detail() {
           return;
         }
 
-        // Bước 2: GỌI 1 REQUEST DUY NHẤT với append_to_response
-        // Lấy details + credits + images trong cùng 1 lần gọi API
-        const combinedUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=vi-VN&append_to_response=credits,images`;
+        // Bước 2: Nâng cấp URL gọi API - Thêm include_image_language để lấy toàn bộ kho ảnh không bị giới hạn bởi tag vi-VN
+        const combinedUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=vi-VN&append_to_response=credits,images&include_image_language=en,null,vi`;
         const combinedData = await fetchWithCache(`tmdb_combined_${tmdbType}_${tmdbId}`, () => fetch(combinedUrl).then(r => r.json()), TTL.TMDB_STATIC);
 
-        // Bước 3: Phân phối dữ liệu vào các state
-        
-        // Rating từ vote_average
+        // Bước 3: Phân phối dữ liệu vào các state an toàn
         if (combinedData.vote_average) {
           let formattedVotes = '';
           if (combinedData.vote_count) {
@@ -429,18 +433,30 @@ export default function Detail() {
           });
         }
 
-        // Cast từ credits
         if (combinedData.credits?.cast) {
           setCast(combinedData.credits.cast.slice(0, 12));
         }
 
-        // Images từ backdrops
-        if (combinedData.images?.backdrops) {
-          setImages(combinedData.images.backdrops.slice(0, 12));
+        // Xử lý kho ảnh mở rộng: Lấy cả backdrops (ảnh ngang) và stills (ảnh phân cảnh) nếu có
+        let extendedImages: any[] = [];
+        if (combinedData.images?.backdrops?.length > 0) {
+          extendedImages = [...combinedData.images.backdrops];
+        }
+        
+        // Nếu là phim bộ (TV Series), lấy thêm ảnh từ các phần để làm phong phú kho ảnh
+        if (combinedData.images?.posters?.length > 0 && extendedImages.length < 5) {
+          extendedImages = [...extendedImages, ...combinedData.images.posters];
         }
 
+        // Lọc trùng và giới hạn tối đa 16 tấm ảnh chất lượng cao nhất
+        const uniqueImages = extendedImages.filter((img, index, self) =>
+          self.findIndex(i => i.file_path === img.file_path) === index
+        );
+
+        setImages(uniqueImages.slice(0, 16));
+
       } catch (error) {
-        // Silent fail — không làm gián đoạn trải nghiệm
+        console.error("Silent error fetching extended images:", error);
       } finally {
         setLoadingCast(false);
         setLoadingImages(false);

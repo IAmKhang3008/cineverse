@@ -1,5 +1,6 @@
 import React from "react";
 import { cn } from "@/lib/utils";
+import { motion } from "motion/react";
 
 interface SkeletonProps {
   className?: string;
@@ -149,77 +150,78 @@ export function SearchSuggestionSkeleton() {
 // ============================================================
 export function MovieDetailSkeleton() {
   return (
-    <div className="w-full">
-      {/* Backdrop — khớp với min/max-h của Detail */}
-      <div
-        className="relative w-full bg-[#0A0A0A]"
-        style={{ minHeight: '60vh', maxHeight: '90vh', height: '75vh' }}
-      >
-        <Skeleton className="absolute inset-0 w-full h-full rounded-none" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0A] via-[#0A0A0A]/60 to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#0A0A0A]/80 via-[#0A0A0A]/20 to-transparent" />
+    <div className="w-full bg-[#0A0A0A] text-white">
+      {/* 1. Backdrop Area Skeleton - Khớp chuẩn chiều cao responsive */}
+      <div className="relative w-full overflow-hidden min-h-[60vh] md:min-h-[75vh] max-h-[90vh] bg-neutral-900/60 animate-pulse">
+        {/* Nút quay lại giả lập */}
+        <div className="absolute top-20 md:top-24 left-4 md:left-6 z-50">
+          <div className="w-32 h-10 bg-white/10 rounded-full backdrop-blur-md" />
+        </div>
+        {/* Lớp gradient giả lập phía dưới đáy */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0A] via-[#0A0A0A]/40 to-transparent" />
       </div>
 
-      {/* Content — -mt-32 md:-mt-64 khớp với Detail */}
-      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 relative -mt-32 md:-mt-64 z-10 pb-20">
+      {/* 2. Content Container Skeleton - Khớp chuẩn khoảng cách âm (-mt-32, -mt-64) */}
+      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 -mt-32 md:-mt-64 relative z-10 pb-20">
         <div className="flex flex-col md:flex-row gap-6 md:gap-16">
-
-          {/* Poster — w-48 sm:w-56 md:w-80 khớp chính xác */}
+          
+          {/* CỘT TRÁI: Poster phim giả lập (Đảm bảo chuẩn tỉ lệ aspect-[2/3] và không vỡ border-radius) */}
           <div className="w-48 sm:w-56 md:w-80 flex-shrink-0 mx-auto md:mx-0">
-            <Skeleton className="aspect-[2/3] w-full rounded-2xl" />
+            <div className="rounded-2xl bg-neutral-800 border border-white/5 aspect-[2/3] w-full animate-pulse shadow-[0_20px_50px_rgba(0,0,0,0.5)]" />
           </div>
 
-          {/* Info */}
-          <div className="flex-1 pt-4 md:pt-12 space-y-4">
-            {/* Title: text-3xl..6xl leading-[1.1] */}
-            <Skeleton className="h-10 md:h-14 lg:h-[66px] w-3/4 rounded-lg" />
+          {/* CỘT PHẢI: Thông tin chi tiết phim giả lập */}
+          <div className="flex-grow text-center md:text-left pt-4 md:pt-12">
+            
+            {/* Tên phim (H1 Giả lập) */}
+            <div className="h-10 sm:h-12 md:h-14 bg-white/10 rounded-xl w-3/4 mx-auto md:mx-0 mb-3 animate-pulse" />
+            
+            {/* Tên gốc (H2 Giả lập) */}
+            <div className="h-6 bg-white/5 rounded-lg w-1/2 mx-auto md:mx-0 mb-6 animate-pulse" />
+            
+            {/* Năm phát hành & Quốc gia */}
+            <div className="h-5 bg-white/5 rounded-lg w-1/3 mx-auto md:mx-0 mb-6 animate-pulse" />
 
-            {/* Origin name: text-xl md:text-2xl italic */}
-            <Skeleton className="h-7 md:h-8 w-1/2 rounded-md" />
-
-            {/* Year • country: text-xl */}
-            <Skeleton className="h-7 w-40 rounded-md" />
-
-            {/* Tags row: text-sm px-3 py-1.5 → ~36px */}
-            <div className="flex gap-3">
-              <Skeleton className="h-9 w-24 rounded-lg" />
-              <Skeleton className="h-9 w-16 rounded-lg" />
-              <Skeleton className="h-9 w-20 rounded-lg" />
-            </div>
-
-            {/* Description: text-sm md:text-base leading-relaxed → ~22-26px/dòng, 4 dòng */}
-            <div className="space-y-2 pt-2">
-              <Skeleton className="h-[22px] w-full rounded-sm" />
-              <Skeleton className="h-[22px] w-full rounded-sm" />
-              <Skeleton className="h-[22px] w-5/6 rounded-sm" />
-              <Skeleton className="h-[22px] w-4/6 rounded-sm" />
-            </div>
-
-            {/* Action buttons: py-3 md:py-4 text-base md:text-lg → ~48-56px, min-w-[160px..180px] */}
-            <div className="flex flex-wrap gap-4 pt-2">
-              <Skeleton className="h-12 md:h-14 w-full sm:w-[180px] rounded-xl" />
-              <Skeleton className="h-12 md:h-14 w-full sm:w-[180px] rounded-xl" />
-              <Skeleton className="h-12 md:h-14 w-full sm:w-[180px] rounded-xl" />
-              <Skeleton className="h-12 md:h-14 w-full sm:w-[180px] rounded-xl" />
-            </div>
-
-            {/* Tab bar skeleton */}
-            <div className="mt-8 md:mt-12 rounded-2xl border border-white/5 p-4 md:p-6 bg-[#121212]">
-              <div className="flex gap-6 border-b border-white/10 pb-4 mb-6">
-                <Skeleton className="h-6 w-16 rounded-sm" />
-                <Skeleton className="h-6 w-20 rounded-sm" />
-                <Skeleton className="h-6 w-16 rounded-sm" />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {[...Array(8)].map((_, i) => (
-                  <div key={i} className="flex gap-4">
-                    <Skeleton className="h-[22px] w-28 flex-shrink-0 rounded-sm" />
-                    <Skeleton className="h-[22px] flex-1 rounded-sm" />
-                  </div>
-                ))}
+            {/* Khối Điểm đánh giá & Thể loại (Meta tags) */}
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 mb-6">
+              {/* Điểm số */}
+              <div className="w-24 h-8 bg-white/5 rounded-lg animate-pulse" />
+              {/* Danh sách các badge thể loại */}
+              <div className="flex gap-2">
+                <div className="w-16 h-7 bg-white/5 rounded-full animate-pulse" />
+                <div className="w-20 h-7 bg-white/5 rounded-full animate-pulse" />
+                <div className="w-16 h-7 bg-white/5 rounded-full animate-pulse" />
               </div>
             </div>
+
+            {/* Khối Ngôn ngữ & Chất lượng phim */}
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mb-8">
+              <div className="w-32 h-8 bg-white/5 rounded-md animate-pulse" />
+              <div className="w-16 h-8 bg-white/5 rounded-md animate-pulse" />
+            </div>
+
+            {/* Khối DESCRIPTION CARD nổi (Khớp chuẩn border-radius, background, shadow và không tràn overflow) */}
+            <div className="max-w-3xl bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-[0_8px_40px_rgba(0,0,0,0.4)] mb-8">
+              <div className="space-y-2.5">
+                <div className="h-4 bg-white/10 rounded w-full animate-pulse" />
+                <div className="h-4 bg-white/5 rounded w-full animate-pulse" />
+                <div className="h-4 bg-white/5 rounded w-11/12 animate-pulse" />
+                <div className="h-4 bg-white/5 rounded w-4/5 animate-pulse" />
+              </div>
+            </div>
+            
+            {/* Cụm nút hành động giả lập (Xem ngay, Trailer, Yêu thích) */}
+            <div className="flex items-center justify-center md:justify-start gap-3 mt-6">
+              {/* Nút Xem Ngay */}
+              <div className="w-36 md:w-40 h-12 md:h-14 bg-white/10 rounded-xl animate-pulse" />
+              {/* Nút Trailer */}
+              <div className="w-28 md:w-32 h-12 md:h-14 bg-white/5 rounded-xl animate-pulse" />
+              {/* Nút Yêu Thích */}
+              <div className="w-14 h-12 md:h-14 bg-white/5 rounded-xl animate-pulse" />
+            </div>
+
           </div>
+
         </div>
       </div>
     </div>
