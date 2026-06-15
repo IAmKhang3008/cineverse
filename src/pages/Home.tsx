@@ -1,5 +1,5 @@
 import React, { useEffect, useState, Suspense, useRef, useCallback } from "react";
-import { api, getImageUrl } from "@/lib/api";
+import { api, getImageUrl, fetchWithRetry } from "@/lib/api";
 import { Play, Info, ChevronRight, Heart, X, Flame, TrendingUp } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Swiper, SwiperSlide } from "swiper/react";
@@ -16,6 +16,7 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { fetchWithCache, TTL } from "@/lib/cache";
 
 const MovieCard = React.lazy(() => import("@/components/MovieCard"));
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 // ============================================================
 // CẤU HÌNH TAB THỜI GIAN
@@ -62,7 +63,7 @@ function useTrendingMovies() {
       const tmdbCacheKey = `tmdb_trending_${tab}`;
       const tmdbData = await fetchWithCache(
         tmdbCacheKey,
-        () => fetch(`https://api.themoviedb.org/3/trending/movie/${tab}?api_key=${TMDB_KEY}&language=vi-VN`)
+        () => fetchWithRetry(`https://api.themoviedb.org/3/trending/movie/${tab}?api_key=${TMDB_KEY}&language=vi-VN`, {}, 2, 6000)
               .then(r => r.json()),
         TTL.TMDB_STATIC
       );
@@ -108,8 +109,18 @@ function useTrendingMovies() {
       resultCache.current[tab] = verified;
       setMovies(verified);
     } catch (err) {
-      console.warn('[Trending] Fetch failed:', err);
-      setMovies([]);
+      console.warn('[Trending] TMDB Fetch failed, falling back to local database categories:', err);
+      try {
+        const fallbackRes = tab === 'day'
+          ? await api.getNewUpdated(1)
+          : await api.getByCategory("phim-chieu-rap", 1);
+        const list = (fallbackRes.items || []).slice(0, 15);
+        resultCache.current[tab] = list;
+        setMovies(list);
+      } catch (innerErr) {
+        console.warn('[Trending] Local database fallback also failed:', innerErr);
+        setMovies([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -204,7 +215,7 @@ export default function Home() {
                 let tmdbType = detail.movie?.tmdb?.type || 'movie';
                 if (!tmdbId) {
                   const searchUrl  = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.name)}&language=vi-VN`;
-                  const searchData = await fetchWithCache(`tmdb_search_${movie.slug}`, () => fetch(searchUrl).then(r => r.json()), TTL.TMDB_STATIC);
+                  const searchData = await fetchWithCache(`tmdb_search_${movie.slug}`, () => fetchWithRetry(searchUrl, {}, 1, 5000).then(r => r.json()), TTL.TMDB_STATIC);
                   if (searchData.results?.length > 0) {
                     tmdbId   = searchData.results[0].id;
                     tmdbType = searchData.results[0].media_type || (searchData.results[0].first_air_date ? 'tv' : 'movie');
@@ -212,7 +223,7 @@ export default function Home() {
                 }
                 if (tmdbId) {
                   const imagesUrl  = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}/images?api_key=${apiKey}`;
-                  const imagesData = await fetchWithCache(`tmdb_images_${tmdbType}_${tmdbId}`, () => fetch(imagesUrl).then(r => r.json()), TTL.TMDB_STATIC);
+                  const imagesData = await fetchWithCache(`tmdb_images_${tmdbType}_${tmdbId}`, () => fetchWithRetry(imagesUrl, {}, 1, 5000).then(r => r.json()), TTL.TMDB_STATIC);
                   if (imagesData.backdrops?.length > 0) {
                     const sorted = imagesData.backdrops.sort((a: any, b: any) => b.width - a.width);
                     highQualityBanner = `https://image.tmdb.org/t/p/original${sorted[0].file_path}`;
@@ -385,92 +396,94 @@ export default function Home() {
             PHIM THỊNH HÀNH — NÂNG CẤP VỚI TIME FILTER
             ============================================= */}
         <section>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 md:mb-8">
-            {/* Tiêu đề */}
-            <h2 className="text-xl md:text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-2 md:gap-3 flex-shrink-0">
-              <span className="w-1.5 h-6 md:h-8 bg-[#F5C518] rounded-full inline-block" />
-              Phim Thịnh Hành
-            </h2>
+          <ErrorBoundary name="Phim Thịnh Hành">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 md:mb-8">
+              {/* Tiêu đề */}
+              <h2 className="text-xl md:text-2xl font-heading font-bold text-white tracking-wider flex items-center gap-2 md:gap-3 flex-shrink-0">
+                <span className="w-1.5 h-6 md:h-8 bg-[#F5C518] rounded-full inline-block" />
+                Phim Thịnh Hành
+              </h2>
 
-            {/* Toggle 2 tab — pill container, đối xứng */}
-            <div className="flex items-center bg-white/5 border border-white/10 rounded-full p-1 gap-0.5 flex-shrink-0">
-              {TRENDING_TABS.map((tab) => {
-                const isActive = activeTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`
-                      flex items-center justify-center gap-1.5
-                      min-h-[44px] sm:min-h-[36px] px-4 sm:px-5
-                      rounded-full text-xs font-bold whitespace-nowrap
-                      transition-all duration-250
-                      ${isActive
-                        ? 'bg-[#F5C518] text-black shadow-[0_0_14px_rgba(245,197,24,0.5)] scale-[1.03]'
-                        : 'text-secondary-text hover:text-white hover:bg-white/10 active:scale-95'
-                      }
-                    `}
-                  >
-                    <span className={`flex-shrink-0 ${isActive ? 'text-black' : 'text-[#F5C518]'}`}>
-                      {tab.icon}
-                    </span>
-                    <span>{tab.label}</span>
-                  </button>
-                );
-              })}
+              {/* Toggle 2 tab — pill container, đối xứng */}
+              <div className="flex items-center bg-white/5 border border-white/10 rounded-full p-1 gap-0.5 flex-shrink-0">
+                {TRENDING_TABS.map((tab) => {
+                  const isActive = activeTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`
+                        flex items-center justify-center gap-1.5
+                        min-h-[44px] sm:min-h-[36px] px-4 sm:px-5
+                        rounded-full text-xs font-bold whitespace-nowrap
+                        transition-all duration-250
+                        ${isActive
+                          ? 'bg-[#F5C518] text-black shadow-[0_0_14px_rgba(245,197,24,0.5)] scale-[1.03]'
+                          : 'text-secondary-text hover:text-white hover:bg-white/10 active:scale-95'
+                        }
+                      `}
+                    >
+                      <span className={`flex-shrink-0 ${isActive ? 'text-black' : 'text-[#F5C518]'}`}>
+                        {tab.icon}
+                      </span>
+                      <span>{tab.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
 
-          {/* Nội dung: skeleton hoặc swiper */}
-          <AnimatePresence mode="wait">
-            {trendingLoading ? (
-              <motion.div
-                key="trending-skeleton"
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6"
-              >
-                {[...Array(5)].map((_, i) => <MovieCardSkeleton key={i} />)}
-              </motion.div>
-            ) : trendingMovies.length > 0 ? (
-              <motion.div
-                key={`trending-${activeTab}`}
-                initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.25 }}
-              >
-                <Swiper
-                  modules={[Navigation, Autoplay]}
-                  spaceBetween={16}
-                  slidesPerView={2}
-                  navigation
-                  allowTouchMove={!isCardHolding}
-                  autoplay={{ delay: 4000, disableOnInteraction: false }}
-                  breakpoints={{
-                    640:  { slidesPerView: 3, spaceBetween: 20 },
-                    768:  { slidesPerView: 4, spaceBetween: 24 },
-                    1024: { slidesPerView: 5, spaceBetween: 24 },
-                  }}
-                  className="pb-8 md:pb-12 !overflow-visible"
+            {/* Nội dung: skeleton hoặc swiper */}
+            <AnimatePresence mode="wait">
+              {trendingLoading ? (
+                <motion.div
+                  key="trending-skeleton"
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6"
                 >
-                  {trendingMovies.map((movie, index) => (
-                    <SwiperSlide key={`trending-${activeTab}-${movie.slug || index}`}>
-                      <Suspense fallback={<MovieCardSkeleton />}>
-                        <MovieCard movie={movie} onHoldChange={setIsCardHolding} />
-                      </Suspense>
-                    </SwiperSlide>
-                  ))}
-                </Swiper>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="trending-empty"
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                className="flex items-center justify-center py-16 text-secondary-text text-sm"
-              >
-                Không tìm thấy phim thịnh hành trong khoảng thời gian này.
-              </motion.div>
-            )}
-          </AnimatePresence>
+                  {[...Array(5)].map((_, i) => <MovieCardSkeleton key={i} />)}
+                </motion.div>
+              ) : trendingMovies.length > 0 ? (
+                <motion.div
+                  key={`trending-${activeTab}`}
+                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.25 }}
+                >
+                  <Swiper
+                    modules={[Navigation, Autoplay]}
+                    spaceBetween={16}
+                    slidesPerView={2}
+                    navigation
+                    allowTouchMove={!isCardHolding}
+                    autoplay={{ delay: 4000, disableOnInteraction: false }}
+                    breakpoints={{
+                      640:  { slidesPerView: 3, spaceBetween: 20 },
+                      768:  { slidesPerView: 4, spaceBetween: 24 },
+                      1024: { slidesPerView: 5, spaceBetween: 24 },
+                    }}
+                    className="pb-8 md:pb-12 !overflow-visible"
+                  >
+                    {trendingMovies.map((movie, index) => (
+                      <SwiperSlide key={`trending-${activeTab}-${movie.slug || index}`}>
+                        <Suspense fallback={<MovieCardSkeleton />}>
+                          <MovieCard movie={movie} onHoldChange={setIsCardHolding} />
+                        </Suspense>
+                      </SwiperSlide>
+                    ))}
+                  </Swiper>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="trending-empty"
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                  className="flex items-center justify-center py-16 text-secondary-text text-sm"
+                >
+                  Không tìm thấy phim thịnh hành trong khoảng thời gian này.
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </ErrorBoundary>
         </section>
 
         {/* Phim mới cập nhật */}

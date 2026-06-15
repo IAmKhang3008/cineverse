@@ -8,12 +8,13 @@ import { useToast } from "@/contexts/ToastContext";
 import { decodeHtml, DEFAULT_AVATAR, CAST_PLACEHOLDER } from "@/lib/utils";
 import { fetchWithCache, TTL } from "@/lib/cache";
 import { motion, AnimatePresence } from "motion/react";
+import { Vibrant } from "node-vibrant/browser";
 import CommentsSection from "@/components/CommentsSection";
 import { MovieDetailSkeleton } from "@/components/Skeleton";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { toMovieTitleCase } from "@/lib/utils";
 
-const containerVariants = {
+const containerVariants: any = {
   hidden: { opacity: 0 },
   show: {
     opacity: 1,
@@ -24,7 +25,7 @@ const containerVariants = {
   },
 };
 
-const itemVariants = {
+const itemVariants: any = {
   hidden: { opacity: 0, y: 15 },
   show: {
     opacity: 1,
@@ -33,7 +34,7 @@ const itemVariants = {
   },
 };
 
-const buttonContainerVariants = {
+const buttonContainerVariants: any = {
   hidden: { opacity: 0 },
   show: {
     opacity: 1,
@@ -44,7 +45,7 @@ const buttonContainerVariants = {
   },
 };
 
-const buttonVariants = {
+const buttonVariants: any = {
   hidden: { opacity: 0, y: 10 },
   show: {
     opacity: 1,
@@ -198,24 +199,18 @@ export default function Detail() {
     let isMounted = true;
     const imageUrl = getImageUrl(movie.thumb_url || movie.poster_url, "banner");
 
-    import("node-vibrant/browser")
-      .then((mod) => {
+    Vibrant.from(imageUrl)
+      .getPalette()
+      .then(palette => {
         if (!isMounted) return;
-        mod.Vibrant.from(imageUrl)
-          .getPalette()
-          .then(palette => {
-            if (!isMounted) return;
-            const color = palette.Vibrant?.hex || palette.DarkVibrant?.hex || "#E50914";
-            setAccentColor(color);
-          })
-          .catch(() => {
-            if (!isMounted) return;
-            setAccentColor("#E50914");
-          });
+        const color = palette.Vibrant?.hex || palette.DarkVibrant?.hex || "#E50914";
+        setAccentColor(color);
       })
       .catch((err) => {
-        console.error("Failed to dynamically import node-vibrant:", err);
-        if (isMounted) setAccentColor("#E50914");
+        if (isMounted) {
+          console.warn("Vibrant failed to extract colors, falling back to default theme color:", err);
+          setAccentColor("#E50914");
+        }
       });
 
     return () => {
@@ -456,7 +451,8 @@ export default function Detail() {
         setImages(uniqueImages.slice(0, 16));
 
       } catch (error) {
-        console.error("Silent error fetching extended images:", error);
+        // Ghi nhận cảnh báo nhẹ, tránh console.error làm đỏ log hệ thống giám sát
+        console.warn("Failed to fetch TMDB data, falling back to local metadata:", error);
       } finally {
         setLoadingCast(false);
         setLoadingImages(false);

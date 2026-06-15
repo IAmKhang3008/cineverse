@@ -112,6 +112,42 @@ async function retryWithJitter(
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+/**
+ * Robust fetch utility with retry, exponential backoff, jitter, and standard timeout.
+ */
+export async function fetchWithRetry(
+  url: string,
+  options: RequestInit = {},
+  retries = 3,
+  timeoutMs = 8000
+): Promise<Response> {
+  let lastError: any;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetchWithTimeout(url, timeoutMs, options);
+      if (!res.ok) {
+        // Retry on 5xx or rate limiting status (429)
+        if (res.status >= 500 || res.status === 429) {
+          throw new Error(`HTTP Error ${res.status}: ${res.statusText}`);
+        }
+      }
+      return res;
+    } catch (err: any) {
+      lastError = err;
+      if (attempt === retries) break;
+      const base = 250 * Math.pow(2, attempt);
+      const jitter = base * (0.5 + Math.random() * 0.5);
+      console.warn(
+        `[API Retry] Request failed to "${url}" (Attempt ${attempt + 1}/${retries + 1}). Retrying in ${Math.round(jitter)}ms... Reason:`,
+        err?.message || err
+      );
+      await sleep(jitter);
+    }
+  }
+  console.error(`[API Retry] Request failed completely to "${url}" after ${retries + 1} attempts. Last error:`, lastError);
+  throw lastError;
+}
+
 // ============================================================
 // PARALLEL FETCH
 // Gửi request đến cả 2 API cùng lúc.
@@ -397,13 +433,12 @@ async function apiFetch(endpoint: string): Promise<{ data: any; source: 'primary
   let attemptPromise: Promise<{ res: Response; source: 'primary' | 'fallback' }>;
 
   if (apiState.usingFallback) {
-    attemptPromise = fetch(`${FALLBACK_URL}${endpoint}`)
+    attemptPromise = fetchWithRetry(`${FALLBACK_URL}${endpoint}`, {}, 2, PRIMARY_TIMEOUT)
       .then(res => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return { res, source: 'fallback' } as { res: Response; source: 'fallback' };
       })
       .catch((e) => {
-        console.warn('[API] Fallback also failed, retrying parallel', e);
+        console.warn('[API] Fallback request failed even with retries, falling back to parallel fetch:', e);
         return parallelFetch(endpoint); // Nếu fallback lỗi, thử lại cả 2
       });
   } else {
@@ -483,11 +518,12 @@ export const api = {
     }, TTL.CATEGORY_LIST);
   },
 
-  search: async (keyword: string, page = 1) => {
-    return fetchWithCache(`search:${keyword}:${page}`, async () => {
-      const { data } = await apiFetch(`/v1/api/tim-kiem?keyword=${encodeURIComponent(keyword)}&page=${page}`);
+  search: async (keyword: string, page = 1, limit = 64) => {
+    return fetchWithCache(`search:${keyword}:${page}:${limit}`, async () => {
+      const { data } = await apiFetch(`/v1/api/tim-kiem?keyword=${encodeURIComponent(keyword)}&page=${page}&limit=${limit}`);
       const items = data.data?.items || data.items || [];
-      return { items: items.map(normalizePrimary), pagination: data.data?.pagination };
+      const pagination = data.data?.params?.pagination || data.pagination || null;
+      return { items: items.map(normalizePrimary), pagination };
     }, TTL.SEARCH);
   },
 
@@ -501,7 +537,7 @@ export const api = {
 
   getTrendingFromTMDB: async () => {
     try {
-      const res  = await fetch(`https://api.themoviedb.org/3/trending/all/day?api_key=${TMDB_KEY}&language=vi-VN`);
+      const res  = await fetchWithRetry(`https://api.themoviedb.org/3/trending/all/day?api_key=${TMDB_KEY}&language=vi-VN`, {}, 2, 6000);
       const data = await res.json();
       return data.results.map((m: any): Partial<NormalizedMovie> => ({
         _id:         m.id.toString(),
@@ -514,7 +550,8 @@ export const api = {
         slug:        `search?q=${encodeURIComponent(m.title || m.name)}`,
         _source:     'primary',
       }));
-    } catch {
+    } catch (err) {
+      console.error("[Trending] TMDB getTrendingFromTMDB request failed completely even after retries:", err);
       return [];
     }
   },
