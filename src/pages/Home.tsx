@@ -14,9 +14,9 @@ import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { fetchWithCache, TTL } from "@/lib/cache";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 const MovieCard = React.lazy(() => import("@/components/MovieCard"));
-import ErrorBoundary from "@/components/ErrorBoundary";
 
 // ============================================================
 // CẤU HÌNH TAB THỜI GIAN
