@@ -1,43 +1,58 @@
 /**
  * api.ts — Hệ thống API kiên cường cho Cineverse
- * Bao gồm: Smart Retry + Jitter, Health Check, Parallel Fetch,
- * Image Hunter, Data Normalization Adapter
  *
  * CHANGELOG:
- * [FIX 1] normalizePrimary/normalizeFallback được gọi đúng theo source trong tất cả các hàm
- * [FIX 2] upgradeImageUrl xử lý được URL có query string (e.g. ?v=2)
- * [FIX 3] tmdbCache tích hợp vào fetchWithCache (persistent qua reload)
- * [FIX 4] TMDB Rate Limiter — tránh vượt giới hạn 40 req/10s
+ * [FIX 1] normalizeBySource — gọi đúng normalizer theo source
+ * [FIX 2] upgradeImageUrl — xử lý URL có query string
+ * [FIX 3] tmdbCache 2-layer (memory + localStorage TTL 24h)
+ * [FIX 4] TMDB Rate Limiter — sliding window 38 req/10s
+ * [FIX 5] Bỏ hard-code API key, tắt TMDB gracefully khi không có key
+ * [FIX 6] fetchTmdbMovieInfo — check res.ok, sanitize cache key
+ * [FIX 7] getTrendingFromTMDB — /trending/movie (không trả 'person')
+ * [FIX 8] fetchTmdbDetail — 1 request duy nhất với append_to_response
+ *         (credits + videos + images) thay vì 3-4 request riêng lẻ
+ * [FIX 9] getMovieDetail — trailer từ TMDB /videos, image scoring
+ * [FIX 10] getMovieDetail — không gọi apiFetch 2 lần khi primaryData null
+ * [FIX 11] Image upgrade — điều kiện rộng hơn (không chỉ 'ophim')
+ * [FIX 12] Score-based matching — không chỉ lấy results[0] mù quáng
  */
 
 import { fetchWithCache, TTL } from './cache';
 
-// ============================================================
+// ─────────────────────────────────────────────────────────────
 // CẤU HÌNH
-// ============================================================
-const PRIMARY_URL  = 'https://phimapi.com';
-const FALLBACK_URL = 'https://ophim1.com';
-const TMDB_KEY     = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
-
-const MAX_RETRIES          = 1;
-const PRIMARY_TIMEOUT      = 12000;
-const PARALLEL_THRESHOLD   = 6000;
+// ─────────────────────────────────────────────────────────────
+const PRIMARY_URL           = 'https://phimapi.com';
+const FALLBACK_URL          = 'https://ophim1.com';
+const MAX_RETRIES           = 1;
+const PRIMARY_TIMEOUT       = 12_000;
+const PARALLEL_THRESHOLD    = 6_000;
 const HEALTH_CHECK_INTERVAL = 30_000;
 
-// ============================================================
-// [FIX 4] TMDB RATE LIMITER
-// TMDB free tier: ~40 req/10s. Queue + sliding window để không bị 429.
-// ============================================================
-const TMDB_RATE_LIMIT  = 38;  // giữ dưới 40 để an toàn
-const TMDB_WINDOW_MS   = 10_000;
+// [FIX 5] Không hard-code key — chỉ lấy từ .env
+const TMDB_KEY: string    = (import.meta as any).env.VITE_TMDB_API_KEY || '';
+const TMDB_ENABLED: boolean = TMDB_KEY.trim().length > 0;
+
+if (!TMDB_ENABLED) {
+  console.info(
+    '[TMDB] Không tìm thấy VITE_TMDB_API_KEY → tắt TMDB.\n' +
+    'Thêm VITE_TMDB_API_KEY=your_key vào .env để bật.\n' +
+    'Lấy key: https://www.themoviedb.org/settings/api',
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// [FIX 4] TMDB RATE LIMITER — sliding window 38 req/10s
+// ─────────────────────────────────────────────────────────────
+const TMDB_RATE_LIMIT = 38;
+const TMDB_WINDOW_MS  = 10_000;
 
 const tmdbRateLimiter = {
   timestamps: [] as number[],
-  queue: [] as Array<() => void>,
+  queue:      [] as Array<() => void>,
   processing: false,
 
-  /** Đăng ký 1 request TMDB — trả về Promise resolve khi được phép gửi */
-  async acquire(): Promise<void> {
+  acquire(): Promise<void> {
     return new Promise(resolve => {
       this.queue.push(resolve);
       if (!this.processing) this._process();
@@ -48,21 +63,14 @@ const tmdbRateLimiter = {
     this.processing = true;
     const tick = () => {
       if (this.queue.length === 0) { this.processing = false; return; }
-
       const now = Date.now();
-      // Xóa các timestamp cũ hơn 10 giây
       this.timestamps = this.timestamps.filter(t => now - t < TMDB_WINDOW_MS);
-
       if (this.timestamps.length < TMDB_RATE_LIMIT) {
         this.timestamps.push(now);
-        const next = this.queue.shift();
-        next?.();
-        // Xử lý ngay request kế tiếp (không delay nếu còn slot)
+        this.queue.shift()?.();
         tick();
       } else {
-        // Tính thời gian chờ đến khi slot cũ nhất expire
-        const oldest   = this.timestamps[0];
-        const waitTime = TMDB_WINDOW_MS - (now - oldest) + 50; // +50ms buffer
+        const waitTime = TMDB_WINDOW_MS - (now - this.timestamps[0]) + 50;
         setTimeout(tick, waitTime);
       }
     };
@@ -70,34 +78,27 @@ const tmdbRateLimiter = {
   },
 };
 
-// ============================================================
+// ─────────────────────────────────────────────────────────────
 // FETCH HELPERS
-// ============================================================
-function fetchWithTimeout(url: string, timeoutMs: number, options: RequestInit = {}) {
-  if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
-    return fetch(url, { ...options, signal: AbortSignal.timeout(timeoutMs) });
+// ─────────────────────────────────────────────────────────────
+function fetchWithTimeout(url: string, ms: number, opts: RequestInit = {}): Promise<Response> {
+  if (typeof AbortSignal?.timeout === 'function') {
+    return fetch(url, { ...opts, signal: AbortSignal.timeout(ms) });
   }
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeoutMs);
-  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(id));
+  const ctrl = new AbortController();
+  const id   = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(id));
 }
 
-const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
-async function retryWithJitter(
-  fn: () => Promise<Response>,
-  retries = MAX_RETRIES,
-): Promise<Response> {
+async function retryWithJitter(fn: () => Promise<Response>, retries = MAX_RETRIES): Promise<Response> {
   let lastError: unknown;
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      return await fn();
-    } catch (err) {
+  for (let i = 0; i <= retries; i++) {
+    try { return await fn(); } catch (err) {
       lastError = err;
-      if (attempt === retries) break;
-      const base   = 200 * Math.pow(2, attempt);
-      const jitter = base * (0.5 + Math.random() * 0.5);
-      await sleep(jitter);
+      if (i === retries) break;
+      await sleep(200 * Math.pow(2, i) * (0.5 + Math.random() * 0.5));
     }
   }
   throw lastError;
@@ -105,36 +106,34 @@ async function retryWithJitter(
 
 export async function fetchWithRetry(
   url: string,
-  options: RequestInit = {},
+  opts: RequestInit = {},
   retries = 3,
-  timeoutMs = 8000,
+  timeoutMs = 8_000,
 ): Promise<Response> {
   let lastError: any;
-  for (let attempt = 0; attempt <= retries; attempt++) {
+  for (let i = 0; i <= retries; i++) {
     try {
-      const res = await fetchWithTimeout(url, timeoutMs, options);
-      if (!res.ok && (res.status >= 500 || res.status === 429)) {
-        throw new Error(`HTTP Error ${res.status}: ${res.statusText}`);
-      }
+      const res = await fetchWithTimeout(url, timeoutMs, opts);
+      if (!res.ok && (res.status >= 500 || res.status === 429))
+        throw new Error(`HTTP ${res.status}`);
       return res;
     } catch (err: any) {
       lastError = err;
-      if (attempt === retries) break;
-      const base   = 250 * Math.pow(2, attempt);
-      const jitter = base * (0.5 + Math.random() * 0.5);
-      const tag    = url.includes('themoviedb.org') ? '[TMDB Optional]' : '[API Retry]';
-      console.warn(`${tag} Attempt ${attempt + 1}/${retries + 1} failed for "${url}". Retrying in ${Math.round(jitter)}ms...`, err?.message || err);
+      if (i === retries) break;
+      const jitter = 250 * Math.pow(2, i) * (0.5 + Math.random() * 0.5);
+      const tag    = url.includes('themoviedb.org') ? '[TMDB]' : '[API]';
+      console.warn(`${tag} Attempt ${i + 1}/${retries + 1} failed. Retry in ${Math.round(jitter)}ms`, err?.message);
       await sleep(jitter);
     }
   }
-  const tag = url.includes('themoviedb.org') ? '[TMDB Optional]' : '[API Retry]';
-  console.error(`${tag} All ${retries + 1} attempts failed for "${url}".`, lastError?.message || lastError);
+  const tag = url.includes('themoviedb.org') ? '[TMDB]' : '[API]';
+  console.error(`${tag} All ${retries + 1} attempts failed.`, lastError?.message);
   throw lastError;
 }
 
-// ============================================================
-// TRẠNG THÁI API
-// ============================================================
+// ─────────────────────────────────────────────────────────────
+// API STATE — health check + failover
+// ─────────────────────────────────────────────────────────────
 const apiState = {
   usingFallback:    false,
   primaryDeadSince: 0,
@@ -145,46 +144,39 @@ const apiState = {
     if (this.usingFallback) return;
     this.usingFallback    = true;
     this.primaryDeadSince = Date.now();
-    console.warn('[API] Primary phimapi.com không phản hồi → chuyển sang ophim1.com');
+    console.warn('[API] phimapi.com không phản hồi → ophim1.com');
     this.startHealthCheck();
   },
-
   switchToPrimary() {
     this.usingFallback    = false;
     this.consecutiveFails = 0;
     this.primaryDeadSince = 0;
-    console.info('[API] phimapi.com sống lại → tự động quay về primary ✅');
+    console.info('[API] phimapi.com sống lại ✅');
     this.stopHealthCheck();
   },
-
   startHealthCheck() {
     if (this.healthCheckTimer) return;
     this.healthCheckTimer = setInterval(async () => {
       try {
-        const res = await fetchWithTimeout(`${PRIMARY_URL}/danh-sach/phim-moi-cap-nhat?page=1`, 3000);
-        if (res.ok) this.switchToPrimary();
-      } catch { /* Primary vẫn chết */ }
+        const r = await fetchWithTimeout(`${PRIMARY_URL}/danh-sach/phim-moi-cap-nhat?page=1`, 3_000);
+        if (r.ok) this.switchToPrimary();
+      } catch { /* vẫn chết */ }
     }, HEALTH_CHECK_INTERVAL);
   },
-
   stopHealthCheck() {
-    if (this.healthCheckTimer) {
-      clearInterval(this.healthCheckTimer);
-      this.healthCheckTimer = null;
-    }
+    if (this.healthCheckTimer) { clearInterval(this.healthCheckTimer); this.healthCheckTimer = null; }
   },
 };
 
-// ============================================================
+// ─────────────────────────────────────────────────────────────
 // PARALLEL FETCH
-// ============================================================
+// ─────────────────────────────────────────────────────────────
 async function parallelFetch(endpoint: string): Promise<{ res: Response; source: 'primary' | 'fallback' }> {
   return new Promise((resolve, reject) => {
     let settled = false;
     let fallbackResult: { res: Response; source: 'fallback' } | null = null;
-
-    const settle = (value: { res: Response; source: 'primary' | 'fallback' }) => {
-      if (!settled) { settled = true; resolve(value); }
+    const settle = (v: { res: Response; source: 'primary' | 'fallback' }) => {
+      if (!settled) { settled = true; resolve(v); }
     };
 
     const primaryPromise = retryWithJitter(() =>
@@ -201,7 +193,7 @@ async function parallelFetch(endpoint: string): Promise<{ res: Response; source:
         fallbackResult = { res: fRes, source: 'fallback' };
         primaryPromise.catch(() => {});
         if (!settled) {
-          console.info(`[API] Dùng fallback tạm thời cho ${endpoint} (Primary chậm hơn ${PARALLEL_THRESHOLD}ms)`);
+          console.info(`[API] Fallback tạm cho ${endpoint} (primary > ${PARALLEL_THRESHOLD}ms)`);
           settle(fallbackResult);
         }
       } catch { /* fallback cũng chết */ }
@@ -218,164 +210,314 @@ async function parallelFetch(endpoint: string): Promise<{ res: Response; source:
         clearTimeout(fallbackTimer);
         apiState.consecutiveFails++;
         if (apiState.consecutiveFails >= 2) apiState.switchToFallback();
-
-        if (fallbackResult) {
-          settle(fallbackResult);
-        } else {
-          fetchWithTimeout(`${FALLBACK_URL}${endpoint}`, PRIMARY_TIMEOUT)
-            .then(r => {
-              if (r.ok) settle({ res: r, source: 'fallback' });
-              else reject(err);
-            })
-            .catch(() => reject(err));
-        }
+        if (fallbackResult) { settle(fallbackResult); return; }
+        fetchWithTimeout(`${FALLBACK_URL}${endpoint}`, PRIMARY_TIMEOUT)
+          .then(r => { if (r.ok) settle({ res: r, source: 'fallback' }); else reject(err); })
+          .catch(() => reject(err));
       });
   });
 }
 
-// ============================================================
-// [FIX 2] IMAGE HUNTER — xử lý URL có query string
-// ============================================================
-
-/**
- * Nâng cấp URL ảnh từ ophim1 lên chất lượng cao hơn.
- *
- * FIX: Tách query string ra trước khi apply regex, gắn lại sau.
- * Trước đây: "film-thumb.jpg?v=2" không match "-thumb(\.\w+)$" → bỏ sót.
- * Sau fix:   tách "?v=2" ra, xử lý "film-thumb.jpg", gắn lại "?v=2".
- */
+// ─────────────────────────────────────────────────────────────
+// [FIX 2] IMAGE UPGRADE — tách query string trước khi regex
+// ─────────────────────────────────────────────────────────────
 function upgradeImageUrl(url: string): string {
   if (!url) return url;
-
-  // Tách query string và fragment ra khỏi path để regex hoạt động đúng
   const qIdx  = url.indexOf('?');
   const hIdx  = url.indexOf('#');
   const cutAt = qIdx !== -1 ? qIdx : hIdx !== -1 ? hIdx : url.length;
-
-  const base   = url.slice(0, cutAt);   // phần path thuần
-  const suffix = url.slice(cutAt);      // "?v=2#anchor" hoặc ""
-
-  const upgraded = base
-    .replace(/-thumb(\.\w+)$/i,  '$1')   // xóa -thumb
-    .replace(/_thumb(\.\w+)$/i,  '$1')   // xóa _thumb
-    .replace(/-poster(\.\w+)$/i, '$1')   // xóa -poster
-    .replace(/\/w\d+\//g, '/original/'); // TMDB: w500 → original
-
-  return upgraded + suffix;
+  const base   = url.slice(0, cutAt);
+  const suffix = url.slice(cutAt);
+  return base
+    .replace(/-thumb(\.\w+)$/i,  '$1')
+    .replace(/_thumb(\.\w+)$/i,  '$1')
+    .replace(/-poster(\.\w+)$/i, '$1')
+    .replace(/\/w\d+\//g, '/original/')
+    + suffix;
 }
 
-// ============================================================
-// [FIX 3] TMDB CACHE — persistent qua reload dùng localStorage
-// TTL 24 giờ để tránh stale data quá lâu
-// ============================================================
-const TMDB_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 giờ
+// ─────────────────────────────────────────────────────────────
+// [FIX 3] TMDB CACHE — 2-layer: memory L1 + localStorage L2
+// ─────────────────────────────────────────────────────────────
+const TMDB_CACHE_TTL_MS = 24 * 60 * 60 * 1_000; // 24h
 const TMDB_CACHE_PREFIX = 'cv_tmdb_';
 
-interface TmdbCacheEntry {
-  data:      TmdbMovieInfo | null;
-  expiresAt: number;
-}
+interface TmdbCacheEntry<T> { data: T | null; expiresAt: number; }
 
-const tmdbMemCache = new Map<string, TmdbMovieInfo | null>(); // L1: in-memory nhanh
+// Generic 2-layer cache để dùng cho cả TmdbMovieInfo và TmdbFullDetail
+class TmdbCache<T> {
+  private mem = new Map<string, T | null>();
+  private prefix: string;
+  constructor(prefix: string) { this.prefix = TMDB_CACHE_PREFIX + prefix + '_'; }
 
-function tmdbCacheGet(key: string): TmdbMovieInfo | null | undefined {
-  // L1: memory trước
-  if (tmdbMemCache.has(key)) return tmdbMemCache.get(key);
+  get(key: string): T | null | undefined {
+    if (this.mem.has(key)) return this.mem.get(key);
+    try {
+      const raw = localStorage.getItem(this.prefix + key);
+      if (!raw) return undefined;
+      const entry: TmdbCacheEntry<T> = JSON.parse(raw);
+      if (Date.now() > entry.expiresAt) { localStorage.removeItem(this.prefix + key); return undefined; }
+      this.mem.set(key, entry.data);
+      return entry.data;
+    } catch { return undefined; }
+  }
 
-  // L2: localStorage
-  try {
-    const raw = localStorage.getItem(TMDB_CACHE_PREFIX + key);
-    if (!raw) return undefined;
-    const entry: TmdbCacheEntry = JSON.parse(raw);
-    if (Date.now() > entry.expiresAt) {
-      localStorage.removeItem(TMDB_CACHE_PREFIX + key);
-      return undefined;
-    }
-    // Warm L1 cache
-    tmdbMemCache.set(key, entry.data);
-    return entry.data;
-  } catch {
-    return undefined;
+  set(key: string, data: T | null): void {
+    this.mem.set(key, data);
+    try {
+      localStorage.setItem(this.prefix + key, JSON.stringify({ data, expiresAt: Date.now() + TMDB_CACHE_TTL_MS }));
+    } catch { /* localStorage full/blocked */ }
   }
 }
 
-function tmdbCacheSet(key: string, data: TmdbMovieInfo | null): void {
-  tmdbMemCache.set(key, data);
-  try {
-    const entry: TmdbCacheEntry = { data, expiresAt: Date.now() + TMDB_CACHE_TTL_MS };
-    localStorage.setItem(TMDB_CACHE_PREFIX + key, JSON.stringify(entry));
-  } catch (e) {
-    // localStorage đầy hoặc bị block (private mode) — chỉ dùng memory
-    console.warn('[TMDB Cache] localStorage unavailable, using memory-only cache.', e);
-  }
-}
-
-// ============================================================
-// TMDB MOVIE LOOKUP
-// ============================================================
+// ─────────────────────────────────────────────────────────────
+// TMDB TYPES
+// ─────────────────────────────────────────────────────────────
 interface TmdbMovieInfo {
-  id:              number;
-  title:           string;
-  original_title:  string;
-  name?:           string;
-  original_name?:  string;
-  release_date?:   string;
+  id:             number;
+  title:          string;
+  original_title: string;
+  name?:          string;
+  original_name?: string;
+  media_type?:    'movie' | 'tv' | 'person';
+  release_date?:  string;
   first_air_date?: string;
-  poster_path?:    string;
-  backdrop_path?:  string;
-  overview?:       string;
-  vote_average?:   number;
+  poster_path?:   string;
+  backdrop_path?: string;
+  overview?:      string;
+  vote_average?:  number;
+  vote_count?:    number;
+  popularity?:    number;
 }
 
-async function fetchTmdbMovieInfo(
+// [FIX 8] Full detail trả về từ append_to_response
+interface TmdbFullDetail extends TmdbMovieInfo {
+  genres?:    { id: number; name: string }[];
+  runtime?:   number;
+  status?:    string;
+  tagline?:   string;
+  // credits (appended)
+  credits?: {
+    cast: { id: number; name: string; character: string; profile_path?: string }[];
+    crew: { id: number; name: string; job: string; department: string }[];
+  };
+  // videos (appended)
+  videos?: {
+    results: { id: string; key: string; site: string; type: string; official: boolean; published_at: string }[];
+  };
+  // images (appended)
+  images?: {
+    backdrops: { file_path: string; width: number; height: number; vote_average: number }[];
+    posters:   { file_path: string; width: number; height: number; vote_average: number }[];
+  };
+  // number_of_episodes / seasons (TV)
+  number_of_episodes?: number;
+  number_of_seasons?:  number;
+}
+
+const tmdbSearchCache = new TmdbCache<TmdbMovieInfo>('search');
+const tmdbDetailCache = new TmdbCache<TmdbFullDetail>('detail');
+
+// ─────────────────────────────────────────────────────────────
+// [FIX 6 + FIX 12] TMDB SEARCH — check res.ok, sanitize key,
+// score-based matching (không chỉ lấy results[0] mù quáng)
+// ─────────────────────────────────────────────────────────────
+
+/** Tính điểm match giữa tên phim tìm kiếm và kết quả TMDB */
+function scoreTmdbResult(result: TmdbMovieInfo, searchName: string, year?: string | number): number {
+  // Bỏ qua 'person' ngay
+  if (result.media_type === 'person') return -1;
+
+  const normalize = (s: string) =>
+    s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+  const query   = normalize(searchName);
+  const title   = normalize(result.title || result.name || '');
+  const origTitle = normalize(result.original_title || result.original_name || '');
+
+  let score = 0;
+
+  // Exact match → điểm cao nhất
+  if (title === query || origTitle === query) score += 100;
+  // Partial match
+  else if (title.includes(query) || query.includes(title)) score += 50;
+  else if (origTitle.includes(query) || query.includes(origTitle)) score += 40;
+  else score -= 20; // không match tên → trừ điểm
+
+  // Year match
+  if (year) {
+    const resultYear = (result.release_date || result.first_air_date || '').slice(0, 4);
+    if (resultYear === String(year)) score += 30;
+    else if (Math.abs(Number(resultYear) - Number(year)) === 1) score += 10; // lệch 1 năm
+  }
+
+  // Popularity bonus (log để không quá dominant)
+  score += Math.min(Math.log10((result.popularity || 0.1) + 1) * 10, 20);
+
+  // Vote count bonus (nhiều vote = ít sai)
+  score += Math.min((result.vote_count || 0) / 500, 5);
+
+  return score;
+}
+
+async function fetchTmdbSearch(
   movieName: string,
   year?: string | number,
 ): Promise<TmdbMovieInfo | null> {
-  const cacheKey = `${movieName}:${year || ''}`;
+  if (!TMDB_ENABLED) return null;
 
-  const cached = tmdbCacheGet(cacheKey);
-  if (cached !== undefined) return cached; // null cũng là kết quả hợp lệ (không tìm thấy)
+  // [FIX 6] Sanitize cache key — loại bỏ ký tự đặc biệt
+  const cacheKey = `${movieName.toLowerCase().replace(/[^a-z0-9\u00C0-\u024F]/g, '_')}:${year || ''}`;
+  const cached   = tmdbSearchCache.get(cacheKey);
+  if (cached !== undefined) return cached;
 
-  // [FIX 4] Xin phép rate limiter trước khi gửi request
   await tmdbRateLimiter.acquire();
 
   try {
-    const yearQuery = year ? `&year=${year}` : '';
-    const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${TMDB_KEY}&query=${encodeURIComponent(movieName)}${yearQuery}&language=vi-VN`;
-    const res  = await fetchWithTimeout(searchUrl, 5000);
-    const data = await res.json();
-    const hit  = data.results?.[0];
+    const yearParam  = year ? `&year=${year}` : '';
+    const url        = `https://api.themoviedb.org/3/search/multi?api_key=${TMDB_KEY}&query=${encodeURIComponent(movieName)}${yearParam}&language=vi-VN&include_adult=false`;
+    const res        = await fetchWithTimeout(url, 6_000);
 
-    if (!hit) {
-      tmdbCacheSet(cacheKey, null);
+    // [FIX 6] Check res.ok trước khi parse
+    if (!res.ok) {
+      if (res.status === 401) console.error('[TMDB] API key không hợp lệ hoặc đã bị thu hồi (401).');
+      else if (res.status === 429) console.warn('[TMDB] Rate limit hit (429).');
+      tmdbSearchCache.set(cacheKey, null);
       return null;
     }
 
+    const data    = await res.json();
+    const results = (data.results || []) as TmdbMovieInfo[];
+
+    if (results.length === 0) { tmdbSearchCache.set(cacheKey, null); return null; }
+
+    // [FIX 12] Score-based matching — không chỉ lấy results[0]
+    const scored = results
+      .map(r => ({ r, score: scoreTmdbResult(r, movieName, year) }))
+      .filter(x => x.score > 0) // loại kết quả có điểm âm
+      .sort((a, b) => b.score - a.score);
+
+    if (scored.length === 0) { tmdbSearchCache.set(cacheKey, null); return null; }
+
+    const best = scored[0].r;
+
     const info: TmdbMovieInfo = {
-      id:             hit.id,
-      title:          hit.title         || hit.name          || '',
-      original_title: hit.original_title || hit.original_name || '',
-      name:           hit.name          || hit.title         || '',
-      original_name:  hit.original_name  || hit.original_title || '',
-      release_date:   hit.release_date   || hit.first_air_date || '',
-      first_air_date: hit.first_air_date || hit.release_date   || '',
-      poster_path:    hit.poster_path,
-      backdrop_path:  hit.backdrop_path,
-      overview:       hit.overview,
-      vote_average:   hit.vote_average,
+      id:             best.id,
+      title:          best.title          || best.name          || '',
+      original_title: best.original_title || best.original_name || '',
+      name:           best.name           || best.title         || '',
+      original_name:  best.original_name  || best.original_title || '',
+      media_type:     best.media_type,
+      release_date:   best.release_date   || best.first_air_date || '',
+      first_air_date: best.first_air_date || best.release_date   || '',
+      poster_path:    best.poster_path,
+      backdrop_path:  best.backdrop_path,
+      overview:       best.overview,
+      vote_average:   best.vote_average,
+      vote_count:     best.vote_count,
+      popularity:     best.popularity,
     };
 
-    tmdbCacheSet(cacheKey, info);
+    tmdbSearchCache.set(cacheKey, info);
     return info;
-  } catch {
-    tmdbCacheSet(cacheKey, null);
+  } catch (err) {
+    console.warn('[TMDB] Search failed:', err);
+    tmdbSearchCache.set(cacheKey, null);
     return null;
   }
 }
 
-// ============================================================
+// ─────────────────────────────────────────────────────────────
+// [FIX 8] TMDB FULL DETAIL — 1 request với append_to_response
+// Thay vì 3-4 request riêng: /movie/{id} + /credits + /videos + /images
+// → 1 request duy nhất: /movie/{id}?append_to_response=credits,videos,images
+//
+// Theo TMDB docs: với append_to_response, 6 sub-request = 100ms
+// thay vì 464ms nếu gọi riêng lẻ
+// ─────────────────────────────────────────────────────────────
+async function fetchTmdbDetail(
+  tmdbId: number,
+  mediaType: 'movie' | 'tv',
+): Promise<TmdbFullDetail | null> {
+  if (!TMDB_ENABLED) return null;
+
+  const cacheKey = `${mediaType}_${tmdbId}`;
+  const cached   = tmdbDetailCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  await tmdbRateLimiter.acquire();
+
+  try {
+    // append_to_response: credits, videos, images — 1 request thay vì 4
+    const url = `https://api.themoviedb.org/3/${mediaType}/${tmdbId}` +
+      `?api_key=${TMDB_KEY}&language=vi-VN` +
+      `&append_to_response=credits,videos,images` +
+      `&include_image_language=vi,null,en`; // ưu tiên ảnh tiếng Việt, fallback null (ngôn ngữ gốc), rồi en
+
+    const res = await fetchWithTimeout(url, 8_000);
+
+    if (!res.ok) {
+      console.warn(`[TMDB] Detail fetch failed: HTTP ${res.status} for ${mediaType}/${tmdbId}`);
+      tmdbDetailCache.set(cacheKey, null);
+      return null;
+    }
+
+    const data: TmdbFullDetail = await res.json();
+    tmdbDetailCache.set(cacheKey, data);
+    return data;
+  } catch (err) {
+    console.warn('[TMDB] Detail fetch error:', err);
+    tmdbDetailCache.set(cacheKey, null);
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// [FIX 9] TRAILER EXTRACTION — ưu tiên: official teaser/trailer vi → en
+// ─────────────────────────────────────────────────────────────
+function extractBestTrailer(videos?: TmdbFullDetail['videos']): string {
+  if (!videos?.results?.length) return '';
+  const youtubeVideos = videos.results.filter(v => v.site === 'YouTube');
+  if (youtubeVideos.length === 0) return '';
+
+  // Ưu tiên: Official Trailer > Official Teaser > Trailer > Teaser > Clip
+  const priority = ['Trailer', 'Teaser', 'Clip', 'Featurette'];
+  for (const type of priority) {
+    const official = youtubeVideos.find(v => v.type === type && v.official);
+    if (official) return `https://www.youtube.com/watch?v=${official.key}`;
+    const any = youtubeVideos.find(v => v.type === type);
+    if (any) return `https://www.youtube.com/watch?v=${any.key}`;
+  }
+
+  // Fallback: bất kỳ YouTube video nào
+  return `https://www.youtube.com/watch?v=${youtubeVideos[0].key}`;
+}
+
+// ─────────────────────────────────────────────────────────────
+// [FIX 11] BEST BACKDROP — score ảnh theo width + vote_average
+// ─────────────────────────────────────────────────────────────
+function extractBestBackdrop(images?: TmdbFullDetail['images']): string {
+  if (!images?.backdrops?.length) return '';
+  const best = [...images.backdrops]
+    .sort((a, b) => {
+      // Score = width * 0.7 + vote_average * 0.3 (normalize về 0-1)
+      const scoreA = (a.width / 3840) * 0.7 + (a.vote_average / 10) * 0.3;
+      const scoreB = (b.width / 3840) * 0.7 + (b.vote_average / 10) * 0.3;
+      return scoreB - scoreA;
+    })[0];
+  return `https://image.tmdb.org/t/p/original${best.file_path}`;
+}
+
+function extractBestPoster(images?: TmdbFullDetail['images']): string {
+  if (!images?.posters?.length) return '';
+  const best = [...images.posters]
+    .sort((a, b) => (b.vote_average - a.vote_average) || (b.width - a.width))[0];
+  return `https://image.tmdb.org/t/p/original${best.file_path}`;
+}
+
+// ─────────────────────────────────────────────────────────────
 // IMAGE URL HELPERS
-// ============================================================
+// ─────────────────────────────────────────────────────────────
 export const PLACEHOLDER_URL = `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" width="300" height="450" viewBox="0 0 300 450">
   <rect width="300" height="450" fill="#121212"/>
@@ -386,33 +528,37 @@ export const PLACEHOLDER_URL = `data:image/svg+xml;utf8,${encodeURIComponent(`
 </svg>
 `)}`;
 
-export const getImageUrl = (
-  path: string,
-  type: 'poster' | 'banner' = 'poster',
-): string => {
+/** [FIX 11] Điều kiện cần upgrade ảnh — rộng hơn, không chỉ 'ophim' */
+function needsImageUpgrade(url: string): boolean {
+  if (!url || url === PLACEHOLDER_URL) return true;
+  if (url.startsWith('data:')) return true;
+  // Ảnh từ phimimg.com thường là thumbnail thấp chất lượng
+  if (url.includes('phimimg.com') && !url.includes('original')) return true;
+  // Ảnh ophim
+  if (url.includes('ophim') || url.includes('img.ophim')) return true;
+  // Ảnh TMDB kích thước thấp (w185, w300, w342, w500)
+  if (url.includes('image.tmdb.org') && /\/w(185|300|342|500)\//.test(url)) return true;
+  return false;
+}
+
+export const getImageUrl = (path: string, _type: 'poster' | 'banner' = 'poster'): string => {
   if (!path) return PLACEHOLDER_URL;
-  if (path.includes('image.tmdb.org'))            return upgradeImageUrl(path);
-  if (path.includes('phimapi.com/image.php'))     return path;
-  if (path.includes('ophim.live') || path.includes('img.ophim')) {
-    return upgradeImageUrl(path);
-  }
+  if (path.includes('image.tmdb.org'))        return upgradeImageUrl(path);
+  if (path.includes('phimapi.com/image.php')) return path;
+  if (path.includes('ophim.live') || path.includes('img.ophim')) return upgradeImageUrl(path);
   if (path.includes('upload/vod/') || !path.startsWith('http')) {
     const fullUrl = path.startsWith('http')
       ? path
-      : path.startsWith('/')
-        ? `https://phimimg.com${path}`
-        : `https://phimimg.com/${path}`;
+      : path.startsWith('/') ? `https://phimimg.com${path}` : `https://phimimg.com/${path}`;
     return `https://phimapi.com/image.php?url=${fullUrl}`;
   }
-  if (path.includes('phimimg.com')) {
-    return `https://phimapi.com/image.php?url=${path}`;
-  }
+  if (path.includes('phimimg.com')) return `https://phimapi.com/image.php?url=${path}`;
   return path;
 };
 
-// ============================================================
+// ─────────────────────────────────────────────────────────────
 // DATA NORMALIZATION
-// ============================================================
+// ─────────────────────────────────────────────────────────────
 export interface NormalizedMovie {
   _id:             string;
   slug:            string;
@@ -433,82 +579,86 @@ export interface NormalizedMovie {
   country:         { id: string; name: string; slug: string }[];
   actor:           string[];
   director:        string[];
-  tmdb?:           { id?: string; type?: string; vote_average?: number; title?: string; original_title?: string };
+  tmdb?:           {
+    id?:            string;
+    type?:          string;
+    vote_average?:  number;
+    vote_count?:    number;
+    title?:         string;
+    original_title?: string;
+    genres?:        string[];
+    runtime?:       number;
+  };
   trailer_url:     string;
   _source:         'primary' | 'fallback';
 }
 
 function normalizePrimary(raw: any): NormalizedMovie {
-  const movie = raw.movie || raw;
+  const m = raw.movie || raw;
   return {
-    _id:             movie._id           || movie.id || '',
-    slug:            movie.slug          || '',
-    name:            movie.name          || '',
-    origin_name:     movie.origin_name   || movie.name || '',
-    poster_url:      getImageUrl(movie.poster_url || movie.thumb_url, 'poster'),
-    thumb_url:       getImageUrl(movie.thumb_url  || movie.poster_url, 'banner'),
-    description:     movie.content       || movie.description || '',
-    content:         movie.content       || movie.description || '',
-    year:            movie.year          || '',
-    quality:         movie.quality       || 'HD',
-    lang:            movie.lang          || 'Vietsub',
-    time:            movie.time          || '',
-    episode_current: movie.episode_current || 'Full',
-    episode_total:   movie.episode_total   || '1',
-    type:            movie.type          || 'movie',
-    category:        normalizeCategories(movie.category),
-    country:         normalizeCountries(movie.country),
-    actor:           Array.isArray(movie.actor)    ? movie.actor    : [],
-    director:        Array.isArray(movie.director) ? movie.director : (movie.director ? [movie.director] : []),
-    tmdb:            movie.tmdb          || undefined,
-    trailer_url:     movie.trailer_url   || '',
+    _id:             m._id             || m.id    || '',
+    slug:            m.slug            || '',
+    name:            m.name            || '',
+    origin_name:     m.origin_name     || m.name  || '',
+    poster_url:      getImageUrl(m.poster_url || m.thumb_url, 'poster'),
+    thumb_url:       getImageUrl(m.thumb_url  || m.poster_url, 'banner'),
+    description:     m.content         || m.description || '',
+    content:         m.content         || m.description || '',
+    year:            m.year            || '',
+    quality:         m.quality         || 'HD',
+    lang:            m.lang            || 'Vietsub',
+    time:            m.time            || '',
+    episode_current: m.episode_current || 'Full',
+    episode_total:   m.episode_total   || '1',
+    type:            m.type            || 'movie',
+    category:        normalizeCategories(m.category),
+    country:         normalizeCountries(m.country),
+    actor:           Array.isArray(m.actor)    ? m.actor    : [],
+    director:        Array.isArray(m.director) ? m.director : (m.director ? [m.director] : []),
+    tmdb:            m.tmdb            || undefined,
+    trailer_url:     m.trailer_url     || '',
     _source:         'primary',
   };
 }
 
 function normalizeFallback(raw: any): NormalizedMovie {
-  const movie    = raw.movie || raw;
-  const rawPoster = movie.poster_url || movie.thumb_url || '';
-  const rawThumb  = movie.thumb_url  || movie.poster_url || '';
-
+  const m         = raw.movie || raw;
+  const rawPoster = m.poster_url || m.thumb_url || '';
+  const rawThumb  = m.thumb_url  || m.poster_url || '';
   return {
-    _id:             movie._id           || movie.id || '',
-    slug:            movie.slug          || '',
-    name:            movie.name          || '',
-    origin_name:     movie.original_name || movie.origin_name || movie.name || '',
+    _id:             m._id             || m.id    || '',
+    slug:            m.slug            || '',
+    name:            m.name            || '',
+    origin_name:     m.original_name   || m.origin_name || m.name || '',
     poster_url:      upgradeImageUrl(getImageUrl(rawPoster, 'poster')),
     thumb_url:       upgradeImageUrl(getImageUrl(rawThumb,  'banner')),
-    description:     movie.content       || movie.description || '',
-    content:         movie.content       || movie.description || '',
-    year:            movie.year          || '',
-    quality:         movie.quality       || 'HD',
-    lang:            movie.lang          || movie.language || 'Vietsub',
-    time:            movie.time          || movie.duration || '',
-    episode_current: movie.episode_current || movie.current_episode || 'Full',
-    episode_total:   movie.episode_total   || movie.total_episodes  || '1',
-    type:            movie.type          || (movie.category?.includes('series') ? 'series' : 'movie'),
-    category:        normalizeCategories(movie.category),
-    country:         normalizeCountries(movie.country),
-    actor:           Array.isArray(movie.actor)    ? movie.actor    : [],
-    director:        Array.isArray(movie.director) ? movie.director : (movie.director ? [movie.director] : []),
+    description:     m.content         || m.description || '',
+    content:         m.content         || m.description || '',
+    year:            m.year            || '',
+    quality:         m.quality         || 'HD',
+    lang:            m.lang            || m.language || 'Vietsub',
+    time:            m.time            || m.duration || '',
+    episode_current: m.episode_current || m.current_episode || 'Full',
+    episode_total:   m.episode_total   || m.total_episodes  || '1',
+    type:            m.type            || (Array.isArray(m.category) && m.category.some((c: any) => c.slug === 'phim-bo') ? 'series' : 'movie'),
+    category:        normalizeCategories(m.category),
+    country:         normalizeCountries(m.country),
+    actor:           Array.isArray(m.actor)    ? m.actor    : [],
+    director:        Array.isArray(m.director) ? m.director : (m.director ? [m.director] : []),
     tmdb:            undefined,
-    trailer_url:     movie.trailer_url   || '',
+    trailer_url:     m.trailer_url     || '',
     _source:         'fallback',
   };
 }
 
-/**
- * [FIX 1] Helper — chọn đúng normalizer theo source
- * Dùng hàm này thay vì hard-code normalizePrimary ở mọi nơi
- */
+// [FIX 1]
 function normalizeBySource(raw: any, source: 'primary' | 'fallback'): NormalizedMovie {
   return source === 'primary' ? normalizePrimary(raw) : normalizeFallback(raw);
 }
 
 function normalizeCategories(raw: any): NormalizedMovie['category'] {
   if (!raw) return [];
-  const arr = Array.isArray(raw) ? raw : Object.values(raw);
-  return arr.map((c: any) => ({
+  return (Array.isArray(raw) ? raw : Object.values(raw)).map((c: any) => ({
     id:   c.id   || c._id  || c.slug || '',
     name: c.name || c.label || '',
     slug: c.slug || c.id   || '',
@@ -517,225 +667,284 @@ function normalizeCategories(raw: any): NormalizedMovie['category'] {
 
 function normalizeCountries(raw: any): NormalizedMovie['country'] {
   if (!raw) return [];
-  const arr = Array.isArray(raw) ? raw : Object.values(raw);
-  return arr.map((c: any) => ({
+  return (Array.isArray(raw) ? raw : Object.values(raw)).map((c: any) => ({
     id:   c.id   || c._id  || c.slug || '',
     name: c.name || c.label || '',
     slug: c.slug || c.id   || '',
   }));
 }
 
-// ============================================================
+// ─────────────────────────────────────────────────────────────
 // CORE FETCH
-// ============================================================
+// ─────────────────────────────────────────────────────────────
 async function apiFetch(endpoint: string): Promise<{ data: any; source: 'primary' | 'fallback' }> {
-  let attemptPromise: Promise<{ res: Response; source: 'primary' | 'fallback' }>;
+  const attempt = apiState.usingFallback
+    ? fetchWithRetry(`${FALLBACK_URL}${endpoint}`, {}, 2, PRIMARY_TIMEOUT)
+        .then(res => ({ res, source: 'fallback' as const }))
+        .catch(e => { console.warn('[API] Fallback failed, trying parallel:', e); return parallelFetch(endpoint); })
+    : parallelFetch(endpoint);
 
-  if (apiState.usingFallback) {
-    attemptPromise = fetchWithRetry(`${FALLBACK_URL}${endpoint}`, {}, 2, PRIMARY_TIMEOUT)
-      .then(res => ({ res, source: 'fallback' as const }))
-      .catch(e => {
-        console.warn('[API] Fallback failed even with retries, trying parallel fetch:', e);
-        return parallelFetch(endpoint);
-      });
-  } else {
-    attemptPromise = parallelFetch(endpoint);
-  }
-
-  const { res, source } = await attemptPromise;
+  const { res, source } = await attempt;
   const data = await res.json();
   return { data, source };
 }
 
-// ============================================================
+// ─────────────────────────────────────────────────────────────
 // PUBLIC API
-// ============================================================
+// ─────────────────────────────────────────────────────────────
 export const api = {
-  // [FIX 1] Dùng normalizeBySource thay vì hard-code normalizePrimary
-  getNewUpdated: async (page = 1) => {
-    return fetchWithCache(`new-updated:${page}`, async () => {
+  getNewUpdated: async (page = 1) =>
+    fetchWithCache(`new-updated:${page}`, async () => {
       const { data, source } = await apiFetch(`/danh-sach/phim-moi-cap-nhat?page=${page}`);
       return {
-        items:      (data.items || data.data?.items || []).map((item: any) => normalizeBySource(item, source)),
+        items:      (data.items || data.data?.items || []).map((i: any) => normalizeBySource(i, source)),
         pagination: data.pagination || data.data?.pagination,
       };
-    }, TTL.NEW_UPDATED);
-  },
+    }, TTL.NEW_UPDATED),
 
-  getByCategory: async (slug: string, page = 1) => {
-    return fetchWithCache(`category:${slug}:${page}`, async () => {
+  getByCategory: async (slug: string, page = 1) =>
+    fetchWithCache(`category:${slug}:${page}`, async () => {
       const { data, source } = await apiFetch(`/v1/api/danh-sach/${slug}?page=${page}`);
       const items = data.data?.items || data.items || [];
-      return {
-        items:      items.map((item: any) => normalizeBySource(item, source)),
-        pagination: data.data?.pagination,
-      };
-    }, TTL.CATEGORY_LIST);
-  },
+      return { items: items.map((i: any) => normalizeBySource(i, source)), pagination: data.data?.pagination };
+    }, TTL.CATEGORY_LIST),
 
-  getMovieDetail: async (slug: string) => {
-    return fetchWithCache(`detail:tmdb:${slug}`, async () => {
-      // === GIAI ĐOẠN 1: Lấy dữ liệu chính ===
+  // ───────────────────────────────────────────────────────────
+  // [FIX 8 + 9 + 10 + 11] getMovieDetail — TMDB FIRST, nâng cấp toàn diện
+  // Luồng:
+  //   1. Fetch phimapi (source data + episodes) song song với TMDB search
+  //   2. Từ TMDB id → 1 request append_to_response (credits+videos+images)
+  //   3. Merge: phimapi cung cấp slug/episodes, TMDB cung cấp chất lượng data
+  //   4. Fallback sạch khi TMDB unavailable
+  // ───────────────────────────────────────────────────────────
+  getMovieDetail: async (slug: string) =>
+    fetchWithCache(`detail:v2:${slug}`, async () => {
+      // ── STAGE 1: Fetch phimapi + TMDB search SONG SONG ──────
+      // [FIX 10] Không gọi apiFetch 2 lần — chỉ 1 lần, lỗi thì null
+      const [phimapiResult, _] = await Promise.allSettled([
+        apiFetch(`/phim/${slug}`),
+        Promise.resolve(), // placeholder để allSettled
+      ]);
+
       let primaryData: any    = null;
       let primarySource: 'primary' | 'fallback' = 'primary';
 
-      try {
-        const result  = await apiFetch(`/phim/${slug}`);
-        primaryData   = result.data;
-        primarySource = result.source;
-      } catch (err) {
-        console.warn('[API] Không thể lấy dữ liệu từ phimapi, sẽ thử fallback:', err);
-      }
-
-      // === GIAI ĐOẠN 2: Lấy thông tin từ TMDB ===
-      const rawMovie  = primaryData?.movie || primaryData || {};
-      const searchName = rawMovie.name || rawMovie.origin_name || rawMovie.title || '';
-      const searchYear = rawMovie.year || '';
-
-      let tmdbInfo: TmdbMovieInfo | null = null;
-      if (searchName) {
-        tmdbInfo = await Promise.race([
-          fetchTmdbMovieInfo(searchName, searchYear),
-          new Promise<null>(resolve => setTimeout(() => resolve(null), 2000)),
-        ]);
-      }
-
-      // === GIAI ĐOẠN 3: Normalize đúng theo source ===
-      let normalized: NormalizedMovie;
-
-      if (primaryData) {
-        // [FIX 1] dùng normalizeBySource thay vì if/else thủ công
-        normalized = normalizeBySource(primaryData, primarySource);
-
-        if (tmdbInfo) {
-          const vietnameseName = tmdbInfo.name  || tmdbInfo.title;
-          const originalName   = tmdbInfo.original_title || tmdbInfo.original_name || tmdbInfo.title;
-          if (vietnameseName) normalized.name        = vietnameseName;
-          if (originalName)   normalized.origin_name = originalName;
-          if (!normalized.year && tmdbInfo.release_date) {
-            normalized.year = tmdbInfo.release_date.split('-')[0];
-          }
-          if (!normalized.description && tmdbInfo.overview) {
-            normalized.description = tmdbInfo.overview;
-            normalized.content     = tmdbInfo.overview;
-          }
-          normalized.tmdb = {
-            id:             String(tmdbInfo.id),
-            type:           tmdbInfo.name ? 'tv' : 'movie',
-            vote_average:   tmdbInfo.vote_average,
-            title:          tmdbInfo.title,
-            original_title: tmdbInfo.original_title,
-          };
-        }
+      if (phimapiResult.status === 'fulfilled') {
+        primaryData   = phimapiResult.value.data;
+        primarySource = phimapiResult.value.source;
       } else {
-        // Fallback nặng — thử lần 2
-        try {
-          const fallbackResult = await apiFetch(`/phim/${slug}`);
-          normalized = normalizeBySource(fallbackResult.data, fallbackResult.source);
-          if (tmdbInfo) {
-            normalized.name        = tmdbInfo.name  || tmdbInfo.title || normalized.name;
-            normalized.origin_name = tmdbInfo.original_title || tmdbInfo.original_name || normalized.origin_name;
+        console.warn('[API] phimapi fetch failed:', (phimapiResult as PromiseRejectedResult).reason);
+      }
+
+      // ── STAGE 2: TMDB search (parallel với normalize) ──────
+      const rawMovie   = primaryData?.movie || primaryData || {};
+      const searchName = rawMovie.name || rawMovie.origin_name || rawMovie.title || '';
+      const searchYear = String(rawMovie.year || '');
+
+      // Chạy song song: normalize phimapi data + search TMDB
+      // Nếu phimapi đã có tmdb.id → bỏ qua search, dùng trực tiếp
+      const existingTmdbId   = rawMovie.tmdb?.id;
+      const existingTmdbType = (rawMovie.tmdb?.type || 'movie') as 'movie' | 'tv';
+
+      let tmdbSearch: TmdbMovieInfo | null = null;
+
+      if (TMDB_ENABLED) {
+        if (existingTmdbId) {
+          // Phimapi đã cung cấp TMDB ID → bỏ qua search step
+          tmdbSearch = { id: Number(existingTmdbId), title: rawMovie.name || '', original_title: '', media_type: existingTmdbType };
+        } else if (searchName) {
+          // Timeout 4s (tăng từ 2s) — search với tên tiếng Anh nếu có
+          const searchPromises = [fetchTmdbSearch(searchName, searchYear)];
+          if (rawMovie.origin_name && rawMovie.origin_name !== searchName) {
+            searchPromises.push(fetchTmdbSearch(rawMovie.origin_name, searchYear));
           }
-        } catch {
-          throw new Error(`Không thể lấy dữ liệu phim "${slug}" từ cả hai nguồn`);
+
+          const searchResults = await Promise.race([
+            Promise.any(searchPromises.map(p => p.then(r => r ?? Promise.reject('null')))),
+            new Promise<null>(r => setTimeout(() => r(null), 4_000)),
+          ]);
+          tmdbSearch = searchResults as TmdbMovieInfo | null;
         }
       }
 
-      // === GIAI ĐOẠN 4: Cải thiện ảnh từ TMDB ===
-      if (tmdbInfo) {
-        if (tmdbInfo.poster_path   && (normalized.poster_url.includes('ophim') || normalized.poster_url === PLACEHOLDER_URL)) {
-          normalized.poster_url = `https://image.tmdb.org/t/p/original${tmdbInfo.poster_path}`;
+      // ── STAGE 3: Fetch TMDB full detail (append_to_response) ──
+      let tmdbDetail: TmdbFullDetail | null = null;
+
+      if (tmdbSearch?.id && TMDB_ENABLED) {
+        const mediaType = (tmdbSearch.media_type === 'tv' || existingTmdbType === 'tv') ? 'tv' : 'movie';
+        // [FIX 8] 1 request thay vì 3-4 request riêng lẻ
+        tmdbDetail = await fetchTmdbDetail(tmdbSearch.id, mediaType);
+      }
+
+      // ── STAGE 4: Normalize phimapi data ──────────────────────
+      if (!primaryData) {
+        // [FIX 10] Không gọi lại apiFetch — throw ngay nếu không có data
+        throw new Error(`Không thể lấy dữ liệu phim "${slug}"`);
+      }
+
+      const normalized = normalizeBySource(primaryData, primarySource);
+
+      // ── STAGE 5: Merge TMDB data vào normalized ──────────────
+      if (tmdbDetail) {
+        const tmdbInfo = tmdbSearch!;
+
+        // Tên — ưu tiên giữ tên tiếng Việt từ phimapi nếu đã có
+        if (!normalized.name && (tmdbDetail.name || tmdbDetail.title)) {
+          normalized.name = tmdbDetail.name || tmdbDetail.title || normalized.name;
         }
-        if (tmdbInfo.backdrop_path && (normalized.thumb_url.includes('ophim')  || normalized.thumb_url  === PLACEHOLDER_URL)) {
-          normalized.thumb_url  = `https://image.tmdb.org/t/p/original${tmdbInfo.backdrop_path}`;
+        if (tmdbDetail.original_title || tmdbDetail.original_name) {
+          normalized.origin_name = tmdbDetail.original_title || tmdbDetail.original_name || normalized.origin_name;
         }
+
+        // Năm
+        if (!normalized.year) {
+          const tmdbYear = (tmdbDetail.release_date || tmdbDetail.first_air_date || '').slice(0, 4);
+          if (tmdbYear) normalized.year = tmdbYear;
+        }
+
+        // Description — TMDB overview nếu phimapi thiếu
+        if (!normalized.description && tmdbDetail.overview) {
+          normalized.description = tmdbDetail.overview;
+          normalized.content     = tmdbDetail.overview;
+        }
+
+        // Runtime (TV: dùng number_of_episodes nếu có)
+        if (!normalized.time) {
+          if (tmdbDetail.runtime) normalized.time = `${tmdbDetail.runtime} phút`;
+          else if (tmdbDetail.number_of_episodes) normalized.time = `${tmdbDetail.number_of_episodes} tập`;
+        }
+
+        // [FIX 9] Trailer — lấy từ TMDB videos
+        if (!normalized.trailer_url) {
+          normalized.trailer_url = extractBestTrailer(tmdbDetail.videos);
+        }
+
+        // Cast từ TMDB credits (nếu phimapi thiếu)
+        if (!normalized.actor.length && tmdbDetail.credits?.cast) {
+          normalized.actor = tmdbDetail.credits.cast.slice(0, 10).map(c => c.name);
+        }
+
+        // Director từ TMDB credits
+        if (!normalized.director.length && tmdbDetail.credits?.crew) {
+          const directors = tmdbDetail.credits.crew
+            .filter(c => c.job === 'Director')
+            .map(c => c.name);
+          if (directors.length) normalized.director = directors;
+        }
+
+        // TMDB metadata
+        normalized.tmdb = {
+          id:            String(tmdbInfo.id),
+          type:          tmdbSearch!.media_type || (primarySource === 'primary' ? normalized.type : 'movie'),
+          vote_average:  tmdbDetail.vote_average,
+          vote_count:    tmdbDetail.vote_count,
+          title:         tmdbDetail.title || tmdbDetail.name,
+          original_title: tmdbDetail.original_title || tmdbDetail.original_name,
+          genres:        tmdbDetail.genres?.map(g => g.name) || [],
+          runtime:       tmdbDetail.runtime,
+        };
+
+        // [FIX 11] Ảnh — điều kiện upgrade rộng hơn + score-based
+        const bestBackdrop = extractBestBackdrop(tmdbDetail.images);
+        const bestPoster   = extractBestPoster(tmdbDetail.images);
+        // Fallback về poster_path/backdrop_path nếu images rỗng
+        const tmdbPoster   = bestPoster   || (tmdbDetail.poster_path   ? `https://image.tmdb.org/t/p/original${tmdbDetail.poster_path}`   : '');
+        const tmdbBackdrop = bestBackdrop || (tmdbDetail.backdrop_path ? `https://image.tmdb.org/t/p/original${tmdbDetail.backdrop_path}` : '');
+
+        if (tmdbPoster   && needsImageUpgrade(normalized.poster_url)) normalized.poster_url = tmdbPoster;
+        if (tmdbBackdrop && needsImageUpgrade(normalized.thumb_url))  normalized.thumb_url  = tmdbBackdrop;
+
+      } else if (tmdbSearch) {
+        // Có search result nhưng detail fetch fail — dùng search data tối thiểu
+        if (!normalized.year && tmdbSearch.release_date) {
+          normalized.year = tmdbSearch.release_date.slice(0, 4);
+        }
+        if (!normalized.description && tmdbSearch.overview) {
+          normalized.description = tmdbSearch.overview;
+          normalized.content     = tmdbSearch.overview;
+        }
+        normalized.tmdb = {
+          id:           String(tmdbSearch.id),
+          type:         tmdbSearch.media_type || normalized.type,
+          vote_average: tmdbSearch.vote_average,
+          vote_count:   tmdbSearch.vote_count,
+        };
+        if (tmdbSearch.poster_path   && needsImageUpgrade(normalized.poster_url))
+          normalized.poster_url = `https://image.tmdb.org/t/p/original${tmdbSearch.poster_path}`;
+        if (tmdbSearch.backdrop_path && needsImageUpgrade(normalized.thumb_url))
+          normalized.thumb_url  = `https://image.tmdb.org/t/p/original${tmdbSearch.backdrop_path}`;
       }
 
       return {
-        movie:      normalized,
-        episodes:   primaryData?.episodes || [],
-        _tmdb_used: !!tmdbInfo,
-        _source:    primarySource,
+        movie:       normalized,
+        episodes:    primaryData?.episodes || [],
+        _tmdb_used:  !!tmdbDetail,
+        _tmdb_id:    tmdbSearch?.id,
+        _source:     primarySource,
       };
-    }, TTL.MOVIE_DETAIL);
-  },
+    }, TTL.MOVIE_DETAIL),
 
-  getByGenre: async (slug: string, page = 1) => {
-    return fetchWithCache(`genre:${slug}:${page}`, async () => {
+  getByGenre: async (slug: string, page = 1) =>
+    fetchWithCache(`genre:${slug}:${page}`, async () => {
       const { data, source } = await apiFetch(`/v1/api/the-loai/${slug}?page=${page}`);
       const items = data.data?.items || data.items || [];
-      return {
-        items:      items.map((item: any) => normalizeBySource(item, source)),
-        pagination: data.data?.pagination,
-      };
-    }, TTL.CATEGORY_LIST);
-  },
+      return { items: items.map((i: any) => normalizeBySource(i, source)), pagination: data.data?.pagination };
+    }, TTL.CATEGORY_LIST),
 
-  getByCountry: async (slug: string, page = 1) => {
-    return fetchWithCache(`country:${slug}:${page}`, async () => {
+  getByCountry: async (slug: string, page = 1) =>
+    fetchWithCache(`country:${slug}:${page}`, async () => {
       const { data, source } = await apiFetch(`/v1/api/quoc-gia/${slug}?page=${page}`);
       const items = data.data?.items || data.items || [];
-      return {
-        items:      items.map((item: any) => normalizeBySource(item, source)),
-        pagination: data.data?.pagination,
-      };
-    }, TTL.CATEGORY_LIST);
-  },
+      return { items: items.map((i: any) => normalizeBySource(i, source)), pagination: data.data?.pagination };
+    }, TTL.CATEGORY_LIST),
 
-  getByYear: async (year: string, page = 1) => {
-    return fetchWithCache(`year:${year}:${page}`, async () => {
+  getByYear: async (year: string, page = 1) =>
+    fetchWithCache(`year:${year}:${page}`, async () => {
       const { data, source } = await apiFetch(`/v1/api/nam/${year}?page=${page}`);
       const items = data.data?.items || data.items || [];
-      return {
-        items:      items.map((item: any) => normalizeBySource(item, source)),
-        pagination: data.data?.pagination,
-      };
-    }, TTL.CATEGORY_LIST);
-  },
+      return { items: items.map((i: any) => normalizeBySource(i, source)), pagination: data.data?.pagination };
+    }, TTL.CATEGORY_LIST),
 
-  search: async (keyword: string, page = 1, limit = 64) => {
-    return fetchWithCache(`search:${keyword}:${page}:${limit}`, async () => {
+  search: async (keyword: string, page = 1, limit = 64) =>
+    fetchWithCache(`search:${keyword}:${page}:${limit}`, async () => {
       const { data, source } = await apiFetch(`/v1/api/tim-kiem?keyword=${encodeURIComponent(keyword)}&page=${page}&limit=${limit}`);
       const items      = data.data?.items || data.items || [];
       const pagination = data.data?.params?.pagination || data.pagination || null;
-      return {
-        items:      items.map((item: any) => normalizeBySource(item, source)),
-        pagination,
-      };
-    }, TTL.SEARCH);
-  },
+      return { items: items.map((i: any) => normalizeBySource(i, source)), pagination };
+    }, TTL.SEARCH),
 
   getApiStatus: () => ({
     usingFallback:    apiState.usingFallback,
     primaryDeadSince: apiState.primaryDeadSince,
     consecutiveFails: apiState.consecutiveFails,
     currentSource:    apiState.usingFallback ? 'ophim1.com' : 'phimapi.com',
+    tmdbEnabled:      TMDB_ENABLED,
   }),
 
+  // [FIX 7] Dùng /trending/movie (không trả 'person') thay vì /trending/all
   getTrendingFromTMDB: async () => {
-    // [FIX 4] Rate limiter cho trending call
+    if (!TMDB_ENABLED) return [];
     await tmdbRateLimiter.acquire();
     try {
       const res  = await fetchWithRetry(
-        `https://api.themoviedb.org/3/trending/all/day?api_key=${TMDB_KEY}&language=vi-VN`,
-        {},
-        2,
-        6000,
+        `https://api.themoviedb.org/3/trending/movie/day?api_key=${TMDB_KEY}&language=vi-VN`,
+        {}, 2, 6_000,
       );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      return data.results.map((m: any): Partial<NormalizedMovie> => ({
+      return (data.results || []).map((m: any): Partial<NormalizedMovie> => ({
         _id:         m.id.toString(),
-        name:        m.title        || m.name,
+        name:        m.title          || m.name,
         origin_name: m.original_title || m.original_name,
         thumb_url:   m.poster_path   ? `https://image.tmdb.org/t/p/w500${m.poster_path}`    : PLACEHOLDER_URL,
         poster_url:  m.backdrop_path ? `https://image.tmdb.org/t/p/w1280${m.backdrop_path}` : PLACEHOLDER_URL,
-        year:        m.release_date?.split('-')[0] || m.first_air_date?.split('-')[0] || '',
+        year:        (m.release_date || m.first_air_date || '').slice(0, 4),
         description: m.overview || '',
         slug:        `search?q=${encodeURIComponent(m.title || m.name)}`,
-        _source:     'primary',
+        _source:     'primary' as const,
       }));
     } catch (err) {
-      console.error('[Trending] TMDB getTrendingFromTMDB failed completely:', err);
+      console.error('[Trending] TMDB fetch failed:', err);
       return [];
     }
   },
