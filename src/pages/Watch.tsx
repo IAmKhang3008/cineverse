@@ -211,7 +211,7 @@ export default function Watch() {
           )}
         >
           <iframe
-            src={getCleanedEmbedUrl(currentEpisode.link_embed)}
+            src={getCleanedEmbedUrl(currentEpisode.link_embed) || null}
             title={currentEpisode.name}
             className="w-full h-full"
             allowFullScreen
@@ -400,6 +400,7 @@ export default function Watch() {
                         src={getImageUrl(m.poster_url || m.thumb_url, 'poster')} 
                         alt={m.name}
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                        referrerPolicy="no-referrer"
                       />
                     </div>
                     <div className="flex flex-col justify-center">

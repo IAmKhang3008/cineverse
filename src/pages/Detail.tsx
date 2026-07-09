@@ -91,6 +91,7 @@ const LazyImage = ({ src, alt, className }: { src: string; alt: string; classNam
       src={(loaded && src) ? src : CAST_PLACEHOLDER}
       alt={alt}
       className={className}
+      referrerPolicy="no-referrer"
     />
   );
 };
@@ -379,13 +380,66 @@ export default function Detail() {
     };
   }, [movie, hasFetchedRelated, slug]);
 
-  // 🚀 TỐI ƯU: Gộp 3 request TMDb thành 1 request duy nhất và mở rộng kho ảnh quốc tế
+  // 🚀 TỐI ƯU: Ưu tiên lấy peoples và images từ phimapi, fallback sang TMDb khi cần
   useEffect(() => {
     if (!movie) return;
     
     const fetchTMDBData = async () => {
       setLoadingCast(true);
       setLoadingImages(true);
+      
+      let gotPeoples = false;
+      let gotImages = false;
+
+      try {
+        // Thử lấy dữ liệu từ phimapi peoples & images trước để tránh dính limit hoặc lỗi API key TMDB
+        const [peoplesData, imagesData] = await Promise.all([
+          api.getMoviePeoples(movie.slug).catch(() => null),
+          api.getMovieImages(movie.slug).catch(() => null)
+        ]);
+
+        if (peoplesData && peoplesData.peoples && peoplesData.peoples.length > 0) {
+          const castList = peoplesData.peoples.filter((p: any) => p.name);
+          if (castList.length > 0) {
+            setCast(castList.slice(0, 12));
+            gotPeoples = true;
+          }
+        }
+
+        if (imagesData && imagesData.images && imagesData.images.length > 0) {
+          const uniqueImages = imagesData.images.filter((img: any, index: number, self: any[]) =>
+            self.findIndex((i: any) => i.file_path === img.file_path) === index
+          );
+          if (uniqueImages.length > 0) {
+            setImages(uniqueImages.slice(0, 16));
+            gotImages = true;
+          }
+        }
+
+        if (movie.tmdb?.vote_average) {
+          let formattedVotes = '';
+          if (movie.tmdb.vote_count) {
+            formattedVotes = Number(movie.tmdb.vote_count) >= 1000 
+              ? `${(Number(movie.tmdb.vote_count) / 1000).toFixed(1)}K` 
+              : `${movie.tmdb.vote_count}`;
+          }
+          setRating({
+            source: 'TMDb',
+            score: Number(movie.tmdb.vote_average).toFixed(1),
+            votes: formattedVotes
+          });
+        }
+      } catch (err) {
+        console.warn("[API] Failed to fetch peoples/images from phimapi:", err);
+      }
+
+      // Nếu đã lấy đầy đủ, không cần fetch trực tiếp từ TMDB
+      if (gotPeoples && gotImages) {
+        setLoadingCast(false);
+        setLoadingImages(false);
+        return;
+      }
+
       const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
       
       try {
@@ -414,7 +468,7 @@ export default function Detail() {
         const combinedData = await fetchWithCache(`tmdb_combined_${tmdbType}_${tmdbId}`, () => fetch(combinedUrl).then(r => r.json()), TTL.TMDB_STATIC);
 
         // Bước 3: Phân phối dữ liệu vào các state an toàn
-        if (combinedData.vote_average) {
+        if (!rating && combinedData.vote_average) {
           let formattedVotes = '';
           if (combinedData.vote_count) {
             formattedVotes = combinedData.vote_count >= 1000 
@@ -428,27 +482,29 @@ export default function Detail() {
           });
         }
 
-        if (combinedData.credits?.cast) {
+        if (!gotPeoples && combinedData.credits?.cast) {
           setCast(combinedData.credits.cast.slice(0, 12));
         }
 
-        // Xử lý kho ảnh mở rộng: Lấy cả backdrops (ảnh ngang) và stills (ảnh phân cảnh) nếu có
-        let extendedImages: any[] = [];
-        if (combinedData.images?.backdrops?.length > 0) {
-          extendedImages = [...combinedData.images.backdrops];
-        }
-        
-        // Nếu là phim bộ (TV Series), lấy thêm ảnh từ các phần để làm phong phú kho ảnh
-        if (combinedData.images?.posters?.length > 0 && extendedImages.length < 5) {
-          extendedImages = [...extendedImages, ...combinedData.images.posters];
-        }
+        if (!gotImages) {
+          // Xử lý kho ảnh mở rộng: Lấy cả backdrops (ảnh ngang) và stills (ảnh phân cảnh) nếu có
+          let extendedImages: any[] = [];
+          if (combinedData.images?.backdrops?.length > 0) {
+            extendedImages = [...combinedData.images.backdrops];
+          }
+          
+          // Nếu là phim bộ (TV Series), lấy thêm ảnh từ các phần để làm phong phú kho ảnh
+          if (combinedData.images?.posters?.length > 0 && extendedImages.length < 5) {
+            extendedImages = [...extendedImages, ...combinedData.images.posters];
+          }
 
-        // Lọc trùng và giới hạn tối đa 16 tấm ảnh chất lượng cao nhất
-        const uniqueImages = extendedImages.filter((img, index, self) =>
-          self.findIndex(i => i.file_path === img.file_path) === index
-        );
+          // Lọc trùng và giới hạn tối đa 16 tấm ảnh chất lượng cao nhất
+          const uniqueImages = extendedImages.filter((img, index, self) =>
+            self.findIndex(i => i.file_path === img.file_path) === index
+          );
 
-        setImages(uniqueImages.slice(0, 16));
+          setImages(uniqueImages.slice(0, 16));
+        }
 
       } catch (error) {
         // Ghi nhận cảnh báo nhẹ, tránh console.error làm đỏ log hệ thống giám sát
@@ -529,7 +585,7 @@ export default function Detail() {
               <X className="w-6 h-6" />
             </button>
             <iframe
-              src={getTrailerUrl(movie.trailer_url) || ''}
+              src={getTrailerUrl(movie.trailer_url) || null}
               title="Trailer"
               className="w-full h-full"
               allowFullScreen
@@ -580,6 +636,7 @@ export default function Detail() {
                 src={getImageUrl(movie.thumb_url || movie.poster_url, 'banner')}
                 alt={movie.name}
                 className="w-full h-full object-cover object-top"
+                referrerPolicy="no-referrer"
               />
             </motion.div>
           </motion.div>
@@ -623,6 +680,7 @@ export default function Detail() {
                 src={getImageUrl(movie.poster_url || movie.thumb_url, 'poster')}
                 alt={movie.name}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                referrerPolicy="no-referrer"
               />
             </div>
           </motion.div>
@@ -976,7 +1034,7 @@ export default function Detail() {
                       cast.map((actor: any, idx: number) => (
                         <motion.div key={idx} variants={itemVariants} className="text-center transition-transform duration-300 hover:-translate-y-1.5 flex flex-col items-center">
                           <LazyImage 
-                            src={actor.profile_path ? `https://image.tmdb.org/t/p/w185${actor.profile_path}` : ""} 
+                            src={actor.profile_path ? getImageUrl(`https://image.tmdb.org/t/p/w185${actor.profile_path}`) : ""} 
                             alt={actor.name}
                             className="w-20 h-20 md:w-full md:h-auto md:aspect-[2/3] object-cover rounded-full md:rounded-xl mb-2.5 shadow-[0_5px_15px_rgba(0,0,0,0.5)] bg-[#2A2A2A]"
                           />
@@ -1017,19 +1075,20 @@ export default function Detail() {
                       images.map((img: any, idx: number) => (
                         <motion.div key={idx} variants={itemVariants} className="rounded-xl overflow-hidden aspect-video cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-[0_10px_25px_rgba(229,9,20,0.3)] bg-[#2A2A2A]">
                           <img 
-                            src={`https://image.tmdb.org/t/p/w500${img.file_path}`} 
+                            src={getImageUrl(`https://image.tmdb.org/t/p/w500${img.file_path}`)} 
                             alt={`Hình ảnh ${idx + 1}`}
                             className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
                           />
                         </motion.div>
                       ))
                     ) : (
                       <div className="col-span-full grid grid-cols-2 sm:grid-cols-3 gap-4">
                         <motion.div variants={itemVariants} className="aspect-video rounded-xl overflow-hidden bg-[#2A2A2A]">
-                          <img src={getImageUrl(movie.thumb_url || movie.poster_url, 'banner')} className="w-full h-full object-cover" alt="Gallery 1" />
+                          <img src={getImageUrl(movie.thumb_url || movie.poster_url, 'banner')} className="w-full h-full object-cover" alt="Gallery 1" referrerPolicy="no-referrer" />
                         </motion.div>
                         <motion.div variants={itemVariants} className="aspect-video rounded-xl overflow-hidden bg-[#2A2A2A]">
-                          <img src={getImageUrl(movie.poster_url || movie.thumb_url, 'banner')} className="w-full h-full object-cover" alt="Gallery 2" />
+                          <img src={getImageUrl(movie.poster_url || movie.thumb_url, 'banner')} className="w-full h-full object-cover" alt="Gallery 2" referrerPolicy="no-referrer" />
                         </motion.div>
                       </div>
                     )}

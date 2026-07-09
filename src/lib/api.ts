@@ -543,17 +543,46 @@ function needsImageUpgrade(url: string): boolean {
 
 export const getImageUrl = (path: string, _type: 'poster' | 'banner' = 'poster'): string => {
   if (!path) return PLACEHOLDER_URL;
-  if (path.includes('image.tmdb.org'))        return upgradeImageUrl(path);
-  if (path.includes('phimapi.com/image.php')) return path;
-  if (path.includes('ophim.live') || path.includes('img.ophim')) return upgradeImageUrl(path);
-  if (path.includes('upload/vod/') || !path.startsWith('http')) {
-    const fullUrl = path.startsWith('http')
+
+  let url = path;
+
+  // 1. If it's a TMDB image, upgrade it first (to get high quality original)
+  if (path.includes('image.tmdb.org')) {
+    url = upgradeImageUrl(path);
+  }
+  // 2. Extract original if it's already a phimapi proxy
+  else if (path.includes('phimapi.com/image.php')) {
+    try {
+      const urlObj = new URL(path);
+      const actualUrl = urlObj.searchParams.get('url');
+      if (actualUrl) {
+        url = actualUrl;
+      }
+    } catch {}
+  }
+  // 3. If it's an ophim image, upgrade it first
+  else if (path.includes('ophim.live') || path.includes('img.ophim')) {
+    url = upgradeImageUrl(path);
+  }
+  // 4. If it's relative or has upload/vod, make it absolute under phimimg.com
+  else if (path.includes('upload/vod/') || !path.startsWith('http')) {
+    url = path.startsWith('http')
       ? path
       : path.startsWith('/') ? `https://phimimg.com${path}` : `https://phimimg.com/${path}`;
-    return `https://phimapi.com/image.php?url=${fullUrl}`;
   }
-  if (path.includes('phimimg.com')) return `https://phimapi.com/image.php?url=${path}`;
-  return path;
+
+  // 5. Now apply proxying based on host to bypass ISP blocks and hotlink protection
+  if (url.includes('image.tmdb.org')) {
+    // TMDB images are blocked in Vietnam, proxy them through images.weserv.nl (runs on Cloudflare network, 100% unblocked and fast)
+    return `https://images.weserv.nl/?url=${encodeURIComponent(url)}`;
+  }
+
+  if (url.includes('phimimg.com') || url.includes('ophim.live') || url.includes('img.ophim')) {
+    // phimimg has hotlinking protection, proxy through phimapi.com to bypass
+    return `https://phimapi.com/image.php?url=${encodeURIComponent(url)}`;
+  }
+
+  return url;
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -695,7 +724,7 @@ async function apiFetch(endpoint: string): Promise<{ data: any; source: 'primary
 export const api = {
   getNewUpdated: async (page = 1) =>
     fetchWithCache(`new-updated:${page}`, async () => {
-      const { data, source } = await apiFetch(`/danh-sach/phim-moi-cap-nhat?page=${page}`);
+      const { data, source } = await apiFetch(`/danh-sach/phim-moi-cap-nhat-v3?page=${page}`);
       return {
         items:      (data.items || data.data?.items || []).map((i: any) => normalizeBySource(i, source)),
         pagination: data.pagination || data.data?.pagination,
@@ -875,6 +904,35 @@ export const api = {
           normalized.thumb_url  = `https://image.tmdb.org/t/p/original${tmdbSearch.backdrop_path}`;
       }
 
+      // ── STAGE 5.5: Fallback to phimapi.com images if poster or banner needs upgrade ──
+      if (needsImageUpgrade(normalized.poster_url) || needsImageUpgrade(normalized.thumb_url)) {
+        try {
+          const imagesData = await api.getMovieImages(slug).catch(() => null);
+          if (imagesData && imagesData.images && imagesData.images.length > 0) {
+            const backdrops = imagesData.images.filter((img: any) => img.width && img.height && img.width > img.height);
+            const posters = imagesData.images.filter((img: any) => img.width && img.height && img.height > img.width);
+
+            if (backdrops.length > 0 && needsImageUpgrade(normalized.thumb_url)) {
+              const bestBackdrop = [...backdrops].sort((a: any, b: any) => {
+                const scoreA = (a.width / 3840) * 0.7 + ((a.vote_average || 0) / 10) * 0.3;
+                const scoreB = (b.width / 3840) * 0.7 + ((b.vote_average || 0) / 10) * 0.3;
+                return scoreB - scoreA;
+              })[0];
+              normalized.thumb_url = `https://image.tmdb.org/t/p/original${bestBackdrop.file_path}`;
+            }
+
+            if (posters.length > 0 && needsImageUpgrade(normalized.poster_url)) {
+              const bestPoster = [...posters].sort((a: any, b: any) => {
+                return ((b.vote_average || 0) - (a.vote_average || 0)) || (b.width - a.width);
+              })[0];
+              normalized.poster_url = `https://image.tmdb.org/t/p/original${bestPoster.file_path}`;
+            }
+          }
+        } catch (err) {
+          console.warn("[API] Fallback image upgrade failed:", err);
+        }
+      }
+
       return {
         movie:       normalized,
         episodes:    primaryData?.episodes || [],
@@ -948,4 +1006,53 @@ export const api = {
       return [];
     }
   },
+
+  getRandom: async (limit = 10, type?: string) =>
+    fetchWithCache(`random:${limit}:${type || ''}`, async () => {
+      const typeParam = type ? `&type=${type}` : '';
+      const { data, source } = await apiFetch(`/v1/api/random?limit=${limit}${typeParam}`);
+      const items = data.data?.items || data.items || [];
+      return {
+        items: items.map((i: any) => normalizeBySource(i, source)),
+        pagination: data.data?.params?.pagination || data.pagination || null,
+      };
+    }, TTL.NEW_UPDATED),
+
+  getMovieImages: async (slug: string) =>
+    fetchWithCache(`images:${slug}`, async () => {
+      const { data } = await apiFetch(`/v1/api/phim/${slug}/images`);
+      return data.data || null;
+    }, TTL.TMDB_STATIC),
+
+  getMoviePeoples: async (slug: string) =>
+    fetchWithCache(`peoples:${slug}`, async () => {
+      const { data } = await apiFetch(`/v1/api/phim/${slug}/peoples`);
+      return data.data || null;
+    }, TTL.TMDB_STATIC),
+
+  getMovieKeywords: async (slug: string) =>
+    fetchWithCache(`keywords:${slug}`, async () => {
+      const { data } = await apiFetch(`/v1/api/phim/${slug}/keywords`);
+      return data.data || null;
+    }, TTL.TMDB_STATIC),
+
+  getMovieDetailById: async (id: string) =>
+    fetchWithCache(`detail:id:${id}`, async () => {
+      const { data, source } = await apiFetch(`/phim/id/${id}`);
+      return {
+        movie: normalizeBySource(data, source),
+        episodes: data.episodes || [],
+        _source: source,
+      };
+    }, TTL.MOVIE_DETAIL),
+
+  getMovieDetailByTmdb: async (type: 'movie' | 'tv', id: number | string) =>
+    fetchWithCache(`detail:tmdb:${type}:${id}`, async () => {
+      const { data, source } = await apiFetch(`/tmdb/${type}/${id}`);
+      return {
+        movie: normalizeBySource(data, source),
+        episodes: data.episodes || [],
+        _source: source,
+      };
+    }, TTL.MOVIE_DETAIL),
 };

@@ -85,6 +85,7 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating }: M
           loading="lazy"
           decoding="async"
           draggable={false}
+          referrerPolicy="no-referrer"
         />
 
         {/* Quality Badge */}

@@ -176,7 +176,7 @@ export default function CineversePlayer({ episode, slug }: CineversePlayerProps)
     return (
       <iframe
         ref={iframeRef}
-        src={episode.link_embed}
+        src={episode.link_embed || null}
         title={episode.name}
         className="w-full h-full"
         allowFullScreen

@@ -25,7 +25,9 @@ export default function Header() {
 
   // Ref để đo vị trí form và tính offset dropdown
   const searchFormRef = useRef<HTMLFormElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+  const [osLabel, setOsLabel] = useState("Ctrl K");
 
   const navigate = useNavigate();
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -79,6 +81,57 @@ export default function Header() {
       window.removeEventListener('scroll', recalcDropdown);
     };
   }, [isSearchFocused, recalcDropdown]);
+
+  // Phím tắt để tắt/mở thanh tìm kiếm
+  useEffect(() => {
+    if (typeof navigator !== 'undefined') {
+      const isMac = navigator.platform.toLowerCase().includes('mac') || 
+                    navigator.userAgent.toLowerCase().includes('mac');
+      setOsLabel(isMac ? "⌘K" : "Ctrl K");
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 1. Ctrl + K hoặc Cmd + K để bật/tắt focus
+      const isK = e.key.toLowerCase() === 'k';
+      const isModifier = e.ctrlKey || e.metaKey;
+
+      if (isModifier && isK) {
+        e.preventDefault();
+        if (document.activeElement === searchInputRef.current) {
+          searchInputRef.current?.blur();
+        } else {
+          searchInputRef.current?.focus();
+        }
+        return;
+      }
+
+      // 2. Phím Esc để tắt
+      if (e.key === 'Escape') {
+        if (document.activeElement === searchInputRef.current) {
+          searchInputRef.current?.blur();
+          return;
+        }
+      }
+
+      // 3. Phím / để mở (focus), không kích hoạt khi đang gõ
+      if (e.key === '/') {
+        const activeEl = document.activeElement;
+        if (activeEl) {
+          const tagName = activeEl.tagName.toUpperCase();
+          if (tagName === 'INPUT' || tagName === 'TEXTAREA' || (activeEl as HTMLElement).isContentEditable) {
+            return;
+          }
+        }
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   useEffect(() => {
     const history = localStorage.getItem("search_history");
@@ -232,6 +285,7 @@ export default function Header() {
             )}>
               <Search className="w-4 h-4 text-secondary-text mr-2 flex-shrink-0" />
               <input
+                ref={searchInputRef}
                 type="text"
                 placeholder="Tìm kiếm..."
                 value={searchQuery}
@@ -241,6 +295,12 @@ export default function Header() {
                 style={inputStyle}
                 className="bg-transparent border-none outline-none text-foreground placeholder:text-secondary-text w-full text-sm"
               />
+              {/* Shortcut badge hint */}
+              {!isSearchFocused && !searchQuery && (
+                <span className="hidden md:inline-flex items-center gap-0.5 text-[10px] font-mono text-secondary-text bg-foreground/5 border border-card-border px-1.5 py-0.5 rounded ml-2 whitespace-nowrap select-none pointer-events-none shadow-sm">
+                  {osLabel}
+                </span>
+              )}
               {/* Nút X xóa nhanh trên mobile */}
               {searchQuery && (
                 <button type="button" onClick={() => setSearchQuery("")} className="ml-1 flex-shrink-0 p-0.5 rounded-full hover:bg-foreground/10">
@@ -339,7 +399,7 @@ export default function Header() {
                             className="w-full flex items-start gap-3 px-4 py-3 hover:bg-foreground/5 border-b border-card-border last:border-0 group text-left"
                           >
                             <div className="w-10 h-14 flex-shrink-0 rounded-md overflow-hidden bg-input-bg relative">
-                              <img src={getImageUrl(movie.poster_url || movie.thumb_url, "poster")} alt={movie.name} className="w-full h-full object-cover" />
+                              <img src={getImageUrl(movie.poster_url || movie.thumb_url, "poster")} alt={movie.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                               <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                 <Play className="w-4 h-4 text-white" fill="currentColor" />
                               </div>

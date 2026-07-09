@@ -246,7 +246,7 @@ export default function CommentsSection({ movieId }: { movieId: string }) {
 
             return (
               <div key={comment.id} className="flex gap-4 group animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <img src={comment.userAvatar} className="w-10 h-10 rounded-full shrink-0 object-cover" />
+                <img src={comment.userAvatar || DEFAULT_USER_AVATAR} className="w-10 h-10 rounded-full shrink-0 object-cover" />
                 <div className="flex-1 bg-[#1A1A1A]/50 rounded-2xl px-4 py-3 border border-transparent hover:border-white/5 transition-all relative">
                   
                   <div className="flex items-center gap-2 mb-1">
