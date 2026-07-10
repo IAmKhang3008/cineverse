@@ -347,7 +347,9 @@ export default function Watch() {
               <div className="max-h-[300px] md:max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                 {episodes.map((server: any, serverIdx: number) => (
                   <div key={serverIdx} className="mb-6 last:mb-0">
-                    <h4 className="text-[#A0A0A0] text-[10px] md:text-xs font-bold uppercase mb-3 pl-1 tracking-wider">{server.server_name}</h4>
+                    <h4 className="text-[#A0A0A0] text-[10px] md:text-xs font-bold uppercase mb-3 pl-1 tracking-wider">
+                      {server.server_name ? (server.server_name.startsWith('#') ? server.server_name : `#${server.server_name}`) : ''}
+                    </h4>
                     <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-2">
                       {server.server_data.map((ep: any, idx: number) => {
                         const isCurrent = currentEpisode?.slug === ep.slug && currentServer === server.server_name;

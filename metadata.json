@@ -1,5 +1,8 @@
 {
   "name": "Cineverse",
   "description": "Vũ trụ điện ảnh của bạn",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
