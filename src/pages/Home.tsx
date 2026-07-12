@@ -18,7 +18,6 @@ import { useToast } from "@/contexts/ToastContext";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { fetchWithCache, TTL } from "@/lib/cache";
 import ErrorBoundary from "@/components/ErrorBoundary";
-import { rewriteTMDBUrl } from "@/lib/utils";
 
 const MovieCard = React.lazy(() => import("@/components/MovieCard"));
 
@@ -26,7 +25,7 @@ const MovieCard = React.lazy(() => import("@/components/MovieCard"));
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────
 const TMDB_KEY: string = (import.meta as any).env.VITE_TMDB_API_KEY || '';
-const TMDB_ENABLED = true; // Luôn bật TMDB để sử dụng Proxy bảo mật từ Backend
+const TMDB_ENABLED = TMDB_KEY.trim().length > 0;
 
 type TrendingWindow = 'day' | 'week';
 
@@ -238,7 +237,7 @@ function useTrendingMovies() {
       if (!TMDB_ENABLED) throw new Error('TMDB disabled');
       const tmdbData = await fetchWithCache(
         `tmdb_trending_${tab}`,
-        () => fetch(rewriteTMDBUrl(`https://api.themoviedb.org/3/trending/movie/${tab}?api_key=${TMDB_KEY}&language=vi-VN`))
+        () => fetch(`https://api.themoviedb.org/3/trending/movie/${tab}?api_key=${TMDB_KEY}&language=vi-VN`)
               .then(r => { if (!r.ok) throw new Error(`TMDB ${r.status}`); return r.json(); }),
         TTL.TMDB_STATIC,
       );
@@ -352,7 +351,7 @@ export default function Home() {
                   if (!tmdbId) {
                     const sd = await fetchWithCache(
                       `tmdb_search_${movie.slug}`,
-                      () => fetch(rewriteTMDBUrl(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_KEY}&query=${encodeURIComponent(movie.name)}&language=vi-VN`)).then(r => r.json()),
+                      () => fetch(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_KEY}&query=${encodeURIComponent(movie.name)}&language=vi-VN`).then(r => r.json()),
                       TTL.TMDB_STATIC,
                     );
                     if (sd.results?.length > 0) {
@@ -363,7 +362,7 @@ export default function Home() {
                   if (tmdbId) {
                     const imgData = await fetchWithCache(
                       `tmdb_images_${tmdbType}_${tmdbId}`,
-                      () => fetch(rewriteTMDBUrl(`https://api.themoviedb.org/3/${tmdbType}/${tmdbId}/images?api_key=${TMDB_KEY}`)).then(r => r.json()),
+                      () => fetch(`https://api.themoviedb.org/3/${tmdbType}/${tmdbId}/images?api_key=${TMDB_KEY}`).then(r => r.json()),
                       TTL.TMDB_STATIC,
                     );
                     if (imgData.backdrops?.length > 0) {

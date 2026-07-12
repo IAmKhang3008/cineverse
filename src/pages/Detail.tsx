@@ -1,19 +1,18 @@
 import { useEffect, useState, useRef, useLayoutEffect } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { api, getImageUrl } from "@/lib/api";
-import { Play, Plus, Star, Clock, Calendar, Globe, Heart, X, ArrowLeft, Share2, Copy, Facebook, Twitter, Link as LinkIcon, ChevronLeft, ChevronRight } from "lucide-react";
+import { Play, Plus, Star, Clock, Calendar, Globe, Heart, X, ArrowLeft, Share2, Copy, Facebook, Twitter, Link as LinkIcon } from "lucide-react";
 import MovieCard from "@/components/MovieCard";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
 import { decodeHtml, DEFAULT_AVATAR, CAST_PLACEHOLDER } from "@/lib/utils";
-import { useMoviePoster } from "@/hooks/useMoviePoster";
 import { fetchWithCache, TTL } from "@/lib/cache";
 import { motion, AnimatePresence } from "motion/react";
 import { Vibrant } from "node-vibrant/browser";
 import CommentsSection from "@/components/CommentsSection";
 import { MovieDetailSkeleton } from "@/components/Skeleton";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
-import { toMovieTitleCase, rewriteTMDBUrl } from "@/lib/utils";
+import { toMovieTitleCase } from "@/lib/utils";
 
 const containerVariants: any = {
   hidden: { opacity: 0 },
@@ -122,24 +121,6 @@ export default function Detail() {
 
   const [relatedMovies, setRelatedMovies] = useState<any[]>([]);
   const [loadingRelated, setLoadingRelated] = useState(false);
-
-  const { src: detailPoster } = useMoviePoster(
-    movie?.slug || "",
-    movie?.name || "",
-    movie?.year,
-    movie?.poster_url,
-    movie?.thumb_url,
-    true
-  );
-
-  const { src: detailBanner } = useMoviePoster(
-    movie?.slug ? `${movie.slug}_banner` : "",
-    movie?.name || "",
-    movie?.year,
-    movie?.thumb_url,
-    movie?.poster_url,
-    true
-  );
   const [hasFetchedRelated, setHasFetchedRelated] = useState(false);
   const relatedMoviesRef = useRef<HTMLDivElement>(null);
   
@@ -150,21 +131,6 @@ export default function Detail() {
   const [loadingCast, setLoadingCast] = useState(false);
   const [images, setImages] = useState<any[]>([]);
   const [loadingImages, setLoadingImages] = useState(false);
-  const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (selectedImageIndex === null) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSelectedImageIndex(null);
-      else if (e.key === 'ArrowLeft') {
-        setSelectedImageIndex((prev) => (prev !== null ? (prev - 1 + images.length) % images.length : null));
-      } else if (e.key === 'ArrowRight') {
-        setSelectedImageIndex((prev) => (prev !== null ? (prev + 1) % images.length : null));
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedImageIndex, images.length]);
   const [rating, setRating] = useState<{ source: string, score: string, votes: string } | null>(null);
   const [showShareMenu, setShowShareMenu] = useState(false);
   const shareMenuRef = useRef<HTMLDivElement>(null);
@@ -273,7 +239,7 @@ export default function Detail() {
           // Tìm kiếm trên TMDb nếu chưa có
           const yearQuery = movie.year ? `&year=${movie.year}` : '';
           const searchUrl = `https://api.themoviedb.org/3/search/movie?api_key=${apiKey}&query=${encodeURIComponent(movie.origin_name || movie.name)}${yearQuery}&language=vi-VN`;
-          const searchData = await fetchWithCache(`tmdb_search_${movie.slug}`, () => fetch(rewriteTMDBUrl(searchUrl)).then(r => r.json()), TTL.TMDB_STATIC);
+          const searchData = await fetchWithCache(`tmdb_search_${movie.slug}`, () => fetch(searchUrl).then(r => r.json()), TTL.TMDB_STATIC);
           if (searchData.results && searchData.results.length > 0) {
             tmdbId = searchData.results[0].id;
           }
@@ -282,14 +248,14 @@ export default function Detail() {
         if (tmdbId && tmdbType === 'movie') {
           // 1.2. Lấy collection_id từ chi tiết phim TMDb
           const detailsUrl = `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${apiKey}&language=vi-VN`;
-          const detailsData = await fetchWithCache(`tmdb_details_${tmdbId}`, () => fetch(rewriteTMDBUrl(detailsUrl)).then(r => r.json()), TTL.TMDB_STATIC);
+          const detailsData = await fetchWithCache(`tmdb_details_${tmdbId}`, () => fetch(detailsUrl).then(r => r.json()), TTL.TMDB_STATIC);
           
           const collectionId = detailsData?.belongs_to_collection?.id;
 
           if (collectionId) {
             // 1.3. Lấy danh sách phim trong collection
             const collectionUrl = `https://api.themoviedb.org/3/collection/${collectionId}?api_key=${apiKey}&language=vi-VN`;
-            const collectionData = await fetchWithCache(`tmdb_collection_${collectionId}`, () => fetch(rewriteTMDBUrl(collectionUrl)).then(r => r.json()), TTL.TMDB_STATIC);
+            const collectionData = await fetchWithCache(`tmdb_collection_${collectionId}`, () => fetch(collectionUrl).then(r => r.json()), TTL.TMDB_STATIC);
             
             if (collectionData?.parts && collectionData.parts.length > 0) {
               // 1.4. Tìm các phim này trong cơ sở dữ liệu của bạn bằng cách search tiêu đề Việt hoặc gốc
@@ -484,7 +450,7 @@ export default function Detail() {
         if (!tmdbId) {
           const yearQuery = movie.year ? `&year=${movie.year}` : '';
           const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.origin_name || movie.name)}${yearQuery}&language=vi-VN`;
-          const searchData = await fetchWithCache(`tmdb_search_${movie.slug}`, () => fetch(rewriteTMDBUrl(searchUrl)).then(r => r.json()), TTL.TMDB_STATIC);
+          const searchData = await fetchWithCache(`tmdb_search_${movie.slug}`, () => fetch(searchUrl).then(r => r.json()), TTL.TMDB_STATIC);
           if (searchData.results?.length > 0) {
             tmdbId = searchData.results[0].id;
             tmdbType = searchData.results[0].media_type || (searchData.results[0].first_air_date ? 'tv' : 'movie');
@@ -499,7 +465,7 @@ export default function Detail() {
 
         // Bước 2: Nâng cấp URL gọi API - Thêm include_image_language để lấy toàn bộ kho ảnh không bị giới hạn bởi tag vi-VN
         const combinedUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=vi-VN&append_to_response=credits,images&include_image_language=en,null,vi`;
-        const combinedData = await fetchWithCache(`tmdb_combined_${tmdbType}_${tmdbId}`, () => fetch(rewriteTMDBUrl(combinedUrl)).then(r => r.json()), TTL.TMDB_STATIC);
+        const combinedData = await fetchWithCache(`tmdb_combined_${tmdbType}_${tmdbId}`, () => fetch(combinedUrl).then(r => r.json()), TTL.TMDB_STATIC);
 
         // Bước 3: Phân phối dữ liệu vào các state an toàn
         if (!rating && combinedData.vote_average) {
@@ -667,10 +633,10 @@ export default function Detail() {
               style={{ willChange: "transform" }}
             >
               <img
-                src={detailBanner || getImageUrl(movie.thumb_url || movie.poster_url, 'banner')}
+                src={getImageUrl(movie.thumb_url || movie.poster_url, 'banner')}
                 alt={movie.name}
                 className="w-full h-full object-cover object-top"
-                referrerPolicy="no-referrer-when-downgrade"
+                referrerPolicy="no-referrer"
               />
             </motion.div>
           </motion.div>
@@ -711,10 +677,10 @@ export default function Detail() {
           >
             <div className="rounded-2xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] aspect-[2/3] border border-white/10 group">
               <img
-                src={detailPoster || getImageUrl(movie.poster_url || movie.thumb_url, 'poster')}
+                src={getImageUrl(movie.poster_url || movie.thumb_url, 'poster')}
                 alt={movie.name}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                referrerPolicy="no-referrer-when-downgrade"
+                referrerPolicy="no-referrer"
               />
             </div>
           </motion.div>
@@ -1107,12 +1073,7 @@ export default function Detail() {
                       </div>
                     ) : images.length > 0 ? (
                       images.map((img: any, idx: number) => (
-                        <motion.div 
-                          key={idx} 
-                          variants={itemVariants} 
-                          onClick={() => setSelectedImageIndex(idx)}
-                          className="rounded-xl overflow-hidden aspect-video cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-[0_10px_25px_rgba(229,9,20,0.3)] bg-[#2A2A2A]"
-                        >
+                        <motion.div key={idx} variants={itemVariants} className="rounded-xl overflow-hidden aspect-video cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-[0_10px_25px_rgba(229,9,20,0.3)] bg-[#2A2A2A]">
                           <img 
                             src={getImageUrl(`https://image.tmdb.org/t/p/w500${img.file_path}`)} 
                             alt={`Hình ảnh ${idx + 1}`}
@@ -1124,10 +1085,10 @@ export default function Detail() {
                     ) : (
                       <div className="col-span-full grid grid-cols-2 sm:grid-cols-3 gap-4">
                         <motion.div variants={itemVariants} className="aspect-video rounded-xl overflow-hidden bg-[#2A2A2A]">
-                          <img src={detailBanner || getImageUrl(movie.thumb_url || movie.poster_url, 'banner')} className="w-full h-full object-cover" alt="Gallery 1" referrerPolicy="no-referrer-when-downgrade" />
+                          <img src={getImageUrl(movie.thumb_url || movie.poster_url, 'banner')} className="w-full h-full object-cover" alt="Gallery 1" referrerPolicy="no-referrer" />
                         </motion.div>
                         <motion.div variants={itemVariants} className="aspect-video rounded-xl overflow-hidden bg-[#2A2A2A]">
-                          <img src={detailPoster || getImageUrl(movie.poster_url || movie.thumb_url, 'poster')} className="w-full h-full object-cover" alt="Gallery 2" referrerPolicy="no-referrer-when-downgrade" />
+                          <img src={getImageUrl(movie.poster_url || movie.thumb_url, 'banner')} className="w-full h-full object-cover" alt="Gallery 2" referrerPolicy="no-referrer" />
                         </motion.div>
                       </div>
                     )}
@@ -1169,75 +1130,6 @@ export default function Detail() {
               </>
             ) : null}
           </div>
-
-          {/* Lightbox Modal */}
-          <AnimatePresence>
-            {selectedImageIndex !== null && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 z-[999] flex flex-col items-center justify-center bg-black/95 backdrop-blur-md select-none"
-                onClick={() => setSelectedImageIndex(null)}
-              >
-                {/* Close Button */}
-                <button
-                  onClick={() => setSelectedImageIndex(null)}
-                  className="absolute top-4 right-4 md:top-6 md:right-6 p-3 rounded-full bg-white/10 hover:bg-[#E50914] text-white transition-all duration-300 z-50 hover:scale-110 active:scale-95"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-
-                {/* Prev Button */}
-                {images.length > 1 && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedImageIndex((prev) => (prev !== null ? (prev - 1 + images.length) % images.length : null));
-                    }}
-                    className="absolute left-4 md:left-6 p-3 rounded-full bg-white/10 hover:bg-[#E50914] text-white transition-all duration-300 z-50 hover:scale-110 active:scale-95"
-                  >
-                    <ChevronLeft className="w-6 h-6" />
-                  </button>
-                )}
-
-                {/* Next Button */}
-                {images.length > 1 && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedImageIndex((prev) => (prev !== null ? (prev + 1) % images.length : null));
-                    }}
-                    className="absolute right-4 md:right-6 p-3 rounded-full bg-white/10 hover:bg-[#E50914] text-white transition-all duration-300 z-50 hover:scale-110 active:scale-95"
-                  >
-                    <ChevronRight className="w-6 h-6" />
-                  </button>
-                )}
-
-                {/* Image Container */}
-                <motion.div
-                  initial={{ scale: 0.92, y: 15 }}
-                  animate={{ scale: 1, y: 0 }}
-                  exit={{ scale: 0.92, y: 15 }}
-                  transition={{ type: "spring", damping: 26, stiffness: 200 }}
-                  className="relative max-w-[90vw] max-h-[80vh] md:max-w-[85vw] md:max-h-[85vh] overflow-hidden rounded-xl shadow-[0_0_50px_rgba(0,0,0,0.8)] flex items-center justify-center bg-transparent"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <img
-                    src={getImageUrl(`https://image.tmdb.org/t/p/original${images[selectedImageIndex]?.file_path}`)}
-                    alt={`Hình ảnh ${selectedImageIndex + 1}`}
-                    className="max-w-full max-h-[80vh] md:max-h-[85vh] object-contain rounded-xl select-none"
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-5 text-center">
-                    <span className="text-sm font-bold text-white tracking-widest bg-black/40 backdrop-blur-sm px-3 py-1 rounded-full border border-white/10">
-                      {selectedImageIndex + 1} / {images.length}
-                    </span>
-                  </div>
-                </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
       </motion.div>
     );

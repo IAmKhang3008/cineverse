@@ -18,7 +18,6 @@
  */
 
 import { fetchWithCache, TTL } from './cache';
-import { rewriteTMDBUrl } from './utils';
 
 // ─────────────────────────────────────────────────────────────
 // CẤU HÌNH
@@ -32,11 +31,13 @@ const HEALTH_CHECK_INTERVAL = 30_000;
 
 // [FIX 5] Không hard-code key — chỉ lấy từ .env
 const TMDB_KEY: string    = (import.meta as any).env.VITE_TMDB_API_KEY || '';
-const TMDB_ENABLED: boolean = true; // Luôn bật TMDB nhờ Proxy bảo mật qua Backend Express
+const TMDB_ENABLED: boolean = TMDB_KEY.trim().length > 0;
 
-if (!TMDB_KEY) {
+if (!TMDB_ENABLED) {
   console.info(
-    '[TMDB] Không tìm thấy VITE_TMDB_API_KEY ở client → Đang sử dụng Proxy bảo mật của Backend để tải thông tin TMDb.',
+    '[TMDB] Không tìm thấy VITE_TMDB_API_KEY → tắt TMDB.\n' +
+    'Thêm VITE_TMDB_API_KEY=your_key vào .env để bật.\n' +
+    'Lấy key: https://www.themoviedb.org/settings/api',
   );
 }
 
@@ -81,13 +82,12 @@ const tmdbRateLimiter = {
 // FETCH HELPERS
 // ─────────────────────────────────────────────────────────────
 function fetchWithTimeout(url: string, ms: number, opts: RequestInit = {}): Promise<Response> {
-  const proxiedUrl = rewriteTMDBUrl(url);
   if (typeof AbortSignal?.timeout === 'function') {
-    return fetch(proxiedUrl, { ...opts, signal: AbortSignal.timeout(ms) });
+    return fetch(url, { ...opts, signal: AbortSignal.timeout(ms) });
   }
   const ctrl = new AbortController();
   const id   = setTimeout(() => ctrl.abort(), ms);
-  return fetch(proxiedUrl, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(id));
+  return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(id));
 }
 
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
@@ -1020,44 +1020,20 @@ export const api = {
 
   getMovieImages: async (slug: string) =>
     fetchWithCache(`images:${slug}`, async () => {
-      try {
-        const res = await fetchWithTimeout(`${PRIMARY_URL}/v1/api/phim/${slug}/images`, PRIMARY_TIMEOUT);
-        if (res.ok) {
-          const data = await res.json();
-          return data.data || null;
-        }
-      } catch (err) {
-        console.warn("[API] getMovieImages forced primary fetch failed:", err);
-      }
-      return null;
+      const { data } = await apiFetch(`/v1/api/phim/${slug}/images`);
+      return data.data || null;
     }, TTL.TMDB_STATIC),
 
   getMoviePeoples: async (slug: string) =>
     fetchWithCache(`peoples:${slug}`, async () => {
-      try {
-        const res = await fetchWithTimeout(`${PRIMARY_URL}/v1/api/phim/${slug}/peoples`, PRIMARY_TIMEOUT);
-        if (res.ok) {
-          const data = await res.json();
-          return data.data || null;
-        }
-      } catch (err) {
-        console.warn("[API] getMoviePeoples forced primary fetch failed:", err);
-      }
-      return null;
+      const { data } = await apiFetch(`/v1/api/phim/${slug}/peoples`);
+      return data.data || null;
     }, TTL.TMDB_STATIC),
 
   getMovieKeywords: async (slug: string) =>
     fetchWithCache(`keywords:${slug}`, async () => {
-      try {
-        const res = await fetchWithTimeout(`${PRIMARY_URL}/v1/api/phim/${slug}/keywords`, PRIMARY_TIMEOUT);
-        if (res.ok) {
-          const data = await res.json();
-          return data.data || null;
-        }
-      } catch (err) {
-        console.warn("[API] getMovieKeywords forced primary fetch failed:", err);
-      }
-      return null;
+      const { data } = await apiFetch(`/v1/api/phim/${slug}/keywords`);
+      return data.data || null;
     }, TTL.TMDB_STATIC),
 
   getMovieDetailById: async (id: string) =>

@@ -35,19 +35,3 @@ export function toMovieTitleCase(str: string): string {
     })
     .join(' ');
 }
-
-export function rewriteTMDBUrl(url: string): string {
-  if (url && url.includes("api.themoviedb.org/3/")) {
-    try {
-      const urlObj = new URL(url);
-      const subPath = urlObj.pathname.replace(/^\/3\//, "");
-      urlObj.searchParams.delete("api_key");
-      const queryParams = urlObj.searchParams.toString();
-      return `/api/tmdb/${subPath}${queryParams ? `?${queryParams}` : ""}`;
-    } catch (e) {
-      console.error("[TMDB-Proxy] Failed to rewrite TMDB URL:", e);
-    }
-  }
-  return url;
-}
-
