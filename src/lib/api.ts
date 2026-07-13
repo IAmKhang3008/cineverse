@@ -127,7 +127,7 @@ export async function fetchWithRetry(
     }
   }
   const tag = url.includes('themoviedb.org') ? '[TMDB]' : '[API]';
-  console.error(`${tag} All ${retries + 1} attempts failed.`, lastError?.message);
+  console.warn(`${tag} All ${retries + 1} attempts failed.`, lastError?.message);
   throw lastError;
 }
 
@@ -171,7 +171,7 @@ const apiState = {
 // ─────────────────────────────────────────────────────────────
 // PARALLEL FETCH
 // ─────────────────────────────────────────────────────────────
-async function parallelFetch(endpoint: string): Promise<{ res: Response; source: 'primary' | 'fallback' }> {
+async function parallelFetch(endpoint: string, canFallback = true): Promise<{ res: Response; source: 'primary' | 'fallback' }> {
   return new Promise((resolve, reject) => {
     let settled = false;
     let fallbackResult: { res: Response; source: 'fallback' } | null = null;
@@ -186,34 +186,41 @@ async function parallelFetch(endpoint: string): Promise<{ res: Response; source:
       })
     );
 
-    const fallbackTimer = setTimeout(async () => {
-      try {
-        const fRes = await fetchWithTimeout(`${FALLBACK_URL}${endpoint}`, PRIMARY_TIMEOUT);
-        if (!fRes.ok) return;
-        fallbackResult = { res: fRes, source: 'fallback' };
-        primaryPromise.catch(() => {});
-        if (!settled) {
-          console.info(`[API] Fallback tạm cho ${endpoint} (primary > ${PARALLEL_THRESHOLD}ms)`);
-          settle(fallbackResult);
-        }
-      } catch { /* fallback cũng chết */ }
-    }, PARALLEL_THRESHOLD);
+    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+    if (canFallback) {
+      fallbackTimer = setTimeout(async () => {
+        try {
+          const fRes = await fetchWithTimeout(`${FALLBACK_URL}${endpoint}`, PRIMARY_TIMEOUT);
+          if (!fRes.ok) return;
+          fallbackResult = { res: fRes, source: 'fallback' };
+          primaryPromise.catch(() => {});
+          if (!settled) {
+            console.info(`[API] Fallback tạm cho ${endpoint} (primary > ${PARALLEL_THRESHOLD}ms)`);
+            settle(fallbackResult);
+          }
+        } catch { /* fallback cũng chết */ }
+      }, PARALLEL_THRESHOLD);
+    }
 
     primaryPromise
       .then(res => {
-        clearTimeout(fallbackTimer);
+        if (fallbackTimer) clearTimeout(fallbackTimer);
         apiState.consecutiveFails = 0;
         if (apiState.usingFallback) apiState.switchToPrimary();
         settle({ res, source: 'primary' });
       })
       .catch(err => {
-        clearTimeout(fallbackTimer);
+        if (fallbackTimer) clearTimeout(fallbackTimer);
         apiState.consecutiveFails++;
         if (apiState.consecutiveFails >= 2) apiState.switchToFallback();
         if (fallbackResult) { settle(fallbackResult); return; }
-        fetchWithTimeout(`${FALLBACK_URL}${endpoint}`, PRIMARY_TIMEOUT)
-          .then(r => { if (r.ok) settle({ res: r, source: 'fallback' }); else reject(err); })
-          .catch(() => reject(err));
+        if (canFallback) {
+          fetchWithTimeout(`${FALLBACK_URL}${endpoint}`, PRIMARY_TIMEOUT)
+            .then(r => { if (r.ok) settle({ res: r, source: 'fallback' }); else reject(err); })
+            .catch(() => reject(err));
+        } else {
+          reject(err);
+        }
       });
   });
 }
@@ -703,15 +710,27 @@ function normalizeCountries(raw: any): NormalizedMovie['country'] {
   }));
 }
 
+function isEndpointSupportedOnFallback(endpoint: string): boolean {
+  if (endpoint.includes('/images') || endpoint.includes('/peoples') || endpoint.includes('/keywords')) {
+    return false;
+  }
+  if (endpoint.includes('/random') || endpoint.includes('/nam/')) {
+    return false;
+  }
+  return true;
+}
+
 // ─────────────────────────────────────────────────────────────
 // CORE FETCH
 // ─────────────────────────────────────────────────────────────
 async function apiFetch(endpoint: string): Promise<{ data: any; source: 'primary' | 'fallback' }> {
-  const attempt = apiState.usingFallback
+  const canFallback = isEndpointSupportedOnFallback(endpoint);
+
+  const attempt = (apiState.usingFallback && canFallback)
     ? fetchWithRetry(`${FALLBACK_URL}${endpoint}`, {}, 2, PRIMARY_TIMEOUT)
         .then(res => ({ res, source: 'fallback' as const }))
-        .catch(e => { console.warn('[API] Fallback failed, trying parallel:', e); return parallelFetch(endpoint); })
-    : parallelFetch(endpoint);
+        .catch(e => { console.warn('[API] Fallback failed, trying parallel:', e); return parallelFetch(endpoint, canFallback); })
+    : parallelFetch(endpoint, canFallback);
 
   const { res, source } = await attempt;
   const data = await res.json();
@@ -1002,7 +1021,7 @@ export const api = {
         _source:     'primary' as const,
       }));
     } catch (err) {
-      console.error('[Trending] TMDB fetch failed:', err);
+      console.warn('[Trending] TMDB fetch failed:', err);
       return [];
     }
   },

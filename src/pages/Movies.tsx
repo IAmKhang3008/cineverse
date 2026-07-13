@@ -87,7 +87,7 @@ export default function Movies() {
 
       setMovies(items);
     } catch (error) {
-      console.error("Lỗi khi tải phim:", error);
+      console.warn("Lỗi khi tải phim:", error);
       showToast("Không thể tải danh sách phim. Vui lòng kiểm tra kết nối mạng.", "error");
     } finally {
       setLoading(false);

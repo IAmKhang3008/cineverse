@@ -83,7 +83,7 @@ export default function Series() {
 
         setMovies(filteredItems);
       } catch (error) {
-        console.error("Failed to fetch series", error);
+        console.warn("Failed to fetch series", error);
         showToast("Không thể tải danh sách phim. Vui lòng kiểm tra kết nối mạng.", "error");
       } finally {
         setLoading(false);

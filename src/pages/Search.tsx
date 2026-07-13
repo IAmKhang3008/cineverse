@@ -73,7 +73,7 @@ export default function Search() {
         }
       } catch (error) {
         if (!isMounted) return;
-        console.error("Failed to search movies", error);
+        console.warn("Failed to search movies", error);
         showToast("Không thể tải kết quả tìm kiếm. Vui lòng kiểm tra kết nối mạng.", "error");
       } finally {
         if (isMounted) setLoading(false);

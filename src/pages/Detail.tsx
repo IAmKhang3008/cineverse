@@ -8,7 +8,6 @@ import { useToast } from "@/contexts/ToastContext";
 import { decodeHtml, DEFAULT_AVATAR, CAST_PLACEHOLDER } from "@/lib/utils";
 import { fetchWithCache, TTL } from "@/lib/cache";
 import { motion, AnimatePresence } from "motion/react";
-import { Vibrant } from "node-vibrant/browser";
 import CommentsSection from "@/components/CommentsSection";
 import { MovieDetailSkeleton } from "@/components/Skeleton";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
@@ -135,10 +134,130 @@ export default function Detail() {
   const [showShareMenu, setShowShareMenu] = useState(false);
   const shareMenuRef = useRef<HTMLDivElement>(null);
   const { isFavorite, toggleFavorite } = useFavorites();
+  
+  const [selectedActor, setSelectedActor] = useState<any | null>(null);
+  const [actorDetails, setActorDetails] = useState<any | null>(null);
+  const [loadingActorDetails, setLoadingActorDetails] = useState(false);
+  const [enrichedActors, setEnrichedActors] = useState<{[name: string]: {profile_path?: string | null; character?: string | null; id?: number}}>({});
   const { showToast } = useToast();
   const location = useLocation();
   const navigate = useNavigate();
   const fromSearch = location.state?.fromSearch;
+
+  // Enrich actors with profile photos and character names from TMDB
+  useEffect(() => {
+    if (!movie) return;
+    
+    let isMounted = true;
+    const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
+
+    const enrichAll = async () => {
+      // 1. Lấy danh sách diễn viên cần làm giàu thông tin (tối đa 12 người để tránh spam API)
+      const actorNamesToEnrich: string[] = [];
+      
+      if (cast && cast.length > 0) {
+        cast.slice(0, 12).forEach((actor: any) => {
+          if (actor.name && !actor.profile_path) {
+            actorNamesToEnrich.push(actor.name);
+          }
+        });
+      } else if (movie.actor && movie.actor.length > 0 && movie.actor[0] !== "Đang cập nhật") {
+        movie.actor.slice(0, 12).forEach((actorName: string) => {
+          actorNamesToEnrich.push(actorName);
+        });
+      }
+
+      if (actorNamesToEnrich.length === 0) return;
+
+      // 2. Thử lấy danh sách credits của toàn bộ phim từ TMDB trước để map hàng loạt (tiết kiệm API call)
+      let tmdbCast: any[] = [];
+      try {
+        let tmdbId = movie.tmdb?.id;
+        let tmdbType = movie.tmdb?.type || 'movie';
+        
+        if (!tmdbId) {
+          const yearQuery = movie.year ? `&year=${movie.year}` : '';
+          const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.origin_name || movie.name)}${yearQuery}&language=vi-VN`;
+          const searchData = await fetchWithCache(`tmdb_search_${movie.slug}`, () => fetch(searchUrl).then(r => r.json()), TTL.TMDB_STATIC);
+          if (searchData.results?.length > 0) {
+            tmdbId = searchData.results[0].id;
+            tmdbType = searchData.results[0].media_type || (searchData.results[0].first_air_date ? 'tv' : 'movie');
+          }
+        }
+
+        if (tmdbId) {
+          const combinedUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=vi-VN&append_to_response=credits`;
+          const combinedData = await fetchWithCache(`tmdb_combined_credits_${tmdbType}_${tmdbId}`, () => fetch(combinedUrl).then(r => r.json()), TTL.TMDB_STATIC);
+          if (combinedData.credits?.cast) {
+            tmdbCast = combinedData.credits.cast;
+          }
+        }
+      } catch (e) {
+        console.warn("Error fetching tmdb credits for enrichment:", e);
+      }
+
+      // 3. Map các diễn viên tìm được từ Credits vào tempMap
+      const tempMap: {[name: string]: {profile_path?: string | null; character?: string | null; id?: number}} = {};
+      
+      tmdbCast.forEach((actor: any) => {
+        if (actor.name) {
+          tempMap[actor.name.toLowerCase()] = {
+            profile_path: actor.profile_path,
+            character: actor.character,
+            id: actor.id
+          };
+        }
+        if (actor.original_name) {
+          tempMap[actor.original_name.toLowerCase()] = {
+            profile_path: actor.profile_path,
+            character: actor.character,
+            id: actor.id
+          };
+        }
+      });
+
+      if (!isMounted) return;
+      setEnrichedActors(prev => ({ ...prev, ...tempMap }));
+
+      // 4. Với những diễn viên còn sót lại (chưa có trong map từ credits), gọi API Search Person riêng biệt
+      const remainingActors = actorNamesToEnrich.filter(name => !tempMap[name.toLowerCase()]);
+      
+      if (remainingActors.length > 0) {
+        // Gọi song song có giới hạn hoặc tuần tự để tránh rate limit
+        for (const name of remainingActors) {
+          if (!isMounted) break;
+          try {
+            const searchPersonUrl = `https://api.themoviedb.org/3/search/person?api_key=${apiKey}&query=${encodeURIComponent(name)}&language=vi-VN`;
+            const searchData = await fetchWithCache(`tmdb_person_search_${name}`, () => fetch(searchPersonUrl).then(r => r.json()), TTL.TMDB_STATIC);
+            
+            if (searchData.results?.length > 0) {
+              const person = searchData.results[0];
+              const resolvedInfo = {
+                profile_path: person.profile_path,
+                id: person.id,
+                character: null // Không có character từ search person chung, nhưng ít nhất có hình ảnh
+              };
+              
+              if (isMounted) {
+                setEnrichedActors(prev => ({
+                  ...prev,
+                  [name.toLowerCase()]: resolvedInfo
+                }));
+              }
+            }
+          } catch (err) {
+            console.warn(`Failed to search person info for ${name}:`, err);
+          }
+        }
+      }
+    };
+
+    enrichAll();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [movie, cast]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -169,6 +288,61 @@ export default function Detail() {
     setShowShareMenu(false);
   };
 
+  const handleActorClick = async (actor: any) => {
+    const actorName = typeof actor === 'string' ? actor : (actor.name || "");
+    setSelectedActor(actorName ? { name: actorName } : actor);
+    setLoadingActorDetails(true);
+    setActorDetails(null);
+    
+    try {
+      const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
+      let actorId = typeof actor === 'object' ? actor.id : null;
+
+      if (!actorId && actorName) {
+        const searchUrl = `https://api.themoviedb.org/3/search/person?api_key=${apiKey}&query=${encodeURIComponent(actorName)}&language=vi-VN`;
+        const searchData = await fetchWithCache(`tmdb_actor_search_${actorName}`, () => fetch(searchUrl).then(r => r.json()), TTL.TMDB_STATIC);
+        if (searchData?.results && searchData.results.length > 0) {
+          actorId = searchData.results[0].id;
+        }
+      }
+
+      if (actorId) {
+        const detailsUrl = `https://api.themoviedb.org/3/person/${actorId}?api_key=${apiKey}&language=vi-VN&append_to_response=combined_credits`;
+        const detailsData = await fetchWithCache(`tmdb_actor_details_vi_${actorId}`, () => fetch(detailsUrl).then(r => r.json()), TTL.TMDB_STATIC);
+        
+        if (detailsData && !detailsData.biography) {
+          const enUrl = `https://api.themoviedb.org/3/person/${actorId}?api_key=${apiKey}&language=en-US`;
+          const enData = await fetchWithCache(`tmdb_actor_details_en_${actorId}`, () => fetch(enUrl).then(r => r.json()), TTL.TMDB_STATIC);
+          if (enData?.biography) {
+            detailsData.biography = enData.biography;
+          }
+        }
+        
+        if (detailsData) {
+          setActorDetails(detailsData);
+        } else {
+          setActorDetails({
+            name: actorName || (actor && actor.name),
+            profile_path: actor && actor.profile_path,
+          });
+        }
+      } else {
+        setActorDetails({
+          name: actorName || (actor && actor.name),
+          profile_path: actor && actor.profile_path,
+        });
+      }
+    } catch (err) {
+      console.warn("Failed to fetch actor details:", err);
+      setActorDetails({
+        name: actorName || (actor && actor.name),
+        profile_path: actor && actor.profile_path,
+      });
+    } finally {
+      setLoadingActorDetails(false);
+    }
+  };
+
   useEffect(() => {
     let isMounted = true;
     const fetchDetail = async () => {
@@ -184,7 +358,7 @@ export default function Detail() {
         if (isMounted) setMovie(res.movie);
       } catch (error) {
         if (!isMounted) return;
-        console.error("Failed to fetch movie detail", error);
+        console.warn("Failed to fetch movie detail", error);
         showToast("Không thể tải thông tin phim. Vui lòng thử lại sau.", "error");
       } finally {
         if (isMounted) setLoading(false);
@@ -200,19 +374,39 @@ export default function Detail() {
     let isMounted = true;
     const imageUrl = getImageUrl(movie.thumb_url || movie.poster_url, "banner");
 
-    Vibrant.from(imageUrl)
-      .getPalette()
-      .then(palette => {
-        if (!isMounted) return;
-        const color = palette.Vibrant?.hex || palette.DarkVibrant?.hex || "#E50914";
-        setAccentColor(color);
-      })
-      .catch((err) => {
-        if (isMounted) {
-          console.warn("Vibrant failed to extract colors, falling back to default theme color:", err);
+    const img = new Image();
+    img.crossOrigin = "Anonymous";
+    img.onload = () => {
+      if (!isMounted) return;
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = 1;
+        canvas.height = 1;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, 1, 1);
+          const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+          
+          const toHex = (c: number) => {
+            const hex = c.toString(16);
+            return hex.length === 1 ? "0" + hex : hex;
+          };
+          const color = `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+          setAccentColor(color);
+        } else {
           setAccentColor("#E50914");
         }
-      });
+      } catch (err) {
+        console.warn("Canvas color extraction failed (probably CORS restrictions), using default:", err);
+        setAccentColor("#E50914");
+      }
+    };
+    img.onerror = () => {
+      if (isMounted) {
+        setAccentColor("#E50914");
+      }
+    };
+    img.src = imageUrl;
 
     return () => {
       isMounted = false;
@@ -337,7 +531,7 @@ export default function Detail() {
         if (isMounted) setRelatedMovies(relatedFromDB.slice(0, 10));
       } catch (error) {
         if (!isMounted) return;
-        console.error("Failed to fetch related movies", error);
+        console.warn("Failed to fetch related movies", error);
         
         // Hồi phục lỗi mượt mà sử dụng thể loại gốc
         try {
@@ -348,7 +542,7 @@ export default function Detail() {
             if (isMounted) setRelatedMovies(filtered.slice(0, 10));
           }
         } catch (innerError) {
-          console.error("Fallback related movies failed", innerError);
+          console.warn("Fallback related movies failed", innerError);
         }
       } finally {
         if (isMounted) {
@@ -1031,29 +1225,65 @@ export default function Detail() {
                         <div className="w-8 h-8 border-4 border-[#E50914] border-t-transparent rounded-full animate-spin"></div>
                       </div>
                     ) : cast.length > 0 ? (
-                      cast.map((actor: any, idx: number) => (
-                        <motion.div key={idx} variants={itemVariants} className="text-center transition-transform duration-300 hover:-translate-y-1.5 flex flex-col items-center">
-                          <LazyImage 
-                            src={actor.profile_path ? getImageUrl(`https://image.tmdb.org/t/p/w185${actor.profile_path}`) : ""} 
-                            alt={actor.name}
-                            className="w-20 h-20 md:w-full md:h-auto md:aspect-[2/3] object-cover rounded-full md:rounded-xl mb-2.5 shadow-[0_5px_15px_rgba(0,0,0,0.5)] bg-[#2A2A2A]"
-                          />
-                          <div className="font-semibold text-white mb-1 text-xs md:text-sm line-clamp-1 w-full" title={decodeHtml(actor.name)}>{decodeHtml(actor.name)}</div>
-                          <div className="text-[10px] md:text-sm text-[#AAAAAA] line-clamp-1 w-full" title={decodeHtml(actor.character)}>{actor.character ? `Vai: ${decodeHtml(actor.character)}` : ''}</div>
-                        </motion.div>
-                      ))
+                      cast.map((actor: any, idx: number) => {
+                        const actorName = actor.name || "";
+                        const enriched = enrichedActors[actorName.toLowerCase()] || {};
+                        const profilePath = actor.profile_path || enriched.profile_path;
+                        const character = actor.character || enriched.character;
+                        return (
+                          <motion.div 
+                            key={idx} 
+                            variants={itemVariants} 
+                            onClick={() => handleActorClick(actor)}
+                            className="text-center transition-transform duration-300 hover:-translate-y-1.5 flex flex-col items-center cursor-pointer group"
+                          >
+                            <div className="relative overflow-hidden rounded-full md:rounded-xl mb-2.5 shadow-[0_5px_15px_rgba(0,0,0,0.5)] bg-[#2A2A2A] aspect-square w-20 h-20 md:w-full md:h-auto md:aspect-[2/3]">
+                              <LazyImage 
+                                src={profilePath ? getImageUrl(`https://image.tmdb.org/t/p/w185${profilePath}`) : ""} 
+                                alt={actor.name}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                                <span className="text-[10px] md:text-xs font-bold text-white bg-black/60 px-2 py-1 rounded-full">Chi tiết</span>
+                              </div>
+                            </div>
+                            <div className="font-semibold text-white group-hover:text-[#E50914] mb-1 text-xs md:text-sm line-clamp-1 w-full transition-colors" title={decodeHtml(actor.name)}>{decodeHtml(actor.name)}</div>
+                            <div className="text-[10px] md:text-sm text-[#AAAAAA] line-clamp-1 w-full" title={decodeHtml(character || "")}>
+                              {character ? `Vai: ${decodeHtml(character)}` : ''}
+                            </div>
+                          </motion.div>
+                        );
+                      })
                     ) : movie.actor && movie.actor.length > 0 && movie.actor[0] !== "Đang cập nhật" ? (
                       // Fallback to PhimAPI actors if TMDB fails
-                      movie.actor.map((actorName: string, idx: number) => (
-                        <motion.div key={idx} variants={itemVariants} className="text-center transition-transform duration-300 hover:-translate-y-1.5 flex flex-col items-center">
-                          <LazyImage 
-                            src="" 
-                            alt={actorName}
-                            className="w-20 h-20 md:w-full md:h-auto md:aspect-[2/3] object-cover rounded-full md:rounded-xl mb-2.5 shadow-[0_5px_15px_rgba(0,0,0,0.5)] bg-[#2A2A2A]"
-                          />
-                          <div className="font-semibold text-white mb-1 text-xs md:text-sm line-clamp-1 w-full" title={decodeHtml(actorName)}>{decodeHtml(actorName)}</div>
-                        </motion.div>
-                      ))
+                      movie.actor.map((actorName: string, idx: number) => {
+                        const enriched = enrichedActors[actorName.toLowerCase()] || {};
+                        const profilePath = enriched.profile_path;
+                        const character = enriched.character;
+                        return (
+                          <motion.div 
+                            key={idx} 
+                            variants={itemVariants} 
+                            onClick={() => handleActorClick(actorName)}
+                            className="text-center transition-transform duration-300 hover:-translate-y-1.5 flex flex-col items-center cursor-pointer group"
+                          >
+                            <div className="relative overflow-hidden rounded-full md:rounded-xl mb-2.5 shadow-[0_5px_15px_rgba(0,0,0,0.5)] bg-[#2A2A2A] aspect-square w-20 h-20 md:w-full md:h-auto md:aspect-[2/3]">
+                              <LazyImage 
+                                src={profilePath ? getImageUrl(`https://image.tmdb.org/t/p/w185${profilePath}`) : ""} 
+                                alt={actorName}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                                <span className="text-[10px] md:text-xs font-bold text-white bg-black/60 px-2 py-1 rounded-full">Chi tiết</span>
+                              </div>
+                            </div>
+                            <div className="font-semibold text-white group-hover:text-[#E50914] mb-1 text-xs md:text-sm line-clamp-1 w-full transition-colors" title={decodeHtml(actorName)}>{decodeHtml(actorName)}</div>
+                            <div className="text-[10px] md:text-sm text-[#AAAAAA] line-clamp-1 w-full" title={decodeHtml(character || "")}>
+                              {character ? `Vai: ${decodeHtml(character)}` : ''}
+                            </div>
+                          </motion.div>
+                        );
+                      })
                     ) : (
                       <p className="col-span-full text-gray-400 text-sm">Đang cập nhật thông tin diễn viên.</p>
                     )}
@@ -1131,6 +1361,140 @@ export default function Detail() {
             ) : null}
           </div>
         </div>
+
+        {/* Actor Details Modal */}
+        <AnimatePresence>
+          {selectedActor && (
+            <div 
+              className="fixed inset-0 z-[110] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 overflow-y-auto"
+              onClick={() => setSelectedActor(null)}
+            >
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                transition={{ duration: 0.3 }}
+                className="relative w-full max-w-4xl bg-[#121212]/95 border border-white/10 rounded-2xl shadow-2xl overflow-hidden text-white"
+                onClick={e => e.stopPropagation()}
+              >
+                {/* Close Button */}
+                <button 
+                  onClick={() => setSelectedActor(null)}
+                  className="absolute top-4 right-4 z-20 w-10 h-10 bg-black/50 hover:bg-[#E50914] text-white rounded-full flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+
+                {loadingActorDetails ? (
+                  <div className="flex flex-col items-center justify-center py-20 min-h-[400px]">
+                    <div className="w-12 h-12 border-4 border-[#E50914] border-t-transparent rounded-full animate-spin mb-4"></div>
+                    <p className="text-gray-400 text-sm">Đang tải thông tin diễn viên...</p>
+                  </div>
+                ) : actorDetails ? (
+                  <div className="p-6 md:p-8 grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 max-h-[85vh] overflow-y-auto custom-scrollbar">
+                    {/* Left Column: Avatar & Quick Info */}
+                    <div className="flex flex-col items-center md:items-start text-center md:text-left">
+                      <img 
+                        src={actorDetails.profile_path ? `https://image.tmdb.org/t/p/w500${actorDetails.profile_path}` : CAST_PLACEHOLDER}
+                        alt={actorDetails.name}
+                        className="w-48 h-72 md:w-full md:h-auto md:aspect-[2/3] object-cover rounded-xl shadow-xl border border-white/10 mb-4 bg-[#2A2A2A]"
+                        referrerPolicy="no-referrer"
+                      />
+                      <h3 className="text-2xl font-bold font-heading mb-1">{actorDetails.name}</h3>
+                      {actorDetails.place_of_birth && (
+                        <p className="text-sm text-gray-400 mb-2">📍 {actorDetails.place_of_birth}</p>
+                      )}
+                      {actorDetails.birthday && (
+                        <p className="text-sm text-gray-400 mb-2">📅 Ngày sinh: {actorDetails.birthday}</p>
+                      )}
+                      {actorDetails.deathday && (
+                        <p className="text-sm text-gray-400 mb-2">💀 Ngày mất: {actorDetails.deathday}</p>
+                      )}
+                      {actorDetails.known_for_department && (
+                        <p className="text-sm text-gray-400 mb-2">🎭 Lĩnh vực: {actorDetails.known_for_department === 'Acting' ? 'Diễn viên' : actorDetails.known_for_department}</p>
+                      )}
+                    </div>
+
+                    {/* Right Column: Biography & Filmography */}
+                    <div className="md:col-span-2 flex flex-col gap-6">
+                      {/* Biography Section */}
+                      <div>
+                        <h4 className="text-lg font-bold font-heading text-[#E50914] mb-2 flex items-center gap-2">
+                          <span className="w-1 h-5 bg-[#E50914] rounded-full inline-block"></span>
+                          Tiểu sử
+                        </h4>
+                        <div className="text-gray-300 text-sm leading-relaxed max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
+                          {actorDetails.biography ? (
+                            <p className="whitespace-pre-line">{actorDetails.biography}</p>
+                          ) : (
+                            <p className="italic text-gray-500">Chưa cập nhật tiểu sử cho diễn viên này.</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Filmography Section */}
+                      <div>
+                        <h4 className="text-lg font-bold font-heading text-[#E50914] mb-3 flex items-center gap-2">
+                          <span className="w-1 h-5 bg-[#E50914] rounded-full inline-block"></span>
+                          Phim đã tham gia
+                        </h4>
+                        {actorDetails.combined_credits?.cast && actorDetails.combined_credits.cast.length > 0 ? (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
+                            {actorDetails.combined_credits.cast
+                              .filter((credit: any) => credit.title || credit.name)
+                              .sort((a: any, b: any) => (b.popularity || 0) - (a.popularity || 0))
+                              .slice(0, 12)
+                              .map((credit: any, index: number) => {
+                                const title = credit.title || credit.name;
+                                const character = credit.character;
+                                return (
+                                  <div 
+                                    key={index} 
+                                    className="bg-white/5 border border-white/5 hover:border-white/25 rounded-lg p-2 flex flex-col justify-between transition-all group"
+                                  >
+                                    <div className="flex gap-2">
+                                      <img 
+                                        src={credit.poster_path ? `https://image.tmdb.org/t/p/w92${credit.poster_path}` : CAST_PLACEHOLDER}
+                                        alt={title}
+                                        className="w-10 h-15 object-cover rounded bg-[#2A2A2A]"
+                                        referrerPolicy="no-referrer"
+                                      />
+                                      <div className="flex-grow min-w-0">
+                                        <h5 className="font-semibold text-xs text-white line-clamp-2" title={title}>{title}</h5>
+                                        {character && (
+                                          <p className="text-[10px] text-gray-400 line-clamp-1" title={character}>as {character}</p>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedActor(null);
+                                        navigate(`/search?q=${encodeURIComponent(title)}`);
+                                      }}
+                                      className="mt-2 w-full bg-[#E50914]/10 hover:bg-[#E50914] text-[#E50914] hover:text-white border border-[#E50914]/20 hover:border-transparent text-[10px] py-1 px-2 rounded font-semibold transition-all text-center cursor-pointer"
+                                    >
+                                      Tìm phim trên Cineverse
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        ) : (
+                          <p className="italic text-gray-500 text-sm">Không có thông tin phim tham gia.</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center py-20 text-gray-400">
+                    Không tìm thấy thông tin chi tiết.
+                  </div>
+                )}
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </motion.div>
     );
   }

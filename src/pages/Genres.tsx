@@ -49,7 +49,7 @@ export default function Genres() {
         const res = await api.getByGenre(selectedGenre, page);
         setMovies(res.items || []);
       } catch (error) {
-        console.error("Failed to fetch movies by genre", error);
+        console.warn("Failed to fetch movies by genre", error);
         showToast("Không thể tải danh sách phim. Vui lòng kiểm tra kết nối mạng.", "error");
       } finally {
         setLoading(false);

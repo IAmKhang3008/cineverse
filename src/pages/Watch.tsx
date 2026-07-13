@@ -59,7 +59,7 @@ export default function Watch() {
           setRelatedMovies(relatedRes.items?.filter((m: any) => m.slug !== slug).slice(0, 6) || []);
         }
       } catch (error) {
-        console.error("Failed to fetch movie detail", error);
+        console.warn("Failed to fetch movie detail", error);
         showToast("Không thể tải dữ liệu phim. Vui lòng kiểm tra kết nối mạng.", "error");
       } finally {
         setLoading(false);
