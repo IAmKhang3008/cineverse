@@ -129,6 +129,7 @@ export default function Detail() {
   const [cast, setCast] = useState<any[]>([]);
   const [loadingCast, setLoadingCast] = useState(false);
   const [images, setImages] = useState<any[]>([]);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [loadingImages, setLoadingImages] = useState(false);
   const [rating, setRating] = useState<{ source: string, score: string, votes: string } | null>(null);
   const [showShareMenu, setShowShareMenu] = useState(false);
@@ -144,32 +145,66 @@ export default function Detail() {
   const navigate = useNavigate();
   const fromSearch = location.state?.fromSearch;
 
-  // Enrich actors with profile photos and character names from TMDB
+  // Enrich actors with profile photos and character names using PhimAPI peoples endpoint + TMDB fallback
   useEffect(() => {
-    if (!movie) return;
+    if (!movie || !movie.slug) return;
     
     let isMounted = true;
     const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
 
-    const enrichAll = async () => {
-      // 1. Lấy danh sách diễn viên cần làm giàu thông tin (tối đa 12 người để tránh spam API)
-      const actorNamesToEnrich: string[] = [];
+    const enrichActors = async () => {
+      let tempMap: {[name: string]: {profile_path?: string | null; character?: string | null; id?: number}} = {};
       
+      // 1. Try PhimAPI peoples endpoint first
+      try {
+        const peoplesData = await api.getMoviePeoples(movie.slug);
+        if (peoplesData && peoplesData.peoples && peoplesData.peoples.length > 0) {
+          peoplesData.peoples.forEach((person: any) => {
+            if (person.known_for_department === 'Acting') {
+              if (person.name) {
+                tempMap[person.name.toLowerCase()] = {
+                  profile_path: person.profile_path,
+                  character: person.character,
+                  id: person.tmdb_people_id
+                };
+              }
+              if (person.original_name) {
+                tempMap[person.original_name.toLowerCase()] = {
+                  profile_path: person.profile_path,
+                  character: person.character,
+                  id: person.tmdb_people_id
+                };
+              }
+            }
+          });
+          
+          if (isMounted && Object.keys(tempMap).length > 0) {
+            setEnrichedActors(prev => ({ ...prev, ...tempMap }));
+            return; // Success with PhimAPI, skip TMDB fallback
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to enrich actors from PhimAPI peoples endpoint:", err);
+      }
+
+      if (!isMounted) return;
+
+      // 2. Fallback to TMDB combined credits search
+      const actorNamesToEnrich: string[] = [];
       if (cast && cast.length > 0) {
         cast.slice(0, 12).forEach((actor: any) => {
-          if (actor.name && !actor.profile_path) {
+          if (actor.name && !actor.profile_path && !tempMap[actor.name.toLowerCase()]) {
             actorNamesToEnrich.push(actor.name);
           }
         });
       } else if (movie.actor && movie.actor.length > 0 && movie.actor[0] !== "Đang cập nhật") {
         movie.actor.slice(0, 12).forEach((actorName: string) => {
-          actorNamesToEnrich.push(actorName);
+          if (!tempMap[actorName.toLowerCase()]) actorNamesToEnrich.push(actorName);
         });
       }
 
       if (actorNamesToEnrich.length === 0) return;
 
-      // 2. Thử lấy danh sách credits của toàn bộ phim từ TMDB trước để map hàng loạt (tiết kiệm API call)
       let tmdbCast: any[] = [];
       try {
         let tmdbId = movie.tmdb?.id;
@@ -196,9 +231,6 @@ export default function Detail() {
         console.warn("Error fetching tmdb credits for enrichment:", e);
       }
 
-      // 3. Map các diễn viên tìm được từ Credits vào tempMap
-      const tempMap: {[name: string]: {profile_path?: string | null; character?: string | null; id?: number}} = {};
-      
       tmdbCast.forEach((actor: any) => {
         if (actor.name) {
           tempMap[actor.name.toLowerCase()] = {
@@ -219,11 +251,9 @@ export default function Detail() {
       if (!isMounted) return;
       setEnrichedActors(prev => ({ ...prev, ...tempMap }));
 
-      // 4. Với những diễn viên còn sót lại (chưa có trong map từ credits), gọi API Search Person riêng biệt
+      // 3. Fallback to TMDB individual person search
       const remainingActors = actorNamesToEnrich.filter(name => !tempMap[name.toLowerCase()]);
-      
       if (remainingActors.length > 0) {
-        // Gọi song song có giới hạn hoặc tuần tự để tránh rate limit
         for (const name of remainingActors) {
           if (!isMounted) break;
           try {
@@ -232,16 +262,14 @@ export default function Detail() {
             
             if (searchData.results?.length > 0) {
               const person = searchData.results[0];
-              const resolvedInfo = {
-                profile_path: person.profile_path,
-                id: person.id,
-                character: null // Không có character từ search person chung, nhưng ít nhất có hình ảnh
-              };
-              
               if (isMounted) {
                 setEnrichedActors(prev => ({
                   ...prev,
-                  [name.toLowerCase()]: resolvedInfo
+                  [name.toLowerCase()]: {
+                    profile_path: person.profile_path,
+                    id: person.id,
+                    character: null
+                  }
                 }));
               }
             }
@@ -252,12 +280,12 @@ export default function Detail() {
       }
     };
 
-    enrichAll();
+    enrichActors();
 
     return () => {
       isMounted = false;
     };
-  }, [movie, cast]);
+  }, [movie]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -1303,9 +1331,10 @@ export default function Detail() {
                       </div>
                     ) : images.length > 0 ? (
                       images.map((img: any, idx: number) => (
-                        <motion.div key={idx} variants={itemVariants} className="rounded-xl overflow-hidden aspect-video cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-[0_10px_25px_rgba(229,9,20,0.3)] bg-[#2A2A2A]">
+                        <motion.div key={idx} variants={itemVariants} className="rounded-xl overflow-hidden aspect-video cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-[0_10px_25px_rgba(229,9,20,0.3)] bg-[#2A2A2A]"
+                          onClick={() => setSelectedImage(`https://image.tmdb.org/t/p/original${img.file_path}`)}>
                           <img 
-                            src={getImageUrl(`https://image.tmdb.org/t/p/w500${img.file_path}`)} 
+                            src={getImageUrl(`https://image.tmdb.org/t/p/w780${img.file_path}`)} 
                             alt={`Hình ảnh ${idx + 1}`}
                             className="w-full h-full object-cover"
                             referrerPolicy="no-referrer"

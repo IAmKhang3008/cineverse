@@ -595,6 +595,27 @@ export const getImageUrl = (path: string, _type: 'poster' | 'banner' = 'poster')
 // ─────────────────────────────────────────────────────────────
 // DATA NORMALIZATION
 // ─────────────────────────────────────────────────────────────
+
+export interface FilterOptions {
+  category?: string;
+  country?: string;
+  year?: string | number;
+  sort_field?: string;
+  sort_type?: string;
+  sort_lang?: string;
+  limit?: number;
+}
+
+const buildQuery = (base: string, params: Record<string, any>) => {
+  const query = Object.keys(params)
+    .filter(k => params[k] !== undefined && params[k] !== null && params[k] !== '')
+    .map(k => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`)
+    .join('&');
+  
+  if (!query) return base;
+  return base.includes('?') ? `${base}&${query}` : `${base}?${query}`;
+};
+
 export interface NormalizedMovie {
   _id:             string;
   slug:            string;
@@ -750,9 +771,20 @@ export const api = {
       };
     }, TTL.NEW_UPDATED),
 
-  getByCategory: async (slug: string, page = 1) =>
+  getNewMovies: async (page = 1, filters?: FilterOptions) =>
+    fetchWithCache(`new-movies:${page}:${JSON.stringify(filters || {})}`, async () => {
+      const { data, source } = await apiFetch(buildQuery(`/v1/api/danh-sach`, { page, ...filters }));
+      const items = data.data?.items || data.items || [];
+      return { 
+        items: items.map((i: any) => normalizeBySource(i, source)), 
+        pagination: data.data?.params?.pagination || data.pagination || null 
+      };
+    }, TTL.NEW_UPDATED),
+
+
+  getByCategory: async (slug: string, page = 1, filters?: FilterOptions) =>
     fetchWithCache(`category:${slug}:${page}`, async () => {
-      const { data, source } = await apiFetch(`/v1/api/danh-sach/${slug}?page=${page}`);
+      const { data, source } = await apiFetch(buildQuery(`/v1/api/danh-sach/${slug}`, { page, ...filters }));
       const items = data.data?.items || data.items || [];
       return { items: items.map((i: any) => normalizeBySource(i, source)), pagination: data.data?.pagination };
     }, TTL.CATEGORY_LIST),
@@ -961,30 +993,30 @@ export const api = {
       };
     }, TTL.MOVIE_DETAIL),
 
-  getByGenre: async (slug: string, page = 1) =>
+  getByGenre: async (slug: string, page = 1, filters?: FilterOptions) =>
     fetchWithCache(`genre:${slug}:${page}`, async () => {
-      const { data, source } = await apiFetch(`/v1/api/the-loai/${slug}?page=${page}`);
+      const { data, source } = await apiFetch(buildQuery(`/v1/api/the-loai/${slug}`, { page, ...filters }));
       const items = data.data?.items || data.items || [];
       return { items: items.map((i: any) => normalizeBySource(i, source)), pagination: data.data?.pagination };
     }, TTL.CATEGORY_LIST),
 
-  getByCountry: async (slug: string, page = 1) =>
+  getByCountry: async (slug: string, page = 1, filters?: FilterOptions) =>
     fetchWithCache(`country:${slug}:${page}`, async () => {
-      const { data, source } = await apiFetch(`/v1/api/quoc-gia/${slug}?page=${page}`);
+      const { data, source } = await apiFetch(buildQuery(`/v1/api/quoc-gia/${slug}`, { page, ...filters }));
       const items = data.data?.items || data.items || [];
       return { items: items.map((i: any) => normalizeBySource(i, source)), pagination: data.data?.pagination };
     }, TTL.CATEGORY_LIST),
 
-  getByYear: async (year: string, page = 1) =>
+  getByYear: async (year: string, page = 1, filters?: FilterOptions) =>
     fetchWithCache(`year:${year}:${page}`, async () => {
-      const { data, source } = await apiFetch(`/v1/api/nam/${year}?page=${page}`);
+      const { data, source } = await apiFetch(buildQuery(`/v1/api/nam/${year}`, { page, ...filters }));
       const items = data.data?.items || data.items || [];
       return { items: items.map((i: any) => normalizeBySource(i, source)), pagination: data.data?.pagination };
     }, TTL.CATEGORY_LIST),
 
-  search: async (keyword: string, page = 1, limit = 64) =>
+  search: async (keyword: string, page = 1, limit = 64, filters?: FilterOptions) =>
     fetchWithCache(`search:${keyword}:${page}:${limit}`, async () => {
-      const { data, source } = await apiFetch(`/v1/api/tim-kiem?keyword=${encodeURIComponent(keyword)}&page=${page}&limit=${limit}`);
+      const { data, source } = await apiFetch(buildQuery(`/v1/api/tim-kiem`, { keyword, page, limit, ...filters }));
       const items      = data.data?.items || data.items || [];
       const pagination = data.data?.params?.pagination || data.pagination || null;
       return { items: items.map((i: any) => normalizeBySource(i, source)), pagination };
