@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useLayoutEffect } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { api, getImageUrl } from "@/lib/api";
-import { Play, Plus, Star, Clock, Calendar, Globe, Heart, X, ArrowLeft, Share2, Copy, Facebook, Twitter, Link as LinkIcon } from "lucide-react";
+import { Play, Plus, Star, Clock, Calendar, Globe, Heart, X, ArrowLeft, Share2, Copy, Link as LinkIcon } from "lucide-react";
 import MovieCard from "@/components/MovieCard";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
@@ -129,7 +129,6 @@ export default function Detail() {
   const [cast, setCast] = useState<any[]>([]);
   const [loadingCast, setLoadingCast] = useState(false);
   const [images, setImages] = useState<any[]>([]);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [loadingImages, setLoadingImages] = useState(false);
   const [rating, setRating] = useState<{ source: string, score: string, votes: string } | null>(null);
   const [showShareMenu, setShowShareMenu] = useState(false);
@@ -145,66 +144,32 @@ export default function Detail() {
   const navigate = useNavigate();
   const fromSearch = location.state?.fromSearch;
 
-  // Enrich actors with profile photos and character names using PhimAPI peoples endpoint + TMDB fallback
+  // Enrich actors with profile photos and character names from TMDB
   useEffect(() => {
-    if (!movie || !movie.slug) return;
+    if (!movie) return;
     
     let isMounted = true;
     const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
 
-    const enrichActors = async () => {
-      let tempMap: {[name: string]: {profile_path?: string | null; character?: string | null; id?: number}} = {};
-      
-      // 1. Try PhimAPI peoples endpoint first
-      try {
-        const peoplesData = await api.getMoviePeoples(movie.slug);
-        if (peoplesData && peoplesData.peoples && peoplesData.peoples.length > 0) {
-          peoplesData.peoples.forEach((person: any) => {
-            if (person.known_for_department === 'Acting') {
-              if (person.name) {
-                tempMap[person.name.toLowerCase()] = {
-                  profile_path: person.profile_path,
-                  character: person.character,
-                  id: person.tmdb_people_id
-                };
-              }
-              if (person.original_name) {
-                tempMap[person.original_name.toLowerCase()] = {
-                  profile_path: person.profile_path,
-                  character: person.character,
-                  id: person.tmdb_people_id
-                };
-              }
-            }
-          });
-          
-          if (isMounted && Object.keys(tempMap).length > 0) {
-            setEnrichedActors(prev => ({ ...prev, ...tempMap }));
-            return; // Success with PhimAPI, skip TMDB fallback
-          }
-        }
-      } catch (err) {
-        console.warn("Failed to enrich actors from PhimAPI peoples endpoint:", err);
-      }
-
-      if (!isMounted) return;
-
-      // 2. Fallback to TMDB combined credits search
+    const enrichAll = async () => {
+      // 1. Lấy danh sách diễn viên cần làm giàu thông tin (tối đa 12 người để tránh spam API)
       const actorNamesToEnrich: string[] = [];
+      
       if (cast && cast.length > 0) {
         cast.slice(0, 12).forEach((actor: any) => {
-          if (actor.name && !actor.profile_path && !tempMap[actor.name.toLowerCase()]) {
+          if (actor.name && !actor.profile_path) {
             actorNamesToEnrich.push(actor.name);
           }
         });
       } else if (movie.actor && movie.actor.length > 0 && movie.actor[0] !== "Đang cập nhật") {
         movie.actor.slice(0, 12).forEach((actorName: string) => {
-          if (!tempMap[actorName.toLowerCase()]) actorNamesToEnrich.push(actorName);
+          actorNamesToEnrich.push(actorName);
         });
       }
 
       if (actorNamesToEnrich.length === 0) return;
 
+      // 2. Thử lấy danh sách credits của toàn bộ phim từ TMDB trước để map hàng loạt (tiết kiệm API call)
       let tmdbCast: any[] = [];
       try {
         let tmdbId = movie.tmdb?.id;
@@ -231,6 +196,9 @@ export default function Detail() {
         console.warn("Error fetching tmdb credits for enrichment:", e);
       }
 
+      // 3. Map các diễn viên tìm được từ Credits vào tempMap
+      const tempMap: {[name: string]: {profile_path?: string | null; character?: string | null; id?: number}} = {};
+      
       tmdbCast.forEach((actor: any) => {
         if (actor.name) {
           tempMap[actor.name.toLowerCase()] = {
@@ -251,9 +219,11 @@ export default function Detail() {
       if (!isMounted) return;
       setEnrichedActors(prev => ({ ...prev, ...tempMap }));
 
-      // 3. Fallback to TMDB individual person search
+      // 4. Với những diễn viên còn sót lại (chưa có trong map từ credits), gọi API Search Person riêng biệt
       const remainingActors = actorNamesToEnrich.filter(name => !tempMap[name.toLowerCase()]);
+      
       if (remainingActors.length > 0) {
+        // Gọi song song có giới hạn hoặc tuần tự để tránh rate limit
         for (const name of remainingActors) {
           if (!isMounted) break;
           try {
@@ -262,14 +232,16 @@ export default function Detail() {
             
             if (searchData.results?.length > 0) {
               const person = searchData.results[0];
+              const resolvedInfo = {
+                profile_path: person.profile_path,
+                id: person.id,
+                character: null // Không có character từ search person chung, nhưng ít nhất có hình ảnh
+              };
+              
               if (isMounted) {
                 setEnrichedActors(prev => ({
                   ...prev,
-                  [name.toLowerCase()]: {
-                    profile_path: person.profile_path,
-                    id: person.id,
-                    character: null
-                  }
+                  [name.toLowerCase()]: resolvedInfo
                 }));
               }
             }
@@ -280,12 +252,12 @@ export default function Detail() {
       }
     };
 
-    enrichActors();
+    enrichAll();
 
     return () => {
       isMounted = false;
     };
-  }, [movie]);
+  }, [movie, cast]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -1100,14 +1072,14 @@ export default function Detail() {
                           onClick={() => handleShare('facebook')}
                           className="flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:text-white hover:bg-[#1877F2]/20 transition-colors text-left cursor-pointer"
                         >
-                          <Facebook className="w-4 h-4 text-[#1877F2]" />
+                          <svg className="w-4 h-4 text-[#1877F2]" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.04c-5.5 0-10 4.48-10 10.02 0 5.01 3.66 9.15 8.44 9.9v-7.03H7.9v-2.87h2.54V9.89c0-2.51 1.49-3.89 3.78-3.89 1.09 0 2.23.19 2.23.19v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56v1.88h2.78l-.44 2.87h-2.34v7.03c4.78-.75 8.44-4.89 8.44-9.9 0-5.54-4.5-10.02-10-10.02z" /></svg>
                           Chia sẻ Facebook
                         </button>
                         <button 
                           onClick={() => handleShare('twitter')}
                           className="flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:text-white hover:bg-[#1DA1F2]/20 transition-colors text-left cursor-pointer"
                         >
-                          <Twitter className="w-4 h-4 text-[#1DA1F2]" />
+                          <svg className="w-4 h-4 text-[#1DA1F2]" viewBox="0 0 24 24" fill="currentColor"><path d="M23.954 4.569c-.885.389-1.83.654-2.825.775 1.014-.611 1.794-1.574 2.163-2.723-.951.555-2.005.959-3.127 1.184-.896-.959-2.173-1.559-3.591-1.559-2.717 0-4.92 2.203-4.92 4.917 0 .39.045.765.127 1.124C7.691 8.094 4.066 6.13 1.64 3.161c-.427.722-.666 1.561-.666 2.475 0 1.71.87 3.213 2.188 4.096-.807-.026-1.566-.248-2.228-.616v.061c0 2.385 1.693 4.374 3.946 4.827-.413.111-.849.171-1.296.171-.314 0-.615-.03-.916-.086.631 1.953 2.445 3.377 4.604 3.417-1.68 1.319-3.809 2.105-6.102 2.105-.39 0-.779-.023-1.17-.067 2.189 1.394 4.768 2.209 7.557 2.209 9.054 0 13.999-7.496 13.999-13.986 0-.209 0-.42-.015-.63.961-.689 1.8-1.56 2.46-2.548l-.047-.02z" /></svg>
                           Chia sẻ Twitter
                         </button>
                       </div>
@@ -1331,10 +1303,9 @@ export default function Detail() {
                       </div>
                     ) : images.length > 0 ? (
                       images.map((img: any, idx: number) => (
-                        <motion.div key={idx} variants={itemVariants} className="rounded-xl overflow-hidden aspect-video cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-[0_10px_25px_rgba(229,9,20,0.3)] bg-[#2A2A2A]"
-                          onClick={() => setSelectedImage(`https://image.tmdb.org/t/p/original${img.file_path}`)}>
+                        <motion.div key={idx} variants={itemVariants} className="rounded-xl overflow-hidden aspect-video cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-[0_10px_25px_rgba(229,9,20,0.3)] bg-[#2A2A2A]">
                           <img 
-                            src={getImageUrl(`https://image.tmdb.org/t/p/w780${img.file_path}`)} 
+                            src={getImageUrl(`https://image.tmdb.org/t/p/w500${img.file_path}`)} 
                             alt={`Hình ảnh ${idx + 1}`}
                             className="w-full h-full object-cover"
                             referrerPolicy="no-referrer"
