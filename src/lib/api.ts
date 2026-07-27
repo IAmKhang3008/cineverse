@@ -25,8 +25,8 @@ import { fetchWithCache, TTL } from './cache';
 const PRIMARY_URL           = 'https://phimapi.com';
 const FALLBACK_URL          = 'https://ophim1.com';
 const MAX_RETRIES           = 1;
-const PRIMARY_TIMEOUT       = 12_000;
-const PARALLEL_THRESHOLD    = 6_000;
+const PRIMARY_TIMEOUT       = 8_000;
+const PARALLEL_THRESHOLD    = 1_000;
 const HEALTH_CHECK_INTERVAL = 30_000;
 
 // [FIX 5] Không hard-code key — chỉ lấy từ .env
@@ -131,26 +131,20 @@ export async function fetchWithRetry(
   throw lastError;
 }
 
-// ─────────────────────────────────────────────────────────────
-// API STATE — health check + failover
-// ─────────────────────────────────────────────────────────────
 const apiState = {
-  usingFallback:    false,
-  primaryDeadSince: 0,
-  healthCheckTimer: null as ReturnType<typeof setInterval> | null,
+  usingFallback: false,
   consecutiveFails: 0,
+  healthCheckTimer: null as ReturnType<typeof setInterval> | null,
 
   switchToFallback() {
     if (this.usingFallback) return;
-    this.usingFallback    = true;
-    this.primaryDeadSince = Date.now();
+    this.usingFallback = true;
     console.warn('[API] phimapi.com không phản hồi → ophim1.com');
     this.startHealthCheck();
   },
   switchToPrimary() {
-    this.usingFallback    = false;
+    this.usingFallback = false;
     this.consecutiveFails = 0;
-    this.primaryDeadSince = 0;
     console.info('[API] phimapi.com sống lại ✅');
     this.stopHealthCheck();
   },
@@ -158,9 +152,11 @@ const apiState = {
     if (this.healthCheckTimer) return;
     this.healthCheckTimer = setInterval(async () => {
       try {
-        const r = await fetchWithTimeout(`${PRIMARY_URL}/danh-sach/phim-moi-cap-nhat?page=1`, 3_000);
-        if (r.ok) this.switchToPrimary();
-      } catch { /* vẫn chết */ }
+        const res = await fetch(`${PRIMARY_URL}/v1/api/danh-sach/phim-le?limit=1`);
+        if (res.ok) {
+          this.switchToPrimary();
+        }
+      } catch {}
     }, HEALTH_CHECK_INTERVAL);
   },
   stopHealthCheck() {
@@ -168,476 +164,155 @@ const apiState = {
   },
 };
 
-// ─────────────────────────────────────────────────────────────
-// PARALLEL FETCH
-// ─────────────────────────────────────────────────────────────
-async function parallelFetch(endpoint: string, canFallback = true): Promise<{ res: Response; source: 'primary' | 'fallback' }> {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    let fallbackResult: { res: Response; source: 'fallback' } | null = null;
-    const settle = (v: { res: Response; source: 'primary' | 'fallback' }) => {
-      if (!settled) { settled = true; resolve(v); }
-    };
 
-    const primaryPromise = retryWithJitter(() =>
-      fetchWithTimeout(`${PRIMARY_URL}${endpoint}`, PRIMARY_TIMEOUT).then(r => {
-        if (!r.ok && r.status >= 500) throw new Error(`HTTP ${r.status}`);
-        return r;
-      })
-    );
+export const PLACEHOLDER_URL = 'https://placehold.co/500x750/1a1a1a/FFF?text=No+Image';
 
-    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
-    if (canFallback) {
-      fallbackTimer = setTimeout(async () => {
-        try {
-          const fRes = await fetchWithTimeout(`${FALLBACK_URL}${endpoint}`, PRIMARY_TIMEOUT);
-          if (!fRes.ok) return;
-          fallbackResult = { res: fRes, source: 'fallback' };
-          primaryPromise.catch(() => {});
-          if (!settled) {
-            console.info(`[API] Fallback tạm cho ${endpoint} (primary > ${PARALLEL_THRESHOLD}ms)`);
-            settle(fallbackResult);
-          }
-        } catch { /* fallback cũng chết */ }
-      }, PARALLEL_THRESHOLD);
-    }
+export type TmdbMovieInfo = {
+  type?: string;
+  id?: number | string;
+  vote_average?: number;
+  vote_count?: number;
+  season?: number | null;
+  title?: string;
+  original_title?: string;
+  media_type?: string;
+  [key: string]: any;
+};
 
-    primaryPromise
-      .then(res => {
-        if (fallbackTimer) clearTimeout(fallbackTimer);
-        apiState.consecutiveFails = 0;
-        if (apiState.usingFallback) apiState.switchToPrimary();
-        settle({ res, source: 'primary' });
-      })
-      .catch(err => {
-        if (fallbackTimer) clearTimeout(fallbackTimer);
-        apiState.consecutiveFails++;
-        if (apiState.consecutiveFails >= 2) apiState.switchToFallback();
-        if (fallbackResult) { settle(fallbackResult); return; }
-        if (canFallback) {
-          fetchWithTimeout(`${FALLBACK_URL}${endpoint}`, PRIMARY_TIMEOUT)
-            .then(r => { if (r.ok) settle({ res: r, source: 'fallback' }); else reject(err); })
-            .catch(() => reject(err));
-        } else {
-          reject(err);
-        }
-      });
-  });
-}
+export type TmdbFullDetail = {
+  [key: string]: any;
+};
 
-// ─────────────────────────────────────────────────────────────
-// [FIX 2] IMAGE UPGRADE — tách query string trước khi regex
-// ─────────────────────────────────────────────────────────────
-function upgradeImageUrl(url: string): string {
+export type NormalizedMovie = {
+  _id: string;
+  slug: string;
+  name: string;
+  origin_name: string;
+  poster_url: string;
+  thumb_url: string;
+  description: string;
+  content: string;
+  year: string;
+  quality: string;
+  lang: string;
+  time: string;
+  episode_current: string;
+  episode_total: string;
+  type: string;
+  category: any[];
+  country: any[];
+  actor: string[];
+  director: string[];
+  tmdb?: TmdbMovieInfo;
+  trailer_url: string;
+  _source: 'primary' | 'fallback';
+};
+
+export function upgradeImageUrl(url: string) {
   if (!url) return url;
-  const qIdx  = url.indexOf('?');
-  const hIdx  = url.indexOf('#');
-  const cutAt = qIdx !== -1 ? qIdx : hIdx !== -1 ? hIdx : url.length;
-  const base   = url.slice(0, cutAt);
-  const suffix = url.slice(cutAt);
-  return base
-    .replace(/-thumb(\.\w+)$/i,  '$1')
-    .replace(/_thumb(\.\w+)$/i,  '$1')
-    .replace(/-poster(\.\w+)$/i, '$1')
-    .replace(/\/w\d+\//g, '/original/')
-    + suffix;
-}
-
-// ─────────────────────────────────────────────────────────────
-// [FIX 3] TMDB CACHE — 2-layer: memory L1 + localStorage L2
-// ─────────────────────────────────────────────────────────────
-const TMDB_CACHE_TTL_MS = 24 * 60 * 60 * 1_000; // 24h
-const TMDB_CACHE_PREFIX = 'cv_tmdb_';
-
-interface TmdbCacheEntry<T> { data: T | null; expiresAt: number; }
-
-// Generic 2-layer cache để dùng cho cả TmdbMovieInfo và TmdbFullDetail
-class TmdbCache<T> {
-  private mem = new Map<string, T | null>();
-  private prefix: string;
-  constructor(prefix: string) { this.prefix = TMDB_CACHE_PREFIX + prefix + '_'; }
-
-  get(key: string): T | null | undefined {
-    if (this.mem.has(key)) return this.mem.get(key);
-    try {
-      const raw = localStorage.getItem(this.prefix + key);
-      if (!raw) return undefined;
-      const entry: TmdbCacheEntry<T> = JSON.parse(raw);
-      if (Date.now() > entry.expiresAt) { localStorage.removeItem(this.prefix + key); return undefined; }
-      this.mem.set(key, entry.data);
-      return entry.data;
-    } catch { return undefined; }
+  if (url.includes('image.tmdb.org') && url.includes('/w500')) {
+    return url.replace('/w500', '/original');
   }
-
-  set(key: string, data: T | null): void {
-    this.mem.set(key, data);
-    try {
-      localStorage.setItem(this.prefix + key, JSON.stringify({ data, expiresAt: Date.now() + TMDB_CACHE_TTL_MS }));
-    } catch { /* localStorage full/blocked */ }
+  if (url.includes('ophim.live') || url.includes('img.ophim')) {
+    return url.replace('img.ophim.live', 'img.ophim.cc').replace('img.ophim.cc', 'img.ophim.live');
   }
+  return url;
 }
 
-// ─────────────────────────────────────────────────────────────
-// TMDB TYPES
-// ─────────────────────────────────────────────────────────────
-interface TmdbMovieInfo {
-  id:             number;
-  title:          string;
-  original_title: string;
-  name?:          string;
-  original_name?: string;
-  media_type?:    'movie' | 'tv' | 'person';
-  release_date?:  string;
-  first_air_date?: string;
-  poster_path?:   string;
-  backdrop_path?: string;
-  overview?:      string;
-  vote_average?:  number;
-  vote_count?:    number;
-  popularity?:    number;
+export function needsImageUpgrade(url: string) {
+  return url.includes('placehold.co') || url.includes('/w500') || !url.includes('image.tmdb.org');
 }
 
-// [FIX 8] Full detail trả về từ append_to_response
-interface TmdbFullDetail extends TmdbMovieInfo {
-  genres?:    { id: number; name: string }[];
-  runtime?:   number;
-  status?:    string;
-  tagline?:   string;
-  // credits (appended)
-  credits?: {
-    cast: { id: number; name: string; character: string; profile_path?: string }[];
-    crew: { id: number; name: string; job: string; department: string }[];
-  };
-  // videos (appended)
-  videos?: {
-    results: { id: string; key: string; site: string; type: string; official: boolean; published_at: string }[];
-  };
-  // images (appended)
-  images?: {
-    backdrops: { file_path: string; width: number; height: number; vote_average: number }[];
-    posters:   { file_path: string; width: number; height: number; vote_average: number }[];
-  };
-  // number_of_episodes / seasons (TV)
-  number_of_episodes?: number;
-  number_of_seasons?:  number;
+export function extractBestPoster(images: any) {
+  if (!images?.posters?.length) return null;
+  const vi = images.posters.find((i: any) => i.iso_639_1 === 'vi');
+  if (vi) return `https://image.tmdb.org/t/p/original${vi.file_path}`;
+  const en = images.posters.find((i: any) => i.iso_639_1 === 'en');
+  if (en) return `https://image.tmdb.org/t/p/original${en.file_path}`;
+  return `https://image.tmdb.org/t/p/original${images.posters[0].file_path}`;
 }
 
-const tmdbSearchCache = new TmdbCache<TmdbMovieInfo>('search');
-const tmdbDetailCache = new TmdbCache<TmdbFullDetail>('detail');
-
-// ─────────────────────────────────────────────────────────────
-// [FIX 6 + FIX 12] TMDB SEARCH — check res.ok, sanitize key,
-// score-based matching (không chỉ lấy results[0] mù quáng)
-// ─────────────────────────────────────────────────────────────
-
-/** Tính điểm match giữa tên phim tìm kiếm và kết quả TMDB */
-function scoreTmdbResult(result: TmdbMovieInfo, searchName: string, year?: string | number): number {
-  // Bỏ qua 'person' ngay
-  if (result.media_type === 'person') return -1;
-
-  const normalize = (s: string) =>
-    s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-
-  const query   = normalize(searchName);
-  const title   = normalize(result.title || result.name || '');
-  const origTitle = normalize(result.original_title || result.original_name || '');
-
-  let score = 0;
-
-  // Exact match → điểm cao nhất
-  if (title === query || origTitle === query) score += 100;
-  // Partial match
-  else if (title.includes(query) || query.includes(title)) score += 50;
-  else if (origTitle.includes(query) || query.includes(origTitle)) score += 40;
-  else score -= 20; // không match tên → trừ điểm
-
-  // Year match
-  if (year) {
-    const resultYear = (result.release_date || result.first_air_date || '').slice(0, 4);
-    if (resultYear === String(year)) score += 30;
-    else if (Math.abs(Number(resultYear) - Number(year)) === 1) score += 10; // lệch 1 năm
-  }
-
-  // Popularity bonus (log để không quá dominant)
-  score += Math.min(Math.log10((result.popularity || 0.1) + 1) * 10, 20);
-
-  // Vote count bonus (nhiều vote = ít sai)
-  score += Math.min((result.vote_count || 0) / 500, 5);
-
-  return score;
+export function extractBestBackdrop(images: any) {
+  if (!images?.backdrops?.length) return null;
+  const vi = images.backdrops.find((i: any) => i.iso_639_1 === 'vi');
+  if (vi) return `https://image.tmdb.org/t/p/original${vi.file_path}`;
+  const en = images.backdrops.find((i: any) => i.iso_639_1 === 'en');
+  if (en) return `https://image.tmdb.org/t/p/original${en.file_path}`;
+  return `https://image.tmdb.org/t/p/original${images.backdrops[0].file_path}`;
 }
 
-async function fetchTmdbSearch(
-  movieName: string,
-  year?: string | number,
-): Promise<TmdbMovieInfo | null> {
+export function extractBestTrailer(videos: any) {
+  if (!videos?.results?.length) return null;
+  const trailer = videos.results.find((v: any) => v.type === 'Trailer' && v.site === 'YouTube');
+  if (trailer) return `https://www.youtube.com/watch?v=${trailer.key}`;
+  return null;
+}
+
+export async function fetchTmdbSearch(title: string, year: string, type?: string) {
   if (!TMDB_ENABLED) return null;
-
-  // [FIX 6] Sanitize cache key — loại bỏ ký tự đặc biệt
-  const cacheKey = `${movieName.toLowerCase().replace(/[^a-z0-9\u00C0-\u024F]/g, '_')}:${year || ''}`;
-  const cached   = tmdbSearchCache.get(cacheKey);
-  if (cached !== undefined) return cached;
-
-  await tmdbRateLimiter.acquire();
-
   try {
-    const yearParam  = year ? `&year=${year}` : '';
-    const url        = `https://api.themoviedb.org/3/search/multi?api_key=${TMDB_KEY}&query=${encodeURIComponent(movieName)}${yearParam}&language=vi-VN&include_adult=false`;
-    const res        = await fetchWithTimeout(url, 6_000);
-
-    // [FIX 6] Check res.ok trước khi parse
-    if (!res.ok) {
-      if (res.status === 401) console.error('[TMDB] API key không hợp lệ hoặc đã bị thu hồi (401).');
-      else if (res.status === 429) console.warn('[TMDB] Rate limit hit (429).');
-      tmdbSearchCache.set(cacheKey, null);
-      return null;
-    }
-
-    const data    = await res.json();
-    const results = (data.results || []) as TmdbMovieInfo[];
-
-    if (results.length === 0) { tmdbSearchCache.set(cacheKey, null); return null; }
-
-    // [FIX 12] Score-based matching — không chỉ lấy results[0]
-    const scored = results
-      .map(r => ({ r, score: scoreTmdbResult(r, movieName, year) }))
-      .filter(x => x.score > 0) // loại kết quả có điểm âm
-      .sort((a, b) => b.score - a.score);
-
-    if (scored.length === 0) { tmdbSearchCache.set(cacheKey, null); return null; }
-
-    const best = scored[0].r;
-
-    const info: TmdbMovieInfo = {
-      id:             best.id,
-      title:          best.title          || best.name          || '',
-      original_title: best.original_title || best.original_name || '',
-      name:           best.name           || best.title         || '',
-      original_name:  best.original_name  || best.original_title || '',
-      media_type:     best.media_type,
-      release_date:   best.release_date   || best.first_air_date || '',
-      first_air_date: best.first_air_date || best.release_date   || '',
-      poster_path:    best.poster_path,
-      backdrop_path:  best.backdrop_path,
-      overview:       best.overview,
-      vote_average:   best.vote_average,
-      vote_count:     best.vote_count,
-      popularity:     best.popularity,
-    };
-
-    tmdbSearchCache.set(cacheKey, info);
-    return info;
-  } catch (err) {
-    console.warn('[TMDB] Search failed:', err);
-    tmdbSearchCache.set(cacheKey, null);
-    return null;
-  }
+    const res = await fetch(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_KEY}&query=${encodeURIComponent(title)}&language=vi-VN`);
+    const data = await res.json();
+    return data.results?.[0] || null;
+  } catch { return null; }
 }
 
-// ─────────────────────────────────────────────────────────────
-// [FIX 8] TMDB FULL DETAIL — 1 request với append_to_response
-// Thay vì 3-4 request riêng: /movie/{id} + /credits + /videos + /images
-// → 1 request duy nhất: /movie/{id}?append_to_response=credits,videos,images
-//
-// Theo TMDB docs: với append_to_response, 6 sub-request = 100ms
-// thay vì 464ms nếu gọi riêng lẻ
-// ─────────────────────────────────────────────────────────────
-async function fetchTmdbDetail(
-  tmdbId: number,
-  mediaType: 'movie' | 'tv',
-): Promise<TmdbFullDetail | null> {
+export async function fetchTmdbDetail(id: string | number, type?: string) {
   if (!TMDB_ENABLED) return null;
-
-  const cacheKey = `${mediaType}_${tmdbId}`;
-  const cached   = tmdbDetailCache.get(cacheKey);
-  if (cached !== undefined) return cached;
-
-  await tmdbRateLimiter.acquire();
-
+  const t = type || 'movie';
   try {
-    // append_to_response: credits, videos, images — 1 request thay vì 4
-    const url = `https://api.themoviedb.org/3/${mediaType}/${tmdbId}` +
-      `?api_key=${TMDB_KEY}&language=vi-VN` +
-      `&append_to_response=credits,videos,images` +
-      `&include_image_language=vi,null,en`; // ưu tiên ảnh tiếng Việt, fallback null (ngôn ngữ gốc), rồi en
-
-    const res = await fetchWithTimeout(url, 8_000);
-
-    if (!res.ok) {
-      console.warn(`[TMDB] Detail fetch failed: HTTP ${res.status} for ${mediaType}/${tmdbId}`);
-      tmdbDetailCache.set(cacheKey, null);
-      return null;
-    }
-
-    const data: TmdbFullDetail = await res.json();
-    tmdbDetailCache.set(cacheKey, data);
-    return data;
-  } catch (err) {
-    console.warn('[TMDB] Detail fetch error:', err);
-    tmdbDetailCache.set(cacheKey, null);
-    return null;
-  }
+    const res = await fetch(`https://api.themoviedb.org/3/${t}/${id}?api_key=${TMDB_KEY}&language=vi-VN&append_to_response=images,videos,credits`);
+    return await res.json();
+  } catch { return null; }
 }
 
-// ─────────────────────────────────────────────────────────────
-// [FIX 9] TRAILER EXTRACTION — ưu tiên: official teaser/trailer vi → en
-// ─────────────────────────────────────────────────────────────
-function extractBestTrailer(videos?: TmdbFullDetail['videos']): string {
-  if (!videos?.results?.length) return '';
-  const youtubeVideos = videos.results.filter(v => v.site === 'YouTube');
-  if (youtubeVideos.length === 0) return '';
-
-  // Ưu tiên: Official Trailer > Official Teaser > Trailer > Teaser > Clip
-  const priority = ['Trailer', 'Teaser', 'Clip', 'Featurette'];
-  for (const type of priority) {
-    const official = youtubeVideos.find(v => v.type === type && v.official);
-    if (official) return `https://www.youtube.com/watch?v=${official.key}`;
-    const any = youtubeVideos.find(v => v.type === type);
-    if (any) return `https://www.youtube.com/watch?v=${any.key}`;
-  }
-
-  // Fallback: bất kỳ YouTube video nào
-  return `https://www.youtube.com/watch?v=${youtubeVideos[0].key}`;
-}
-
-// ─────────────────────────────────────────────────────────────
-// [FIX 11] BEST BACKDROP — score ảnh theo width + vote_average
-// ─────────────────────────────────────────────────────────────
-function extractBestBackdrop(images?: TmdbFullDetail['images']): string {
-  if (!images?.backdrops?.length) return '';
-  const best = [...images.backdrops]
-    .sort((a, b) => {
-      // Score = width * 0.7 + vote_average * 0.3 (normalize về 0-1)
-      const scoreA = (a.width / 3840) * 0.7 + (a.vote_average / 10) * 0.3;
-      const scoreB = (b.width / 3840) * 0.7 + (b.vote_average / 10) * 0.3;
-      return scoreB - scoreA;
-    })[0];
-  return `https://image.tmdb.org/t/p/original${best.file_path}`;
-}
-
-function extractBestPoster(images?: TmdbFullDetail['images']): string {
-  if (!images?.posters?.length) return '';
-  const best = [...images.posters]
-    .sort((a, b) => (b.vote_average - a.vote_average) || (b.width - a.width))[0];
-  return `https://image.tmdb.org/t/p/original${best.file_path}`;
-}
-
-// ─────────────────────────────────────────────────────────────
-// IMAGE URL HELPERS
-// ─────────────────────────────────────────────────────────────
-export const PLACEHOLDER_URL = `data:image/svg+xml;utf8,${encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" width="300" height="450" viewBox="0 0 300 450">
-  <rect width="300" height="450" fill="#121212"/>
-  <rect x="0" y="0" width="300" height="4" fill="#E50914"/>
-  <text x="150" y="200" font-family="sans-serif" font-size="48" fill="#E50914" text-anchor="middle">🎬</text>
-  <text x="150" y="250" font-family="sans-serif" font-size="18" font-weight="bold" fill="#ffffff" text-anchor="middle">CINEVERSE</text>
-  <text x="150" y="278" font-family="sans-serif" font-size="12" fill="#666666" text-anchor="middle">Đang cập nhật...</text>
-</svg>
-`)}`;
-
-/** [FIX 11] Điều kiện cần upgrade ảnh — rộng hơn, không chỉ 'ophim' */
-function needsImageUpgrade(url: string): boolean {
-  if (!url || url === PLACEHOLDER_URL) return true;
-  if (url.startsWith('data:')) return true;
-  // Ảnh từ phimimg.com thường là thumbnail thấp chất lượng
-  if (url.includes('phimimg.com') && !url.includes('original')) return true;
-  // Ảnh ophim
-  if (url.includes('ophim') || url.includes('img.ophim')) return true;
-  // Ảnh TMDB kích thước thấp (w185, w300, w342, w500)
-  if (url.includes('image.tmdb.org') && /\/w(185|300|342|500)\//.test(url)) return true;
-  return false;
-}
-
-export const getImageUrl = (path: string, _type: 'poster' | 'banner' = 'poster'): string => {
+export const getImageUrl = (path: string, _type: 'poster' | 'banner' = 'poster', domain?: string): string => {
   if (!path) return PLACEHOLDER_URL;
 
   let url = path;
-
-  // 1. If it's a TMDB image, upgrade it first (to get high quality original)
   if (path.includes('image.tmdb.org')) {
     url = upgradeImageUrl(path);
-  }
-  // 2. Extract original if it's already a phimapi proxy
-  else if (path.includes('phimapi.com/image.php')) {
+  } else if (path.includes('phimapi.com/image.php')) {
     try {
       const urlObj = new URL(path);
       const actualUrl = urlObj.searchParams.get('url');
-      if (actualUrl) {
-        url = actualUrl;
-      }
+      if (actualUrl) url = actualUrl;
     } catch {}
-  }
-  // 3. If it's an ophim image, upgrade it first
-  else if (path.includes('ophim.live') || path.includes('img.ophim')) {
+  } else if (path.includes('ophim.live') || path.includes('img.ophim')) {
     url = upgradeImageUrl(path);
+  } else if (path.includes('upload/vod/') || !path.startsWith('http')) {
+    url = path.startsWith('http') ? path : (domain ? (path.startsWith('/') ? `${domain}${path}` : `${domain}/${path}`) : (path.startsWith('/') ? `https://phimimg.com${path}` : `https://phimimg.com/${path}`));
   }
-  // 4. If it's relative or has upload/vod, make it absolute under phimimg.com
-  else if (path.includes('upload/vod/') || !path.startsWith('http')) {
-    url = path.startsWith('http')
-      ? path
-      : path.startsWith('/') ? `https://phimimg.com${path}` : `https://phimimg.com/${path}`;
-  }
-
-  // 5. Now apply proxying based on host to bypass ISP blocks and hotlink protection
-  if (url.includes('image.tmdb.org')) {
-    // TMDB images are blocked in Vietnam, proxy them through images.weserv.nl (runs on Cloudflare network, 100% unblocked and fast)
-    return `https://images.weserv.nl/?url=${encodeURIComponent(url)}`;
-  }
-
-  if (url.includes('phimimg.com') || url.includes('ophim.live') || url.includes('img.ophim')) {
-    // phimimg has hotlinking protection, proxy through phimapi.com to bypass
-    return `https://phimapi.com/image.php?url=${encodeURIComponent(url)}`;
-  }
-
   return url;
 };
 
-// ─────────────────────────────────────────────────────────────
-// DATA NORMALIZATION
-// ─────────────────────────────────────────────────────────────
-export interface NormalizedMovie {
-  _id:             string;
-  slug:            string;
-  name:            string;
-  origin_name:     string;
-  poster_url:      string;
-  thumb_url:       string;
-  description:     string;
-  content:         string;
-  year:            string | number;
-  quality:         string;
-  lang:            string;
-  time:            string;
-  episode_current: string;
-  episode_total:   string;
-  type:            string;
-  category:        { id: string; name: string; slug: string }[];
-  country:         { id: string; name: string; slug: string }[];
-  actor:           string[];
-  director:        string[];
-  tmdb?:           {
-    id?:            string;
-    type?:          string;
-    vote_average?:  number;
-    vote_count?:    number;
-    title?:         string;
-    original_title?: string;
-    genres?:        string[];
-    runtime?:       number;
-  };
-  trailer_url:     string;
-  _source:         'primary' | 'fallback';
+function normalizeCategories(raw: any): any[] {
+  if (!raw) return [];
+  return (Array.isArray(raw) ? raw : Object.values(raw)).map((c: any) => ({
+    id:   c.id   || c._id  || c.slug || '',
+    name: c.name || c.label || '',
+    slug: c.slug || c.id   || '',
+  }));
 }
 
-function normalizePrimary(raw: any): NormalizedMovie {
+function normalizeCountries(raw: any): any[] {
+  if (!raw) return [];
+  return (Array.isArray(raw) ? raw : Object.values(raw)).map((c: any) => ({
+    id:   c.id   || c._id  || c.slug || '',
+    name: c.name || c.label || '',
+    slug: c.slug || c.id   || '',
+  }));
+}
+
+export function normalizePrimary(raw: any, domain?: string): NormalizedMovie {
   const m = raw.movie || raw;
   return {
     _id:             m._id             || m.id    || '',
     slug:            m.slug            || '',
     name:            m.name            || '',
     origin_name:     m.origin_name     || m.name  || '',
-    poster_url:      getImageUrl(m.poster_url || m.thumb_url, 'poster'),
-    thumb_url:       getImageUrl(m.thumb_url  || m.poster_url, 'banner'),
+    poster_url:      getImageUrl(m.poster_url || m.thumb_url, 'poster', domain),
+    thumb_url:       getImageUrl(m.thumb_url  || m.poster_url, 'banner', domain),
     description:     m.content         || m.description || '',
     content:         m.content         || m.description || '',
     year:            m.year            || '',
@@ -657,7 +332,7 @@ function normalizePrimary(raw: any): NormalizedMovie {
   };
 }
 
-function normalizeFallback(raw: any): NormalizedMovie {
+export function normalizeFallback(raw: any, domain?: string): NormalizedMovie {
   const m         = raw.movie || raw;
   const rawPoster = m.poster_url || m.thumb_url || '';
   const rawThumb  = m.thumb_url  || m.poster_url || '';
@@ -666,8 +341,8 @@ function normalizeFallback(raw: any): NormalizedMovie {
     slug:            m.slug            || '',
     name:            m.name            || '',
     origin_name:     m.original_name   || m.origin_name || m.name || '',
-    poster_url:      upgradeImageUrl(getImageUrl(rawPoster, 'poster')),
-    thumb_url:       upgradeImageUrl(getImageUrl(rawThumb,  'banner')),
+    poster_url:      upgradeImageUrl(getImageUrl(rawPoster, 'poster', domain)),
+    thumb_url:       upgradeImageUrl(getImageUrl(rawThumb,  'banner', domain)),
     description:     m.content         || m.description || '',
     content:         m.content         || m.description || '',
     year:            m.year            || '',
@@ -687,74 +362,161 @@ function normalizeFallback(raw: any): NormalizedMovie {
   };
 }
 
-// [FIX 1]
-function normalizeBySource(raw: any, source: 'primary' | 'fallback'): NormalizedMovie {
-  return source === 'primary' ? normalizePrimary(raw) : normalizeFallback(raw);
-}
-
-function normalizeCategories(raw: any): NormalizedMovie['category'] {
-  if (!raw) return [];
-  return (Array.isArray(raw) ? raw : Object.values(raw)).map((c: any) => ({
-    id:   c.id   || c._id  || c.slug || '',
-    name: c.name || c.label || '',
-    slug: c.slug || c.id   || '',
-  }));
-}
-
-function normalizeCountries(raw: any): NormalizedMovie['country'] {
-  if (!raw) return [];
-  return (Array.isArray(raw) ? raw : Object.values(raw)).map((c: any) => ({
-    id:   c.id   || c._id  || c.slug || '',
-    name: c.name || c.label || '',
-    slug: c.slug || c.id   || '',
-  }));
+export function normalizeBySource(raw: any, source: 'primary' | 'fallback', domain?: string): NormalizedMovie {
+  return source === 'primary' ? normalizePrimary(raw, domain) : normalizeFallback(raw, domain);
 }
 
 function isEndpointSupportedOnFallback(endpoint: string): boolean {
   if (endpoint.includes('/images') || endpoint.includes('/peoples') || endpoint.includes('/keywords')) {
     return false;
   }
-  if (endpoint.includes('/random') || endpoint.includes('/nam/')) {
+  if (endpoint.includes('/random') || endpoint.includes('/nam/') || endpoint.includes('/tmdb/')) {
     return false;
   }
   return true;
 }
 
-// ─────────────────────────────────────────────────────────────
-// CORE FETCH
-// ─────────────────────────────────────────────────────────────
+
 async function apiFetch(endpoint: string): Promise<{ data: any; source: 'primary' | 'fallback' }> {
   const canFallback = isEndpointSupportedOnFallback(endpoint);
 
-  const attempt = (apiState.usingFallback && canFallback)
-    ? fetchWithRetry(`${FALLBACK_URL}${endpoint}`, {}, 2, PRIMARY_TIMEOUT)
-        .then(res => ({ res, source: 'fallback' as const }))
-        .catch(e => { console.warn('[API] Fallback failed, trying parallel:', e); return parallelFetch(endpoint, canFallback); })
-    : parallelFetch(endpoint, canFallback);
+  // If we are currently in fallback mode and fallback is supported for this endpoint
+  if (apiState.usingFallback && canFallback) {
+    try {
+      const res = await fetchWithTimeout(`${FALLBACK_URL}${endpoint}`, PRIMARY_TIMEOUT);
+      if (!res.ok) throw new Error(`Fallback HTTP ${res.status}`);
+      const data = await res.json();
+      return { data, source: 'fallback' };
+    } catch (e) {
+      console.warn('[API] Fallback failed:', e);
+    }
+  }
 
-  const { res, source } = await attempt;
-  const data = await res.json();
-  return { data, source };
+  // Otherwise, try primary
+  try {
+    const res = await fetchWithTimeout(`${PRIMARY_URL}${endpoint}`, PRIMARY_TIMEOUT);
+    if (!res.ok) throw new Error(`Primary HTTP ${res.status}`);
+    
+    // Success, reset consecutive fails
+    apiState.consecutiveFails = 0;
+    if (apiState.usingFallback) {
+      apiState.switchToPrimary();
+    }
+    
+    const data = await res.json();
+    return { data, source: 'primary' };
+  } catch (err) {
+    if (canFallback) {
+      apiState.consecutiveFails++;
+      if (apiState.consecutiveFails >= 2) {
+        apiState.switchToFallback();
+      }
+      console.warn(`[API] Primary failed for ${endpoint}, using fallback.`);
+      const res = await fetchWithTimeout(`${FALLBACK_URL}${endpoint}`, PRIMARY_TIMEOUT);
+      if (!res.ok) throw new Error(`Fallback HTTP ${res.status}`);
+      const data = await res.json();
+      return { data, source: 'fallback' };
+    }
+    throw err;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
 // PUBLIC API
 // ─────────────────────────────────────────────────────────────
+
+function normalizePagination(pagination: any) {
+  if (!pagination) return { totalPages: 1, currentPage: 1 };
+  let totalPages = pagination.totalPages;
+  if (totalPages === undefined && pagination.totalItems !== undefined && pagination.totalItemsPerPage !== undefined) {
+    totalPages = Math.ceil(pagination.totalItems / pagination.totalItemsPerPage);
+  }
+  return {
+    ...pagination,
+    totalPages: totalPages || 1,
+  };
+}
+
 export const api = {
-  getNewUpdated: async (page = 1) =>
-    fetchWithCache(`new-updated:${page}`, async () => {
-      const { data, source } = await apiFetch(`/danh-sach/phim-moi-cap-nhat-v3?page=${page}`);
+  getNewUpdated: async (page = 1, filters: { category?: string; country?: string; year?: string; sort_field?: string; sort_type?: string; sort_lang?: string } = {}) =>
+    fetchWithCache(`new-updated:${page}:${JSON.stringify(filters)}`, async () => {
+      const params = new URLSearchParams();
+      params.append('page', page.toString());
+      if (filters.category) params.append('category', filters.category);
+      if (filters.country) params.append('country', filters.country);
+      if (filters.year) params.append('year', filters.year);
+      if (filters.sort_field) params.append('sort_field', filters.sort_field);
+      if (filters.sort_type) params.append('sort_type', filters.sort_type);
+      if (filters.sort_lang) params.append('sort_lang', filters.sort_lang);
+
+      const { data, source } = await apiFetch(`/v1/api/danh-sach?${params.toString()}`);
       return {
-        items:      (data.items || data.data?.items || []).map((i: any) => normalizeBySource(i, source)),
-        pagination: data.pagination || data.data?.pagination,
+        items:      (data.data?.items || data.items || []).map((i: any) => normalizeBySource(i, source)),
+        pagination: normalizePagination(data.data?.params?.pagination || data.pagination || data.data?.pagination),
       };
     }, TTL.NEW_UPDATED),
 
-  getByCategory: async (slug: string, page = 1) =>
-    fetchWithCache(`category:${slug}:${page}`, async () => {
-      const { data, source } = await apiFetch(`/v1/api/danh-sach/${slug}?page=${page}`);
+  getByCategory: async (slug: string, page = 1, filters: { category?: string; country?: string; year?: string; sort_field?: string; sort_type?: string; sort_lang?: string } = {}) =>
+    fetchWithCache(`category:${slug}:${page}:${JSON.stringify(filters)}`, async () => {
+      const params = new URLSearchParams();
+      params.append('page', page.toString());
+      if (filters.category) params.append('category', filters.category);
+      if (filters.country) params.append('country', filters.country);
+      if (filters.year) params.append('year', filters.year);
+      if (filters.sort_field) params.append('sort_field', filters.sort_field);
+      if (filters.sort_type) params.append('sort_type', filters.sort_type);
+      if (filters.sort_lang) params.append('sort_lang', filters.sort_lang);
+
+      const { data, source } = await apiFetch(`/v1/api/danh-sach/${slug}?${params.toString()}`);
       const items = data.data?.items || data.items || [];
-      return { items: items.map((i: any) => normalizeBySource(i, source)), pagination: data.data?.pagination };
+      return { items: items.map((i: any) => normalizeBySource(i, source)), pagination: normalizePagination(data.data?.params?.pagination || data.data?.pagination || data.pagination) };
+    }, TTL.CATEGORY_LIST),
+
+  getByGenre: async (slug: string, page = 1, filters: { category?: string; country?: string; year?: string; sort_field?: string; sort_type?: string; sort_lang?: string } = {}) =>
+    fetchWithCache(`genre:${slug}:${page}:${JSON.stringify(filters)}`, async () => {
+      const params = new URLSearchParams();
+      params.append('page', page.toString());
+      if (filters.category) params.append('category', filters.category);
+      if (filters.country) params.append('country', filters.country);
+      if (filters.year) params.append('year', filters.year);
+      if (filters.sort_field) params.append('sort_field', filters.sort_field);
+      if (filters.sort_type) params.append('sort_type', filters.sort_type);
+      if (filters.sort_lang) params.append('sort_lang', filters.sort_lang);
+
+      const { data, source } = await apiFetch(`/v1/api/the-loai/${slug}?${params.toString()}`);
+      const items = data.data?.items || data.items || [];
+      return { items: items.map((i: any) => normalizeBySource(i, source)), pagination: normalizePagination(data.data?.params?.pagination || data.data?.pagination || data.pagination) };
+    }, TTL.CATEGORY_LIST),
+
+  getByCountry: async (slug: string, page = 1, filters: { category?: string; country?: string; year?: string; sort_field?: string; sort_type?: string; sort_lang?: string } = {}) =>
+    fetchWithCache(`country:${slug}:${page}:${JSON.stringify(filters)}`, async () => {
+      const params = new URLSearchParams();
+      params.append('page', page.toString());
+      if (filters.category) params.append('category', filters.category);
+      if (filters.country) params.append('country', filters.country);
+      if (filters.year) params.append('year', filters.year);
+      if (filters.sort_field) params.append('sort_field', filters.sort_field);
+      if (filters.sort_type) params.append('sort_type', filters.sort_type);
+      if (filters.sort_lang) params.append('sort_lang', filters.sort_lang);
+
+      const { data, source } = await apiFetch(`/v1/api/quoc-gia/${slug}?${params.toString()}`);
+      const items = data.data?.items || data.items || [];
+      return { items: items.map((i: any) => normalizeBySource(i, source)), pagination: normalizePagination(data.data?.params?.pagination || data.data?.pagination || data.data?.params?.pagination || data.pagination) };
+    }, TTL.CATEGORY_LIST),
+
+  getByYear: async (year: string | number, page = 1, filters: { category?: string; country?: string; sort_field?: string; sort_type?: string; sort_lang?: string } = {}) =>
+    fetchWithCache(`year:${year}:${page}:${JSON.stringify(filters)}`, async () => {
+      const params = new URLSearchParams();
+      params.append('page', page.toString());
+      if (filters.category) params.append('category', filters.category);
+      if (filters.country) params.append('country', filters.country);
+      if (filters.sort_field) params.append('sort_field', filters.sort_field);
+      if (filters.sort_type) params.append('sort_type', filters.sort_type);
+      if (filters.sort_lang) params.append('sort_lang', filters.sort_lang);
+
+      const { data, source } = await apiFetch(`/v1/api/nam/${year}?${params.toString()}`);
+      const items = data.data?.items || data.items || [];
+      return { items: items.map((i: any) => normalizeBySource(i, source)), pagination: normalizePagination(data.data?.params?.pagination || data.data?.pagination || data.pagination) };
     }, TTL.CATEGORY_LIST),
 
   // ───────────────────────────────────────────────────────────
@@ -961,27 +723,6 @@ export const api = {
       };
     }, TTL.MOVIE_DETAIL),
 
-  getByGenre: async (slug: string, page = 1) =>
-    fetchWithCache(`genre:${slug}:${page}`, async () => {
-      const { data, source } = await apiFetch(`/v1/api/the-loai/${slug}?page=${page}`);
-      const items = data.data?.items || data.items || [];
-      return { items: items.map((i: any) => normalizeBySource(i, source)), pagination: data.data?.pagination };
-    }, TTL.CATEGORY_LIST),
-
-  getByCountry: async (slug: string, page = 1) =>
-    fetchWithCache(`country:${slug}:${page}`, async () => {
-      const { data, source } = await apiFetch(`/v1/api/quoc-gia/${slug}?page=${page}`);
-      const items = data.data?.items || data.items || [];
-      return { items: items.map((i: any) => normalizeBySource(i, source)), pagination: data.data?.pagination };
-    }, TTL.CATEGORY_LIST),
-
-  getByYear: async (year: string, page = 1) =>
-    fetchWithCache(`year:${year}:${page}`, async () => {
-      const { data, source } = await apiFetch(`/v1/api/nam/${year}?page=${page}`);
-      const items = data.data?.items || data.items || [];
-      return { items: items.map((i: any) => normalizeBySource(i, source)), pagination: data.data?.pagination };
-    }, TTL.CATEGORY_LIST),
-
   search: async (keyword: string, page = 1, limit = 64, filters: { category?: string; country?: string; year?: string; sort_field?: string; sort_type?: string; sort_lang?: string } = {}) =>
     fetchWithCache(`search:${keyword}:${page}:${limit}:${JSON.stringify(filters)}`, async () => {
       const params = new URLSearchParams();
@@ -997,21 +738,16 @@ export const api = {
 
       const { data, source } = await apiFetch(`/v1/api/tim-kiem?${params.toString()}`);
       const items      = data.data?.items || data.items || [];
-      const pagination = data.data?.params?.pagination || data.pagination || null;
+      const pagination = normalizePagination(data.data?.params?.pagination || data.pagination);
       return { items: items.map((i: any) => normalizeBySource(i, source)), pagination };
     }, TTL.SEARCH),
 
   getApiStatus: () => ({
-    usingFallback:    apiState.usingFallback,
-    primaryDeadSince: apiState.primaryDeadSince,
-    consecutiveFails: apiState.consecutiveFails,
-    currentSource:    apiState.usingFallback ? 'ophim1.com' : 'phimapi.com',
-    tmdbEnabled:      TMDB_ENABLED,
+    usingFallback: false,
+    consecutiveFails: 0,
   }),
 
-  // [FIX 7] Dùng /trending/movie (không trả 'person') thay vì /trending/all
-  getTrendingFromTMDB: async () => {
-    if (!TMDB_ENABLED) return [];
+  getTrendingTmdb: async () => {
     await tmdbRateLimiter.acquire();
     try {
       const res  = await fetchWithRetry(
@@ -1044,7 +780,7 @@ export const api = {
       const items = data.data?.items || data.items || [];
       return {
         items: items.map((i: any) => normalizeBySource(i, source)),
-        pagination: data.data?.params?.pagination || data.pagination || null,
+        pagination: normalizePagination(data.data?.params?.pagination || data.pagination),
       };
     }, TTL.NEW_UPDATED),
 
@@ -1064,6 +800,18 @@ export const api = {
     fetchWithCache(`keywords:${slug}`, async () => {
       const { data } = await apiFetch(`/v1/api/phim/${slug}/keywords`);
       return data.data || null;
+    }, TTL.TMDB_STATIC),
+
+  getGenres: async () =>
+    fetchWithCache(`genres:all`, async () => {
+      const { data } = await apiFetch(`/the-loai`);
+      return data.data?.items || data.items || [];
+    }, TTL.TMDB_STATIC),
+
+  getCountries: async () =>
+    fetchWithCache(`countries:all`, async () => {
+      const { data } = await apiFetch(`/quoc-gia`);
+      return data.data?.items || data.items || [];
     }, TTL.TMDB_STATIC),
 
   getMovieDetailById: async (id: string) =>

@@ -1,0 +1,141 @@
+    
+    const fetchTMDBData = async () => {
+      setLoadingCast(true);
+      setLoadingImages(true);
+      
+      let gotPeoples = false;
+      let gotImages = false;
+
+      try {
+        // Thử lấy dữ liệu từ phimapi peoples & images trước để tránh dính limit hoặc lỗi API key TMDB
+        const [peoplesData, imagesData] = await Promise.all([
+          api.getMoviePeoples(movie.slug).catch(() => null),
+          api.getMovieImages(movie.slug).catch(() => null)
+        ]);
+
+        if (peoplesData && peoplesData.peoples && peoplesData.peoples.length > 0) {
+          const castList = peoplesData.peoples.filter((p: any) => p.name);
+          if (castList.length > 0) {
+            setCast(castList.slice(0, 12));
+            gotPeoples = true;
+          }
+        }
+
+        if (imagesData && imagesData.images && imagesData.images.length > 0) {
+          const uniqueImages = imagesData.images.filter((img: any, index: number, self: any[]) =>
+            self.findIndex((i: any) => i.file_path === img.file_path) === index
+          );
+          if (uniqueImages.length > 0) {
+            setImages(uniqueImages.slice(0, 16));
+            gotImages = true;
+          }
+        }
+
+        if (movie.tmdb?.vote_average) {
+          let formattedVotes = '';
+          if (movie.tmdb.vote_count) {
+            formattedVotes = Number(movie.tmdb.vote_count) >= 1000 
+              ? `${(Number(movie.tmdb.vote_count) / 1000).toFixed(1)}K` 
+              : `${movie.tmdb.vote_count}`;
+          }
+          setRating({
+            source: 'TMDb',
+            score: Number(movie.tmdb.vote_average).toFixed(1),
+            votes: formattedVotes
+          });
+        }
+      } catch (err) {
+        console.warn("[API] Failed to fetch peoples/images from phimapi:", err);
+      }
+
+      // Nếu đã lấy đầy đủ, không cần fetch trực tiếp từ TMDB
+      if (gotPeoples && gotImages) {
+        setLoadingCast(false);
+        setLoadingImages(false);
+        return;
+      }
+
+      const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
+      
+      try {
+        // Bước 1: Tìm tmdbId (chỉ 1 lần)
+        let tmdbId = movie.tmdb?.id;
+        let tmdbType = movie.tmdb?.type || 'movie';
+        
+        if (!tmdbId) {
+          const yearQuery = movie.year ? `&year=${movie.year}` : '';
+          const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.origin_name || movie.name)}${yearQuery}&language=vi-VN`;
+          const searchData = await fetchWithCache(`tmdb_search_${movie.slug}`, () => fetch(searchUrl).then(r => r.json()), TTL.TMDB_STATIC);
+          if (searchData.results?.length > 0) {
+            tmdbId = searchData.results[0].id;
+            tmdbType = searchData.results[0].media_type || (searchData.results[0].first_air_date ? 'tv' : 'movie');
+          }
+        }
+
+        if (!tmdbId) {
+          setLoadingCast(false);
+          setLoadingImages(false);
+          return;
+        }
+
+        // Bước 2: Nâng cấp URL gọi API - Thêm include_image_language để lấy toàn bộ kho ảnh không bị giới hạn bởi tag vi-VN
+        const combinedUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=vi-VN&append_to_response=credits,images&include_image_language=en,null,vi`;
+        const combinedData = await fetchWithCache(`tmdb_combined_${tmdbType}_${tmdbId}`, () => fetch(combinedUrl).then(r => r.json()), TTL.TMDB_STATIC);
+
+        // Bước 3: Phân phối dữ liệu vào các state an toàn
+        if (!rating && combinedData.vote_average) {
+          let formattedVotes = '';
+          if (combinedData.vote_count) {
+            formattedVotes = combinedData.vote_count >= 1000 
+              ? `${(combinedData.vote_count / 1000).toFixed(1)}K` 
+              : `${combinedData.vote_count}`;
+          }
+          setRating({
+            source: 'TMDb',
+            score: combinedData.vote_average.toFixed(1),
+            votes: formattedVotes
+          });
+        }
+
+        if (!gotPeoples && combinedData.credits?.cast) {
+          setCast(combinedData.credits.cast.slice(0, 12));
+        }
+
+        if (!gotImages) {
+          // Xử lý kho ảnh mở rộng: Lấy cả backdrops (ảnh ngang) và stills (ảnh phân cảnh) nếu có
+          let extendedImages: any[] = [];
+          if (combinedData.images?.backdrops?.length > 0) {
+            extendedImages = [...combinedData.images.backdrops];
+          }
+          
+          // Nếu là phim bộ (TV Series), lấy thêm ảnh từ các phần để làm phong phú kho ảnh
+          if (combinedData.images?.posters?.length > 0 && extendedImages.length < 5) {
+            extendedImages = [...extendedImages, ...combinedData.images.posters];
+          }
+
+          // Lọc trùng và giới hạn tối đa 16 tấm ảnh chất lượng cao nhất
+          const uniqueImages = extendedImages.filter((img, index, self) =>
+            self.findIndex(i => i.file_path === img.file_path) === index
+          );
+
+          setImages(uniqueImages.slice(0, 16));
+        }
+
+      } catch (error) {
+        // Ghi nhận cảnh báo nhẹ, tránh console.error làm đỏ log hệ thống giám sát
+        console.warn("Failed to fetch TMDB data, falling back to local metadata:", error);
+      } finally {
+        setLoadingCast(false);
+        setLoadingImages(false);
+      }
+    };
+
+    fetchTMDBData();
+  }, [movie]);
+
+  if (loading) {
+    return (
+      <div className="-mt-16 md:-mt-20 pb-20">
+        <MovieDetailSkeleton />
+      </div>
+    );

@@ -49,6 +49,7 @@ export default function Movies() {
   const [movies, setMovies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const { showToast } = useToast();
   
   // State tạm thời (Dùng cho các ô Select)
@@ -66,26 +67,17 @@ export default function Movies() {
   const fetchMovies = useCallback(async () => {
     setLoading(true);
     try {
-      let res;
-      // Ưu tiên lọc theo thứ tự API hỗ trợ
-      if (filters.genre) {
-        res = await api.getByGenre(filters.genre, page);
-      } else if (filters.country) {
-        res = await api.getByCountry(filters.country, page);
-      } else if (filters.year) {
-        res = await api.getByYear(filters.year, page);
-      } else {
-        res = await api.getByCategory("phim-le", page);
-      }
+      const apiFilters = {
+        category: filters.genre || undefined,
+        country: filters.country || undefined,
+        year: filters.year || undefined,
+      };
+      const res = await api.getByCategory("phim-le", page, apiFilters);
 
       let items = res?.items || [];
       
-      // Nếu lọc genre nhưng user có chọn thêm Year ở client-side
-      if (filters.genre && filters.year) {
-        items = items.filter((m: any) => m.year?.toString() === filters.year);
-      }
-
       setMovies(items);
+      setTotalPages(res?.pagination?.totalPages || 1);
     } catch (error) {
       console.warn("Lỗi khi tải phim:", error);
       showToast("Không thể tải danh sách phim. Vui lòng kiểm tra kết nối mạng.", "error");
@@ -225,7 +217,8 @@ export default function Movies() {
             </span>
             <button
               onClick={() => setPage(p => p + 1)}
-              className="px-4 py-2 md:px-6 md:py-2 bg-[#2A2A2A] rounded-lg hover:bg-[#333] text-sm md:text-base"
+              disabled={page >= totalPages}
+              className="px-4 py-2 md:px-6 md:py-2 bg-[#2A2A2A] rounded-lg hover:bg-[#333] text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Sau
             </button>

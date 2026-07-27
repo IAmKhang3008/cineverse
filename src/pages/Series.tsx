@@ -49,6 +49,7 @@ export default function Series() {
   const [movies, setMovies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [selectedYear, setSelectedYear] = useState<string>("");
   const [selectedGenre, setSelectedGenre] = useState<string>("");
   const [selectedCountry, setSelectedCountry] = useState<string>("");
@@ -58,30 +59,16 @@ export default function Series() {
     const fetchMovies = async () => {
       setLoading(true);
       try {
-        let res;
-        if (selectedGenre) {
-          res = await api.getByGenre(selectedGenre, page);
-        } else if (selectedCountry) {
-          res = await api.getByCountry(selectedCountry, page);
-        } else if (selectedYear) {
-          res = await api.getByYear(selectedYear, page);
-        } else {
-          res = await api.getByCategory("phim-bo", page);
-        }
+        const apiFilters = {
+          category: selectedGenre || undefined,
+          country: selectedCountry || undefined,
+          year: selectedYear || undefined,
+        };
+        const res = await api.getByCategory("phim-bo", page, apiFilters);
         
         let filteredItems = res.items || [];
-        // Filter to ensure we only show series if we used a generic filter like year/genre/country
-        if (selectedGenre || selectedCountry || selectedYear) {
-           filteredItems = filteredItems.filter((m: any) => m.type === 'series' || m.type === 'hoathinh');
-        }
-
-        if (selectedGenre && (selectedCountry || selectedYear)) {
-          if (selectedYear) filteredItems = filteredItems.filter((m: any) => m.year?.toString() === selectedYear);
-        } else if (selectedCountry && selectedYear) {
-          filteredItems = filteredItems.filter((m: any) => m.year?.toString() === selectedYear);
-        }
-
         setMovies(filteredItems);
+        setTotalPages(res?.pagination?.totalPages || 1);
       } catch (error) {
         console.warn("Failed to fetch series", error);
         showToast("Không thể tải danh sách phim. Vui lòng kiểm tra kết nối mạng.", "error");
@@ -236,7 +223,8 @@ export default function Series() {
             </div>
             <button
               onClick={() => setPage((p) => p + 1)}
-              className="px-4 py-2 md:px-6 md:py-2.5 bg-[#2A2A2A] hover:bg-[#333] rounded-lg text-white font-medium transition-colors text-sm md:text-base"
+              disabled={page >= totalPages}
+              className="px-4 py-2 md:px-6 md:py-2.5 bg-[#2A2A2A] hover:bg-[#333] rounded-lg text-white font-medium transition-colors text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Sau
             </button>

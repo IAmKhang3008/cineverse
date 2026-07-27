@@ -130,6 +130,7 @@ export default function Detail() {
   const [loadingCast, setLoadingCast] = useState(false);
   const [images, setImages] = useState<any[]>([]);
   const [loadingImages, setLoadingImages] = useState(false);
+  const [keywords, setKeywords] = useState<any[]>([]);
   const [rating, setRating] = useState<{ source: string, score: string, votes: string } | null>(null);
   const [showShareMenu, setShowShareMenu] = useState(false);
   const shareMenuRef = useRef<HTMLDivElement>(null);
@@ -586,20 +587,10 @@ export default function Detail() {
       let gotImages = false;
 
       try {
-        // Thử lấy dữ liệu từ phimapi peoples & images trước để tránh dính limit hoặc lỗi API key TMDB
-        const [peoplesData, imagesData] = await Promise.all([
-          api.getMoviePeoples(movie.slug).catch(() => null),
-          api.getMovieImages(movie.slug).catch(() => null)
+        const [imagesData, keywordsData] = await Promise.all([
+          api.getMovieImages(movie.slug).catch(() => null),
+          api.getMovieKeywords(movie.slug).catch(() => null),
         ]);
-
-        if (peoplesData && peoplesData.peoples && peoplesData.peoples.length > 0) {
-          const castList = peoplesData.peoples.filter((p: any) => p.name);
-          if (castList.length > 0) {
-            setCast(castList.slice(0, 12));
-            gotPeoples = true;
-          }
-        }
-
         if (imagesData && imagesData.images && imagesData.images.length > 0) {
           const uniqueImages = imagesData.images.filter((img: any, index: number, self: any[]) =>
             self.findIndex((i: any) => i.file_path === img.file_path) === index
@@ -609,13 +600,16 @@ export default function Detail() {
             gotImages = true;
           }
         }
-
+        if (keywordsData && keywordsData.keywords && keywordsData.keywords.length > 0) {
+          setKeywords(keywordsData.keywords);
+        }
+        
         if (movie.tmdb?.vote_average) {
           let formattedVotes = '';
           if (movie.tmdb.vote_count) {
             formattedVotes = Number(movie.tmdb.vote_count) >= 1000 
-              ? `${(Number(movie.tmdb.vote_count) / 1000).toFixed(1)}K` 
-              : `${movie.tmdb.vote_count}`;
+               ? `${(Number(movie.tmdb.vote_count) / 1000).toFixed(1)}K` 
+               : `${movie.tmdb.vote_count}`;
           }
           setRating({
             source: 'TMDb',
@@ -624,20 +618,12 @@ export default function Detail() {
           });
         }
       } catch (err) {
-        console.warn("[API] Failed to fetch peoples/images from phimapi:", err);
-      }
-
-      // Nếu đã lấy đầy đủ, không cần fetch trực tiếp từ TMDB
-      if (gotPeoples && gotImages) {
-        setLoadingCast(false);
-        setLoadingImages(false);
-        return;
+        console.warn("[API] Failed to fetch images from phimapi:", err);
       }
 
       const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
       
       try {
-        // Bước 1: Tìm tmdbId (chỉ 1 lần)
         let tmdbId = movie.tmdb?.id;
         let tmdbType = movie.tmdb?.type || 'movie';
         
@@ -651,57 +637,51 @@ export default function Detail() {
           }
         }
 
-        if (!tmdbId) {
-          setLoadingCast(false);
-          setLoadingImages(false);
-          return;
-        }
-
-        // Bước 2: Nâng cấp URL gọi API - Thêm include_image_language để lấy toàn bộ kho ảnh không bị giới hạn bởi tag vi-VN
-        const combinedUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=vi-VN&append_to_response=credits,images&include_image_language=en,null,vi`;
-        const combinedData = await fetchWithCache(`tmdb_combined_${tmdbType}_${tmdbId}`, () => fetch(combinedUrl).then(r => r.json()), TTL.TMDB_STATIC);
-
-        // Bước 3: Phân phối dữ liệu vào các state an toàn
-        if (!rating && combinedData.vote_average) {
-          let formattedVotes = '';
-          if (combinedData.vote_count) {
-            formattedVotes = combinedData.vote_count >= 1000 
-              ? `${(combinedData.vote_count / 1000).toFixed(1)}K` 
-              : `${combinedData.vote_count}`;
-          }
-          setRating({
-            source: 'TMDb',
-            score: combinedData.vote_average.toFixed(1),
-            votes: formattedVotes
-          });
-        }
-
-        if (!gotPeoples && combinedData.credits?.cast) {
-          setCast(combinedData.credits.cast.slice(0, 12));
-        }
-
-        if (!gotImages) {
-          // Xử lý kho ảnh mở rộng: Lấy cả backdrops (ảnh ngang) và stills (ảnh phân cảnh) nếu có
-          let extendedImages: any[] = [];
-          if (combinedData.images?.backdrops?.length > 0) {
-            extendedImages = [...combinedData.images.backdrops];
+        if (tmdbId) {
+          // Lấy credits từ TMDb như yêu cầu
+          const creditsUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}/credits?api_key=${apiKey}&language=vi-VN`;
+          const creditsData = await fetchWithCache(`tmdb_credits_${tmdbType}_${tmdbId}`, () => fetch(creditsUrl).then(r => r.json()), TTL.TMDB_STATIC);
+          
+          if (creditsData.cast) {
+            setCast(creditsData.cast.slice(0, 12));
+            gotPeoples = true;
           }
           
-          // Nếu là phim bộ (TV Series), lấy thêm ảnh từ các phần để làm phong phú kho ảnh
-          if (combinedData.images?.posters?.length > 0 && extendedImages.length < 5) {
-            extendedImages = [...extendedImages, ...combinedData.images.posters];
+          if (!rating || !gotImages) {
+             const detailUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=vi-VN&append_to_response=images&include_image_language=en,null,vi`;
+             const detailData = await fetchWithCache(`tmdb_detail_${tmdbType}_${tmdbId}`, () => fetch(detailUrl).then(r => r.json()), TTL.TMDB_STATIC);
+
+             if (!rating && detailData.vote_average) {
+                let formattedVotes = '';
+                if (detailData.vote_count) {
+                  formattedVotes = detailData.vote_count >= 1000 
+                     ? `${(detailData.vote_count / 1000).toFixed(1)}K` 
+                     : `${detailData.vote_count}`;
+                }
+                setRating({
+                  source: 'TMDb',
+                  score: detailData.vote_average.toFixed(1),
+                  votes: formattedVotes
+                });
+             }
+
+             if (!gotImages) {
+                let extendedImages: any[] = [];
+                if (detailData.images?.backdrops?.length > 0) {
+                  extendedImages = [...detailData.images.backdrops];
+                }
+                if (detailData.images?.posters?.length > 0 && extendedImages.length < 5) {
+                  extendedImages = [...extendedImages, ...detailData.images.posters];
+                }
+                const uniqueImages = extendedImages.filter((img, index, self) =>
+                  self.findIndex(i => i.file_path === img.file_path) === index
+                );
+                setImages(uniqueImages.slice(0, 16));
+             }
           }
-
-          // Lọc trùng và giới hạn tối đa 16 tấm ảnh chất lượng cao nhất
-          const uniqueImages = extendedImages.filter((img, index, self) =>
-            self.findIndex(i => i.file_path === img.file_path) === index
-          );
-
-          setImages(uniqueImages.slice(0, 16));
         }
 
       } catch (error) {
-        // Ghi nhận cảnh báo nhẹ, tránh console.error làm đỏ log hệ thống giám sát
         console.warn("Failed to fetch TMDB data, falling back to local metadata:", error);
       } finally {
         setLoadingCast(false);
@@ -1210,6 +1190,27 @@ export default function Detail() {
                         ))}
                       </div>
                     </motion.div>
+                    {/* Từ khóa */}
+                    {keywords && keywords.length > 0 && (
+                      <motion.div variants={itemVariants} className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-4 shadow-lg">
+                        <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Từ khóa</span>
+                        <div className="flex flex-wrap gap-2 mt-1.5">
+                          {keywords.map((kw: any, idx: number) => {
+                            const kwName = typeof kw === 'string' ? kw : (kw.name || kw.label);
+                            if (!kwName) return null;
+                            return (
+                              <Link
+                                key={idx}
+                                to={`/tim-kiem?q=${encodeURIComponent(kwName)}`}
+                                className="bg-[#E50914]/10 hover:bg-[#E50914]/20 text-red-400 text-xs px-2.5 py-1.5 rounded-md border border-[#E50914]/20 transition-colors"
+                              >
+                                #{kwName}
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      </motion.div>
+                    )}
                   </motion.div>
                 )}
 
