@@ -281,7 +281,13 @@ export const getImageUrl = (path: string, _type: 'poster' | 'banner' = 'poster',
   } else if (path.includes('ophim.live') || path.includes('img.ophim')) {
     url = upgradeImageUrl(path);
   } else if (path.includes('upload/vod/') || !path.startsWith('http')) {
-    url = path.startsWith('http') ? path : (domain ? (path.startsWith('/') ? `${domain}${path}` : `${domain}/${path}`) : (path.startsWith('/') ? `https://phimimg.com${path}` : `https://phimimg.com/${path}`));
+    if (path.startsWith('http')) {
+      url = path;
+    } else if (domain) {
+      url = domain.endsWith('/') ? `${domain}${path.replace(/^\//, '')}` : `${domain}/${path.replace(/^\//, '')}`;
+    } else {
+      url = path.startsWith('/') ? `https://phimimg.com${path}` : `https://phimimg.com/${path}`;
+    }
   }
   return url;
 };
