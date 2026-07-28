@@ -4,25 +4,13 @@
 // CẤU HÌNH TTL THEO TỪNG LOẠI DỮ LIỆU
 // ============================================================
 export const TTL = {
-  // Dữ liệu TMDB: cast, images, rating — gần như không đổi
-  TMDB_STATIC:    7 * 24 * 60 * 60 * 1000, // 7 ngày
-
-  // Danh sách phim theo thể loại / quốc gia
-  CATEGORY_LIST:  30 * 60 * 1000,           // 30 phút
-
-  // Chi tiết phim (nội dung, trailer)
-  MOVIE_DETAIL:   15 * 60 * 1000,           // 15 phút
-
-  // Phim mới cập nhật — cần fresh nhất
-  NEW_UPDATED:     2 * 60 * 1000,           // 2 phút
-
-  // Kết quả tìm kiếm — user thường search cùng từ trong 1 session
-  SEARCH:          5 * 60 * 1000,           // 5 phút
+  TMDB_STATIC:    7 * 24 * 60 * 60 * 1000,
+  CATEGORY_LIST:  30 * 60 * 1000,
+  MOVIE_DETAIL:   15 * 60 * 1000,
+  NEW_UPDATED:     2 * 60 * 1000,
+  SEARCH:          5 * 60 * 1000,
 } as const;
 
-// ============================================================
-// NODE CHO DOUBLY LINKED LIST — dùng để implement LRU
-// ============================================================
 interface CacheNode<T> {
   key:       string;
   value:     T;
@@ -30,38 +18,33 @@ interface CacheNode<T> {
   ttl:       number;
   prev:      CacheNode<T> | null;
   next:      CacheNode<T> | null;
-  // Đếm số lần được truy cập — dùng cho phân tích hit rate
   hits:      number;
 }
 
-// ============================================================
-// LRU CACHE CLASS
-// ============================================================
+// Prefix for LocalStorage
+const L2_CACHE_PREFIX = 'cineverse_l2_';
+
 export class LRUCache<T = any> {
   private capacity:  number;
   private map:       Map<string, CacheNode<T>>;
-  private head:      CacheNode<T>; // Most Recently Used sentinel
-  private tail:      CacheNode<T>; // Least Recently Used sentinel
+  private head:      CacheNode<T>;
+  private tail:      CacheNode<T>;
   private cleanupInterval: ReturnType<typeof setInterval>;
 
-  // Thống kê để monitor
-  private stats = { hits: 0, misses: 0, evictions: 0, expirations: 0 };
+  private stats = { hits: 0, misses: 0, evictions: 0, expirations: 0, l2_hits: 0 };
 
   constructor(capacity = 400) {
     this.capacity = capacity;
     this.map      = new Map();
 
-    // Sentinel nodes — không chứa data thật, chỉ để đánh dấu 2 đầu list
     this.head = { key: 'HEAD', value: null as any, timestamp: 0, ttl: 0, prev: null, next: null, hits: 0 };
     this.tail = { key: 'TAIL', value: null as any, timestamp: 0, ttl: 0, prev: null, next: null, hits: 0 };
     this.head.next = this.tail;
     this.tail.prev = this.head;
 
-    // Dọn rác TTL hết hạn mỗi 5 phút
     this.cleanupInterval = setInterval(() => this.cleanup(), 5 * 60 * 1000);
   }
 
-  // Đưa node lên đầu list (Most Recently Used)
   private moveToFront(node: CacheNode<T>): void {
     this.removeFromList(node);
     this.insertAfterHead(node);
@@ -79,69 +62,97 @@ export class LRUCache<T = any> {
     this.head.next       = node;
   }
 
-  get(key: string): T | null {
-    const node = this.map.get(key);
+  // Get data, with support for returning stale data (SWR pattern)
+  get(key: string, allowStale = false): { data: T | null, stale: boolean } {
+    let node = this.map.get(key);
+    let fromL2 = false;
 
+    // Check L2 (LocalStorage) if not in L1
     if (!node) {
-      this.stats.misses++;
-      return null;
-    }
-
-    // Kiểm tra TTL — nếu hết hạn, xóa và báo miss
-    if (Date.now() - node.timestamp > node.ttl) {
-      this.delete(key);
-      this.stats.expirations++;
-      this.stats.misses++;
-      return null;
-    }
-
-    // Cache HIT — đưa lên đầu list
-    this.moveToFront(node);
-    node.hits++;
-    this.stats.hits++;
-    return node.value;
-  }
-
-  set(key: string, value: T, ttl: number): void {
-    // Nếu key đã tồn tại → cập nhật
-    if (this.map.has(key)) {
-      const node    = this.map.get(key)!;
-      node.value    = value;
-      node.timestamp = Date.now();
-      node.ttl      = ttl;
-      this.moveToFront(node);
-      return;
-    }
-
-    // Nếu đầy → xóa LRU (node ngay trước tail)
-    if (this.map.size >= this.capacity) {
-      const lruNode = this.tail.prev!;
-      if (lruNode !== this.head) {
-        this.delete(lruNode.key);
-        this.stats.evictions++;
+      try {
+        const l2Raw = localStorage.getItem(L2_CACHE_PREFIX + key);
+        if (l2Raw) {
+          const l2Data = JSON.parse(l2Raw);
+          this.set(key, l2Data.value, l2Data.ttl, l2Data.timestamp);
+          node = this.map.get(key);
+          fromL2 = true;
+          this.stats.l2_hits++;
+        }
+      } catch {
+        // Ignore L2 parse errors
       }
     }
 
-    // Thêm node mới
-    const newNode: CacheNode<T> = {
-      key, value,
-      timestamp: Date.now(),
-      ttl, hits: 0,
-      prev: null, next: null,
-    };
-    this.map.set(key, newNode);
-    this.insertAfterHead(newNode);
+    if (!node) {
+      this.stats.misses++;
+      return { data: null, stale: false };
+    }
+
+    const isExpired = Date.now() - node.timestamp > node.ttl;
+
+    if (isExpired) {
+      this.stats.expirations++;
+      if (allowStale) {
+        // Trả về data cũ (stale) để UI hiển thị nhanh, trong khi fetch background
+        return { data: node.value, stale: true };
+      }
+      this.delete(key);
+      this.stats.misses++;
+      return { data: null, stale: false };
+    }
+
+    this.moveToFront(node);
+    node.hits++;
+    if (!fromL2) this.stats.hits++;
+    return { data: node.value, stale: false };
+  }
+
+  set(key: string, value: T, ttl: number, customTimestamp?: number): void {
+    const timestamp = customTimestamp || Date.now();
+    
+    if (this.map.has(key)) {
+      const node    = this.map.get(key)!;
+      node.value    = value;
+      node.timestamp = timestamp;
+      node.ttl      = ttl;
+      this.moveToFront(node);
+    } else {
+      if (this.map.size >= this.capacity) {
+        const lruNode = this.tail.prev!;
+        if (lruNode !== this.head) {
+          this.delete(lruNode.key);
+          this.stats.evictions++;
+        }
+      }
+
+      const newNode: CacheNode<T> = {
+        key, value,
+        timestamp,
+        ttl, hits: 0,
+        prev: null, next: null,
+      };
+      this.map.set(key, newNode);
+      this.insertAfterHead(newNode);
+    }
+
+    // Persist to L2 safely
+    try {
+      localStorage.setItem(L2_CACHE_PREFIX + key, JSON.stringify({ value, ttl, timestamp }));
+    } catch (e) {
+      // LocalStorage quota exceeded, clear old L2
+      this.clearL2();
+    }
   }
 
   delete(key: string): void {
     const node = this.map.get(key);
-    if (!node) return;
-    this.removeFromList(node);
-    this.map.delete(key);
+    if (node) {
+      this.removeFromList(node);
+      this.map.delete(key);
+    }
+    localStorage.removeItem(L2_CACHE_PREFIX + key);
   }
 
-  // Event-based invalidation — xóa tất cả key theo prefix
-  // Ví dụ: invalidateByPrefix('movie:avengers') xóa mọi cache liên quan
   invalidateByPrefix(prefix: string): number {
     let count = 0;
     for (const key of this.map.keys()) {
@@ -150,10 +161,25 @@ export class LRUCache<T = any> {
         count++;
       }
     }
+    // L2 cleanup
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k?.startsWith(L2_CACHE_PREFIX + prefix)) {
+        localStorage.removeItem(k);
+      }
+    }
     return count;
   }
 
-  // Dọn rác định kỳ
+  private clearL2(): void {
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k?.startsWith(L2_CACHE_PREFIX)) keys.push(k);
+    }
+    keys.forEach(k => localStorage.removeItem(k));
+  }
+
   private cleanup(): void {
     const now = Date.now();
     for (const [key, node] of this.map.entries()) {
@@ -165,8 +191,8 @@ export class LRUCache<T = any> {
   }
 
   getStats() {
-    const total    = this.stats.hits + this.stats.misses;
-    const hitRate  = total > 0 ? ((this.stats.hits / total) * 100).toFixed(1) : '0';
+    const total    = this.stats.hits + this.stats.misses + this.stats.l2_hits;
+    const hitRate  = total > 0 ? (((this.stats.hits + this.stats.l2_hits) / total) * 100).toFixed(1) : '0';
     return { ...this.stats, hitRate: `${hitRate}%`, size: this.map.size, capacity: this.capacity };
   }
 
@@ -176,48 +202,56 @@ export class LRUCache<T = any> {
   }
 }
 
-// Singleton — dùng chung toàn app
 export const cache = new LRUCache(400);
 
 // ============================================================
-// HELPER: fetchWithCache có TTL linh hoạt
+// HELPER: fetchWithCache sử dụng Stale-While-Revalidate
 // ============================================================
 export async function fetchWithCache<T>(
   key:     string,
   fetcher: () => Promise<T>,
   ttl:     number = TTL.CATEGORY_LIST
 ): Promise<T> {
-  const cached = cache.get(key) as T | null;
-  if (cached !== null) return cached;
+  // Allow stale reads. If stale, we return it immediately and re-fetch in the background.
+  const { data: cached, stale } = cache.get(key, true);
+  
+  if (cached !== null && !stale) {
+    return cached as T;
+  }
 
-  const data = await fetcher();
-  cache.set(key, data, ttl);
-  return data;
+  const fetchPromise = fetcher().then(data => {
+    cache.set(key, data, ttl);
+    return data;
+  }).catch(err => {
+    // If background refresh fails but we have stale data, it's fine.
+    if (cached !== null) {
+      console.warn(`[SWR] Background refresh failed for ${key}, using stale data`, err);
+      return cached as T;
+    }
+    throw err;
+  });
+
+  if (stale && cached !== null) {
+    // SWR: Return stale immediately, update cache in background
+    return cached as T;
+  }
+
+  return fetchPromise;
 }
 
-// ============================================================
-// EVENT-BASED INVALIDATION
-// Gọi khi user thực hiện hành động thay đổi data
-// ============================================================
 export const invalidate = {
-  // Khi user cập nhật thông tin phim (admin)
   movie: (slug: string) => {
     cache.invalidateByPrefix(`movie:${slug}`);
     cache.invalidateByPrefix(`tmdb:${slug}`);
   },
-
-  // Khi danh sách phim mới được cập nhật
   newUpdated: () => {
     cache.invalidateByPrefix('new-updated');
   },
-
-  // Xóa toàn bộ cache TMDB (ví dụ khi đổi API key)
   allTmdb: () => {
     cache.invalidateByPrefix('tmdb:');
   },
 };
 
-// Monitor hit rate trong development
 if ((import.meta as any).env.DEV) {
   setInterval(() => console.table(cache.getStats()), 30_000);
 }

@@ -66,8 +66,7 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating }: M
   };
 
   const rawPosterPath = movie.poster_url || movie.thumb_url;
-  const posterUrl = rawPosterPath ? getImageUrl(rawPosterPath, 'poster', movie.pathImage) : null;
-  const finalPosterUrl = !imgError ? posterUrl : null;
+  const finalPosterUrl = (!imgError && rawPosterPath) ? rawPosterPath : null;
 
   const ratingValue = rating
     || (movie?.tmdb?.vote_average && movie.tmdb.vote_average > 0

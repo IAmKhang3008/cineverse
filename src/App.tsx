@@ -12,6 +12,7 @@ import { ToastProvider } from "./contexts/ToastContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import { FavoritesProvider } from "./contexts/FavoritesContext";
 import ScrollToTop from "./components/ScrollToTop";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 const Home = React.lazy(() => import("./pages/Home"));
 const Movies = React.lazy(() => import("./pages/Movies"));
@@ -42,24 +43,26 @@ function AnimatedRoutes() {
   return (
     <AnimatePresence mode="wait">
       <motion.div key={location.pathname} className="min-h-screen">
-        <Routes location={location}>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Suspense fallback={<LoadingFallback />}><Home /></Suspense>} />
-            <Route path="movies" element={<Suspense fallback={<LoadingFallback />}><Movies /></Suspense>} />
-            <Route path="series" element={<Suspense fallback={<LoadingFallback />}><Series /></Suspense>} />
-            <Route path="genres" element={<Suspense fallback={<LoadingFallback />}><Genres /></Suspense>} />
-            <Route path="movie/:slug" element={<Suspense fallback={<LoadingFallback />}><Detail /></Suspense>} />
-            <Route path="watch/:slug" element={<Suspense fallback={<LoadingFallback />}><Watch /></Suspense>} />
-            <Route path="search" element={<Suspense fallback={<LoadingFallback />}><Search /></Suspense>} />
-            <Route path="favorites" element={<Suspense fallback={<LoadingFallback />}><Favorites /></Suspense>} />
-            <Route path="history" element={<Suspense fallback={<LoadingFallback />}><History /></Suspense>} />
-            <Route path="terms" element={<Suspense fallback={<LoadingFallback />}><Terms /></Suspense>} />
-            <Route path="login" element={<Suspense fallback={<LoadingFallback />}><Login /></Suspense>} />
-            <Route path="profile" element={<Suspense fallback={<LoadingFallback />}><Profile /></Suspense>} />
-            <Route path="settings" element={<Suspense fallback={<LoadingFallback />}><Settings /></Suspense>} />
-            <Route path="*" element={<Suspense fallback={<LoadingFallback />}><NotFound /></Suspense>} />
-          </Route>
-        </Routes>
+        <ErrorBoundary name="RouteBoundary">
+          <Routes location={location}>
+            <Route path="/" element={<Layout />}>
+              <Route index element={<Suspense fallback={<LoadingFallback />}><Home /></Suspense>} />
+              <Route path="movies" element={<Suspense fallback={<LoadingFallback />}><Movies /></Suspense>} />
+              <Route path="series" element={<Suspense fallback={<LoadingFallback />}><Series /></Suspense>} />
+              <Route path="genres" element={<Suspense fallback={<LoadingFallback />}><Genres /></Suspense>} />
+              <Route path="movie/:slug" element={<Suspense fallback={<LoadingFallback />}><Detail /></Suspense>} />
+              <Route path="watch/:slug" element={<Suspense fallback={<LoadingFallback />}><Watch /></Suspense>} />
+              <Route path="search" element={<Suspense fallback={<LoadingFallback />}><Search /></Suspense>} />
+              <Route path="favorites" element={<Suspense fallback={<LoadingFallback />}><Favorites /></Suspense>} />
+              <Route path="history" element={<Suspense fallback={<LoadingFallback />}><History /></Suspense>} />
+              <Route path="terms" element={<Suspense fallback={<LoadingFallback />}><Terms /></Suspense>} />
+              <Route path="login" element={<Suspense fallback={<LoadingFallback />}><Login /></Suspense>} />
+              <Route path="profile" element={<Suspense fallback={<LoadingFallback />}><Profile /></Suspense>} />
+              <Route path="settings" element={<Suspense fallback={<LoadingFallback />}><Settings /></Suspense>} />
+              <Route path="*" element={<Suspense fallback={<LoadingFallback />}><NotFound /></Suspense>} />
+            </Route>
+          </Routes>
+        </ErrorBoundary>
       </motion.div>
     </AnimatePresence>
   );
@@ -71,10 +74,12 @@ export default function App() {
       <ToastProvider>
         <AuthProvider>
           <FavoritesProvider>
-            <BrowserRouter>
-              <ScrollToTop />
-              <AnimatedRoutes />
-            </BrowserRouter>
+            <ErrorBoundary name="AppBoundary">
+              <BrowserRouter>
+                <ScrollToTop />
+                <AnimatedRoutes />
+              </BrowserRouter>
+            </ErrorBoundary>
           </FavoritesProvider>
         </AuthProvider>
       </ToastProvider>
