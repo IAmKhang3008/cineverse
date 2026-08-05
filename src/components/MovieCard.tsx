@@ -1,10 +1,13 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
 import { Play, Star, Heart, Film } from "lucide-react";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
 import { decodeHtml } from "@/lib/utils";
-import { getImageUrl } from "@/lib/api";
+import { api, getImageUrl } from "@/lib/api";
+import { fetchWithCache, TTL } from "@/lib/cache";
+
+const rewriteTMDBUrl = (url: string) => url;
 
 interface MovieCardProps {
   movie: any;
@@ -21,6 +24,82 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating }: M
   const [mobileActive, setMobileActive] = useState(false);
   const [imgError, setImgError] = useState(false);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 📌 STATE cho poster tối ưu
+  const [posterUrl, setPosterUrl] = useState<string | null>(null);
+  const [posterLoading, setPosterLoading] = useState(true); // cho skeleton
+
+  // 🚀 TỐI ƯU: Fetch poster chất lượng cao từ phimapi → TMDb
+  useEffect(() => {
+    if (!movie) return;
+
+    let cancelled = false;
+
+    const fetchBestPoster = async () => {
+      setPosterLoading(true);
+      setImgError(false);
+
+      try {
+        // 1. Thử lấy ảnh từ phimapi images trước
+        const imagesData = await api.getMovieImages(movie.slug).catch(() => null);
+
+        if (imagesData?.images?.length > 0) {
+          const basePosterUrl = imagesData.image_sizes?.poster?.w500 || "https://image.tmdb.org/t/p/w500";
+          // Tìm poster đầu tiên có aspect ratio < 1.0 (ảnh dọc)
+          const posterImg = imagesData.images.find((img: any) => img.aspect_ratio && img.aspect_ratio < 1.0);
+          if (posterImg && !cancelled) {
+            setPosterUrl(getImageUrl(`${basePosterUrl}${posterImg.file_path}`, 'poster'));
+            setPosterLoading(false);
+            return;
+          }
+        }
+
+        // 2. Fallback: Tìm TMDB ID rồi gọi API kết hợp lấy ảnh
+        const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
+        let tmdbId = movie.tmdb?.id;
+        let tmdbType = movie.tmdb?.type || 'movie';
+
+        if (!tmdbId && (movie.origin_name || movie.name)) {
+          const yearQuery = movie.year ? `&year=${movie.year}` : '';
+          const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.origin_name || movie.name)}${yearQuery}&language=vi-VN`;
+          const searchData = await fetchWithCache(`tmdb_search_${movie.slug}`, () => fetch(rewriteTMDBUrl(searchUrl)).then(r => r.json()), TTL.TMDB_STATIC);
+          if (searchData.results?.length > 0) {
+            tmdbId = searchData.results[0].id;
+            tmdbType = searchData.results[0].media_type || (searchData.results[0].first_air_date ? 'tv' : 'movie');
+          }
+        }
+
+        if (tmdbId) {
+          const combinedUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=vi-VN&append_to_response=images&include_image_language=en,null,vi`;
+          const combinedData = await fetchWithCache(`tmdb_combined_${tmdbType}_${tmdbId}`, () => fetch(rewriteTMDBUrl(combinedUrl)).then(r => r.json()), TTL.TMDB_STATIC);
+
+          const posters = combinedData.images?.posters;
+          if (posters?.length > 0 && !cancelled) {
+            // Ưu tiên poster có vote_count cao nhất (chất lượng)
+            const bestPoster = posters.sort((a: any, b: any) => b.vote_count - a.vote_count)[0];
+            setPosterUrl(getImageUrl(`https://image.tmdb.org/t/p/w500${bestPoster.file_path}`, 'poster'));
+            setPosterLoading(false);
+            return;
+          }
+        }
+
+        // 3. Không tìm được poster mới, fallback về poster_url gốc
+        if (!cancelled) {
+          setPosterUrl(getImageUrl(movie.poster_url || movie.thumb_url, 'poster'));
+        }
+
+      } catch (err) {
+        console.warn("MovieCard: failed to fetch high-quality poster, using original", err);
+        if (!cancelled) setPosterUrl(getImageUrl(movie.poster_url || movie.thumb_url, 'poster'));
+      } finally {
+        if (!cancelled) setPosterLoading(false);
+      }
+    };
+
+    fetchBestPoster();
+
+    return () => { cancelled = true; };
+  }, [movie?.slug, movie?.poster_url, movie?.thumb_url]); // fetch khi slug hoặc poster gốc thay đổi
 
   // Hiệu ứng touch giữ nguyên
   const setActive = useCallback((val: boolean) => {
@@ -65,8 +144,9 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating }: M
     setActive(false);
   };
 
-  const rawPosterPath = movie.poster_url || movie.thumb_url;
-  const finalPosterUrl = (!imgError && rawPosterPath) ? rawPosterPath : null;
+  // Cuối cùng, hiển thị poster hoặc skeleton/fallback
+  const showSkeleton = posterLoading || (!posterUrl && !imgError);
+  const finalPosterUrl = !imgError ? posterUrl : null;
 
   const ratingValue = rating
     || (movie?.tmdb?.vote_average && movie.tmdb.vote_average > 0
@@ -107,7 +187,7 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating }: M
             onError={() => setImgError(true)}
           />
         ) : (
-          <div className="w-full h-full bg-[#1A1A1A] flex flex-col items-center justify-center gap-2 select-none">
+          <div className={`w-full h-full bg-[#1A1A1A] flex flex-col items-center justify-center gap-2 select-none ${showSkeleton ? 'animate-pulse' : ''}`}>
             <Film className="w-12 h-12 text-gray-600 opacity-40" />
             <span className="text-[10px] text-gray-500 font-medium px-2 text-center uppercase tracking-wider line-clamp-1">
               {movie.name || ''}

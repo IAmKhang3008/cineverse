@@ -446,7 +446,7 @@ export default function Header() {
           {/* Avatar / Login */}
           <div className="relative">
             {!user ? (
-              <button onClick={() => setIsLoginModalOpen(true)} className="flex items-center gap-2 bg-[#E50914] hover:bg-[#b80710] text-white px-4 py-2 rounded-lg text-sm font-bold transition-all active:scale-95 shadow-lg cursor-pointer">
+              <button onClick={() => setIsLoginModalOpen(true)} className={cn("flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all active:scale-95 cursor-pointer border", atTop ? "bg-transparent hover:bg-white/10 border-white/30 text-white" : "bg-transparent hover:bg-foreground/5 border-card-border text-foreground")}>
                 <LogIn className="w-4 h-4" />
                 <span className="hidden sm:inline">Đăng nhập</span>
               </button>

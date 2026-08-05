@@ -5,7 +5,7 @@ import MovieCard from "@/components/MovieCard";
 import { motion, AnimatePresence } from "motion/react";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useToast } from "@/contexts/ToastContext";
-import { Search as SearchIcon, Filter, X } from "lucide-react";
+import { Search as SearchIcon, Filter } from "lucide-react";
 
 // Stagger animation variants
 const containerVariants: any = {

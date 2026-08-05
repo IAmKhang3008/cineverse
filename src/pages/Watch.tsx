@@ -48,10 +48,45 @@ export default function Watch() {
       try {
         const res = await api.getMovieDetail(slug);
         setMovie(res.movie);
-        setEpisodes(res.episodes || []);
-        if (res.episodes?.[0]?.server_data?.[0]) {
-          setCurrentEpisode(res.episodes[0].server_data[0]);
-          setCurrentServer(res.episodes[0].server_name);
+        
+        let fetchedEpisodes = res.episodes || [];
+        
+        // Inject VidSrc Server if TMDB ID is available
+        const tmdbId = res.movie?.tmdb?.id;
+        if (tmdbId) {
+          const isTv = res.movie?.type === 'series' || res.movie?.tmdb?.type === 'tv';
+          
+          const vidsrcServerData = (fetchedEpisodes[0]?.server_data || []).map((ep: any) => {
+             const epMatch = ep.name.match(/\d+/);
+             const epNum = epMatch ? epMatch[0] : '1';
+             
+             let link_embed = '';
+             if (isTv) {
+               // API might not provide season, default to 1
+               const seasonNum = res.movie?.tmdb?.season || 1; 
+               link_embed = `https://vidsrc-embed.ru/embed/tv?tmdb=${tmdbId}&season=${seasonNum}&episode=${epNum}`;
+             } else {
+               link_embed = `https://vidsrc-embed.ru/embed/movie?tmdb=${tmdbId}`;
+             }
+
+             return {
+               ...ep,
+               link_embed
+             };
+          });
+
+          if (vidsrcServerData.length > 0) {
+             fetchedEpisodes.push({
+               server_name: "VidSrc (VIP)",
+               server_data: vidsrcServerData
+             });
+          }
+        }
+
+        setEpisodes(fetchedEpisodes);
+        if (fetchedEpisodes?.[0]?.server_data?.[0]) {
+          setCurrentEpisode(fetchedEpisodes[0].server_data[0]);
+          setCurrentServer(fetchedEpisodes[0].server_name);
         }
         
         if (res.movie?.category?.[0]?.slug) {
@@ -215,11 +250,6 @@ export default function Watch() {
             title={currentEpisode.name}
             className="w-full h-full"
             allowFullScreen
-            /* CHÌA KHÓA XÓA QUẢNG CÁO: 
-               - allow-popups: BỊ LOẠI BỎ để chặn nhảy tab quảng cáo.
-               - allow-modals: BỊ LOẠI BỎ để chặn các thông báo đẩy.
-            */
-            sandbox="allow-scripts allow-same-origin allow-forms"
             allow="autoplay; fullscreen; picture-in-picture"
             frameBorder="0"
           ></iframe>

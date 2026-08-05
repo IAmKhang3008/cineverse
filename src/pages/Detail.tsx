@@ -849,7 +849,7 @@ export default function Detail() {
             whileHover={{ y: -6, scale: 1.02 }}
             className="w-48 sm:w-56 md:w-80 flex-shrink-0 mx-auto md:mx-0"
           >
-            <div className="rounded-2xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] aspect-[2/3] border border-white/10 group">
+            <div className="rounded-2xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.7)] aspect-[2/3] border border-white/10 group">
               <img
                 src={getImageUrl(movie.poster_url || movie.thumb_url, 'poster')}
                 alt={movie.name}
@@ -873,29 +873,29 @@ export default function Detail() {
               />
               <motion.h2 
                 variants={itemVariants}
-                className="text-xl md:text-2xl text-[#A0A0A0] font-medium mb-6 italic drop-shadow-md"
+                className="text-xl md:text-2xl text-[#A0A0A0] font-medium mb-4 italic drop-shadow-md"
                 dangerouslySetInnerHTML={{ __html: movie.origin_name }}
               />
-              <motion.p 
+              <motion.div 
                 variants={itemVariants}
-                className="text-xl text-[#A0A0A0] mb-6 font-medium drop-shadow-md"
+                className="flex items-center gap-4 text-gray-300 mb-6 font-medium drop-shadow-md flex-wrap justify-center md:justify-start"
               >
-                {movie.year} • {movie.country?.[0]?.name || 'N/A'}
-              </motion.p>
+                <div className="flex items-center text-[#F5C518] gap-1">
+                  <Star className="w-5 h-5" fill="currentColor" />
+                  <span className="font-bold text-lg">{rating ? `${rating.score}` : (movie.tmdb?.vote_average ? `${movie.tmdb.vote_average}` : 'N/A')}</span>
+                  {rating?.votes && <span className="text-sm text-gray-400 ml-1">({rating.votes})</span>}
+                </div>
+                <span>•</span>
+                <span>{movie.year}</span>
+                <span>•</span>
+                <span>{movie.country?.[0]?.name || 'N/A'}</span>
+              </motion.div>
             </motion.div>
 
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 mb-6 text-sm">
-              <div className="flex items-center gap-1.5 bg-[#121212]  px-3 py-1.5 rounded-lg border border-white/5  shadow-sm">
-                <Star className="w-4 h-4 text-[#F5C518]" fill="currentColor" />
-                <span className="text-white  font-bold">
-                  {rating ? `${rating.score}/10` : (movie.tmdb?.vote_average ? `${movie.tmdb.vote_average}/10` : 'Đang cập nhật')}
-                </span>
-                {rating?.votes && <span className="text-xs text-gray-400 ml-1">({rating.votes} votes)</span>}
-              </div>
-              
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 {movie.category && (Array.isArray(movie.category) ? movie.category : Object.values(movie.category)).map((cat: any, index: number) => (
-                  <span key={cat.id || index} className="bg-[#2A2A2A]  text-[#A0A0A0]  text-xs font-medium px-3 py-1.5 rounded-full border border-white/5 ">
+                  <span key={cat.id || index} className="px-3 py-1 rounded-full bg-white/10 border border-white/20 text-sm text-white backdrop-blur-md">
                     {cat.name}
                   </span>
                 ))}
@@ -915,19 +915,17 @@ export default function Detail() {
               )}
             </div>
 
-            {/* --- FLOATING DESCRIPTION CARD CHƯA SẮP ĐẶT ACCENT SHADOW (IDEA 1/3) --- */}
+            {/* --- DESCRIPTION --- */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.4 }}
-              className="relative max-w-3xl bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-[0_8px_40px_rgba(0,0,0,0.4)] mb-8 overflow-hidden"
-              style={{ boxShadow: `0 8px 40px rgba(0,0,0,0.4), 0 0 20px ${accentColor}11` }}
+              className="relative max-w-2xl mb-8"
             >
-              {/* --- EXPANDABLE DESCRIPTION (IDEA 2) --- */}
               <div className="relative">
                 <p
                   ref={descriptionRef}
-                  className={`text-[#A0A0A0] leading-relaxed text-sm md:text-base ${
+                  className={`text-gray-300 leading-7 text-sm md:text-base ${
                     !isDescriptionExpanded ? 'line-clamp-3 md:line-clamp-4' : ''
                   }`}
                   style={{
@@ -960,75 +958,61 @@ export default function Detail() {
               variants={buttonContainerVariants}
               initial="hidden"
               animate="show"
-              className="relative z-20 flex items-center md:flex-wrap gap-3 overflow-x-auto md:overflow-visible no-scrollbar pb-2 md:pb-0 -mx-4 px-4 md:mx-0 md:px-0 snap-x mt-6"
+              className="relative z-20 flex items-center flex-wrap gap-4 pt-4 pb-2 md:pb-0 mt-2"
             >
               {/* ========== PRIMARY BUTTON: XEM NGAY ========== */}
-              <motion.div variants={buttonVariants} whileHover={{ y: -2, scale: 1.02 }} className="flex-shrink-0 snap-start">
+              <motion.div variants={buttonVariants} whileHover={{ scale: 1.02 }} className="flex-shrink-0">
                 <Link
                   to={`/watch/${movie.slug}`}
                   state={{ fromSearch }}
-                  className="relative inline-flex items-center justify-center gap-2 bg-[#E50914] text-white px-8 md:px-10 py-3.5 md:py-4 rounded-xl font-bold transition-all text-sm md:text-lg shadow-[0_4px_20px_rgba(229,9,20,0.5)] overflow-hidden group"
+                  className="relative inline-flex items-center justify-center gap-2 bg-[#E50914] hover:bg-red-700 text-white px-8 md:px-10 py-3 md:py-3.5 rounded-lg font-bold transition-all text-sm md:text-base shadow-[0_4px_20px_rgba(229,9,20,0.5)] overflow-hidden group"
                   style={{ boxShadow: `0 4px 20px rgba(229,9,20,0.5), 0 0 25px ${accentColor}33` }}
                 >
-                  {/* Light sweep pseudo-element */}
                   <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out"></span>
-                  <Play className="w-5 h-5 md:w-6 md:h-6 relative z-10" fill="currentColor" />
+                  <Play className="w-5 h-5 relative z-10" fill="currentColor" />
                   <span className="relative z-10">Xem Ngay</span>
                 </Link>
               </motion.div>
               
               {/* ========== SECONDARY BUTTON: TRAILER ========== */}
               {movie.trailer_url && (
-                <motion.div variants={buttonVariants} whileHover={{ y: -2, scale: 1.02 }} className="flex-shrink-0 snap-start">
+                <motion.div variants={buttonVariants} whileHover={{ scale: 1.02 }} className="flex-shrink-0">
                   <button 
                     onClick={() => setShowTrailer(true)}
-                    className="relative inline-flex items-center justify-center gap-2 bg-white/5 backdrop-blur-md border border-white/10 text-white px-8 md:px-10 py-3.5 md:py-4 rounded-xl font-bold transition-all text-sm md:text-lg group cursor-pointer"
-                    style={{ boxShadow: `0 0 15px ${accentColor}22` }}
-                    onMouseEnter={e => e.currentTarget.style.boxShadow = `0 0 25px ${accentColor}55`}
-                    onMouseLeave={e => e.currentTarget.style.boxShadow = `0 0 15px ${accentColor}22`}
+                    className="relative inline-flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 border border-white/20 px-6 py-3 md:py-3.5 rounded-lg text-white font-bold transition-all text-sm md:text-base cursor-pointer"
                   >
-                    <motion.div
-                      whileHover={{ rotate: [0, -15, 15, 0], scale: 1.2 }}
-                      transition={{ duration: 0.4 }}
-                    >
-                      <Play className="w-5 h-5 md:w-6 md:h-6 text-[#E50914] group-hover:text-red-400 transition-colors" fill="currentColor" />
-                    </motion.div>
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-5 h-5 text-white">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+                    </svg>
                     Trailer
                   </button>
                 </motion.div>
               )}
 
+              {/* Spacer on Desktop */}
+              <div className="flex-grow hidden sm:block"></div>
+
               {/* ========== TERTIARY BUTTON: YÊU THÍCH ========== */}
-              <motion.div variants={buttonVariants} whileHover={{ y: -2 }} className="flex-shrink-0 snap-start">
+              <motion.div variants={buttonVariants} whileHover={{ scale: 1.1 }} className="flex-shrink-0 ml-auto sm:ml-0">
                 <button 
                   onClick={handleFavoriteClick}
-                  className={`relative inline-flex items-center justify-center gap-2 bg-white/5 backdrop-blur-md border border-white/10 text-gray-200 px-5 md:px-6 py-3.5 md:py-4 rounded-xl font-semibold transition-all text-sm md:text-base group cursor-pointer ${
-                    favorite ? 'text-[#E50914]' : ''
+                  className={`w-12 h-12 flex items-center justify-center bg-white/10 hover:bg-white/20 border border-white/10 text-gray-200 rounded-full transition-all cursor-pointer ${
+                    favorite ? 'text-[#E50914] bg-[#E50914]/10 border-[#E50914]/30' : ''
                   }`}
-                  style={favorite ? { boxShadow: `0 0 20px ${accentColor}44` } : {}}
+                  title={favorite ? 'Bỏ yêu thích' : 'Yêu thích'}
                 >
-                  <motion.div
-                    key={favorite ? 'active' : 'inactive'}
-                    initial={{ scale: 0.8 }}
-                    animate={{ scale: [0.8, 1.3, 1] }}
-                    transition={{ duration: 0.4 }}
-                  >
-                    <Heart className={`w-4 h-4 md:w-5 md:h-5 ${favorite ? 'fill-current' : ''}`} />
-                  </motion.div>
-                  {favorite ? 'Bỏ yêu thích' : 'Yêu thích'}
+                  <Heart className={`w-5 h-5 ${favorite ? 'fill-current' : ''}`} />
                 </button>
               </motion.div>
 
               {/* ========== TERTIARY BUTTON: CHIA SẺ ========== */}
-              <motion.div variants={buttonVariants} whileHover={{ y: -2 }} className="relative flex-shrink-0 snap-start" ref={shareMenuRef}>
+              <motion.div variants={buttonVariants} whileHover={{ scale: 1.1 }} className="relative flex-shrink-0" ref={shareMenuRef}>
                 <button 
                   onClick={() => setShowShareMenu(!showShareMenu)}
-                  className="relative inline-flex items-center justify-center gap-2 bg-white/5 backdrop-blur-md border border-white/10 text-gray-200 px-5 md:px-6 py-3.5 md:py-4 rounded-xl font-semibold transition-all text-sm md:text-base group cursor-pointer"
+                  className="w-12 h-12 flex items-center justify-center bg-white/10 hover:bg-white/20 border border-white/10 text-gray-200 rounded-full transition-all cursor-pointer"
+                  title="Chia sẻ"
                 >
-                  <motion.div whileHover={{ scale: 1.2, rotate: 15 }} transition={{ type: "spring", stiffness: 300 }}>
-                    <Share2 className="w-4 h-4 md:w-5 md:h-5" />
-                  </motion.div>
-                  Chia sẻ
+                  <Share2 className="w-5 h-5" />
                 </button>
 
                 <AnimatePresence>
@@ -1038,7 +1022,7 @@ export default function Detail() {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 10, scale: 0.95 }}
                       transition={{ duration: 0.15 }}
-                      className="absolute bottom-full left-0 md:left-1/2 md:-translate-x-1/2 mb-3 w-48 bg-[#1A1A1A] backdrop-blur-xl border border-[#333333] rounded-xl shadow-2xl overflow-hidden z-50"
+                      className="absolute bottom-full right-0 md:left-1/2 md:-translate-x-1/2 mb-3 w-48 bg-[#1A1A1A] backdrop-blur-xl border border-[#333333] rounded-xl shadow-2xl overflow-hidden z-50"
                     >
                       <div className="flex flex-col">
                         <button 

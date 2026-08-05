@@ -593,9 +593,11 @@ export default function Home() {
                         {movie.trailer_url && (
                           <button
                             onClick={() => handlePlayTrailer(movie.trailer_url)}
-                            className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md border border-white/20 text-white px-4 py-2 sm:px-5 sm:py-2.5 md:px-6 md:py-3 rounded-full font-bold text-xs md:text-sm transition-all hover:bg-white/20 active:scale-95"
+                            className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md border border-white/20 text-white px-4 py-2 sm:px-5 sm:py-2.5 md:px-6 md:py-3 rounded-full font-bold text-xs md:text-sm transition-all hover:bg-white/20 active:scale-95 cursor-pointer"
                           >
-                            <Play className="w-3.5 h-3.5 md:w-4 md:h-4 text-[#E50914]" fill="currentColor" />
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-3.5 h-3.5 md:w-4 md:h-4 text-white">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+                            </svg>
                             Trailer
                           </button>
                         )}
