@@ -250,6 +250,7 @@ export default function Watch() {
             title={currentEpisode.name}
             className="w-full h-full"
             allowFullScreen
+            sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-fullscreen"
             allow="autoplay; fullscreen; picture-in-picture"
             frameBorder="0"
           ></iframe>

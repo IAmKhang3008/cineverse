@@ -763,7 +763,7 @@ export default function Detail() {
               title="Trailer"
               className="w-full h-full"
               allowFullScreen
-              allow="autoplay; encrypted-media"
+              allow="autoplay; fullscreen; encrypted-media"
             ></iframe>
           </div>
         </div>
