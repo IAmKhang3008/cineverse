@@ -77,7 +77,7 @@ export default function Watch() {
 
           if (vidsrcServerData.length > 0) {
              fetchedEpisodes.push({
-               server_name: "VidSrc (VIP)",
+               server_name: "Multi-sub",
                server_data: vidsrcServerData
              });
           }
@@ -245,15 +245,33 @@ export default function Watch() {
             cinemaMode ? "z-50" : ""
           )}
         >
-          <iframe
-            src={getCleanedEmbedUrl(currentEpisode.link_embed) || null}
-            title={currentEpisode.name}
-            className="w-full h-full"
-            allowFullScreen
-            sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-fullscreen"
-            allow="autoplay; fullscreen; picture-in-picture"
-            frameBorder="0"
-          ></iframe>
+          {currentServer === 'Multi-sub' ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#121212] p-8 text-center z-20">
+              <h3 className="text-2xl md:text-3xl font-bold text-white mb-4">Trình phát đa phụ đề</h3>
+              <p className="text-gray-400 mb-8 max-w-lg text-sm md:text-base">
+                Tính năng này chưa hỗ trợ nhúng trực tiếp tại đây. Đừng lo, chỉ cần nhấn nút bên dưới để xem trong tab mới nhé!
+              </p>
+              <a
+                href={currentEpisode.link_embed}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-[#E50914] hover:bg-red-700 text-white px-8 py-4 rounded-xl font-bold text-lg flex items-center gap-2 transition-all shadow-[0_4px_20px_rgba(229,9,20,0.5)] hover:scale-105 active:scale-95"
+              >
+                <Play className="w-6 h-6" fill="currentColor" />
+                Xem trong Tab Mới
+              </a>
+            </div>
+          ) : (
+            <iframe
+              src={getCleanedEmbedUrl(currentEpisode.link_embed) || undefined}
+              title={currentEpisode.name}
+              className="w-full h-full"
+              allowFullScreen
+              sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-fullscreen"
+              allow="autoplay; fullscreen; picture-in-picture"
+              frameBorder="0"
+            ></iframe>
+          )}
           
           {/* Overlay bảo vệ: Ngăn chặn click chuột phải hoặc click nhầm vào banner ẩn */}
           <div className="absolute inset-0 pointer-events-none border-[10px] border-transparent"></div>
