@@ -194,7 +194,7 @@ export default function Movies() {
           {movies.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6 gap-y-8 md:gap-y-10">
               {movies.map((movie, index) => (
-                <MovieCard key={movie._id || index} movie={movie} />
+                <MovieCard key={movie._id || index} movie={movie} priority={index < 4} />
               ))}
             </div>
           ) : (

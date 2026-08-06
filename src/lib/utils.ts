@@ -18,6 +18,30 @@ export const CAST_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.
 
 export const DEFAULT_USER_AVATAR = "https://ui-avatars.com/api/?name=User&background=E50914&color=fff&size=256&rounded=true&bold=true";
 
+export function cleanLangString(lang: string | null | undefined): string {
+  if (!lang) return '';
+  const tokens = lang.trim().split(/\s+/);
+  const seen = new Set<string>();
+  const resultTokens: string[] = [];
+  
+  for (const token of tokens) {
+    const cleanWord = token.toLowerCase().replace(/^[+,\-/]+|[+,\-/]+$/g, '');
+    if (cleanWord && seen.has(cleanWord)) {
+      continue;
+    }
+    if (cleanWord) {
+      seen.add(cleanWord);
+    }
+    resultTokens.push(token);
+  }
+  
+  let cleaned = resultTokens.join(' ');
+  cleaned = cleaned.replace(/\s*([+,\-/])\s*\1+/g, ' $1');
+  cleaned = cleaned.replace(/\s*([+,\-/])\s*$/g, '');
+  cleaned = cleaned.replace(/^\s*([+,\-/])\s*/g, '');
+  return cleaned.trim();
+}
+
 /**
  * Viết hoa chữ cái đầu mỗi từ — hỗ trợ tiếng Việt có dấu
  * "nhóc trùm: đi làm lại" → "Nhóc Trùm: Đi Làm Lại"

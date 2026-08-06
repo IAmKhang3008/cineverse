@@ -15,9 +15,10 @@ interface MovieCardProps {
   fromSearch?: boolean;
   onHoldChange?: (holding: boolean) => void;
   rating?: string;
+  priority?: boolean;
 }
 
-export default function MovieCard({ movie, fromSearch, onHoldChange, rating }: MovieCardProps) {
+export default function MovieCard({ movie, fromSearch, onHoldChange, rating, priority }: MovieCardProps) {
   const { isFavorite, toggleFavorite } = useFavorites();
   const favorite = movie ? isFavorite(movie.slug) : false;
   const { showToast } = useToast();
@@ -154,6 +155,30 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating }: M
         : null)
     || 'N/A';
 
+  const imgProps: any = {
+    src: finalPosterUrl || undefined,
+    alt: movie.name || '',
+    className: "w-full h-full object-cover transition-opacity duration-300 group-hover:opacity-40 movie-poster",
+    style: mobileActive ? { opacity: 0.4 } : {},
+    decoding: "async",
+    draggable: false,
+    referrerPolicy: "no-referrer",
+    onError: () => setImgError(true)
+  };
+
+  if (priority) {
+    imgProps.fetchPriority = "high";
+    imgProps.loading = "eager";
+  } else {
+    imgProps.loading = "lazy";
+  }
+
+  if (finalPosterUrl && finalPosterUrl.includes('image.tmdb.org/t/p/')) {
+    const basePath = finalPosterUrl.substring(finalPosterUrl.lastIndexOf('/'));
+    imgProps.srcSet = `https://image.tmdb.org/t/p/w185${basePath} 185w, https://image.tmdb.org/t/p/w342${basePath} 342w, https://image.tmdb.org/t/p/w500${basePath} 500w`;
+    imgProps.sizes = "(max-width: 400px) 185px, (max-width: 768px) 342px, 500px";
+  }
+
   return (
     <div
       className="group relative block w-full flex flex-col items-center md:items-start select-none movie-card-content"
@@ -161,6 +186,7 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating }: M
         WebkitUserSelect: 'none',
         WebkitTouchCallout: 'none',
         touchAction: mobileActive ? 'none' : 'auto',
+        contain: 'layout style paint'
       }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
@@ -171,21 +197,11 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating }: M
         to={`/movie/${movie.slug}`}
         state={fromSearch ? { fromSearch: true } : undefined}
         onClick={e => { if (mobileActive) e.preventDefault(); }}
-        className="block w-full rounded-[12px] overflow-hidden aspect-[2/3] bg-[#121212] transition-all duration-300 group-hover:scale-[1.05] shadow-[0_10px_20px_rgba(0,0,0,0.5)] group-hover:shadow-[0_15px_30px_rgba(229,9,20,0.3)] relative border border-transparent"
+        className="block w-full rounded-[12px] overflow-hidden aspect-[2/3] bg-[#121212] transition-transform duration-300 group-hover:scale-[1.05] shadow-[0_10px_20px_rgba(0,0,0,0.5)] relative border border-transparent"
         style={mobileActive ? { transform: 'scale(1.05)', boxShadow: '0 15px 30px rgba(229,9,20,0.3)' } : {}}
       >
         {finalPosterUrl ? (
-          <img
-            src={finalPosterUrl}
-            alt={movie.name || ''}
-            className="w-full h-full object-cover transition-opacity duration-300 group-hover:opacity-40 movie-poster"
-            style={mobileActive ? { opacity: 0.4 } : {}}
-            loading="lazy"
-            decoding="async"
-            draggable={false}
-            referrerPolicy="no-referrer"
-            onError={() => setImgError(true)}
-          />
+          <img {...imgProps} />
         ) : (
           <div className={`w-full h-full bg-[#1A1A1A] flex flex-col items-center justify-center gap-2 select-none ${showSkeleton ? 'animate-pulse' : ''}`}>
             <Film className="w-12 h-12 text-gray-600 opacity-40" />

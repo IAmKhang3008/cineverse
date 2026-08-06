@@ -5,10 +5,12 @@ import { Play, Plus, Star, Clock, Calendar, Globe, Heart, X, ArrowLeft, Share2, 
 import MovieCard from "@/components/MovieCard";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
-import { decodeHtml, DEFAULT_AVATAR, CAST_PLACEHOLDER } from "@/lib/utils";
+import { decodeHtml, DEFAULT_AVATAR, CAST_PLACEHOLDER, cleanLangString } from "@/lib/utils";
 import { fetchWithCache, TTL } from "@/lib/cache";
 import { motion, AnimatePresence } from "motion/react";
-import CommentsSection from "@/components/CommentsSection";
+import { Suspense, lazy } from "react";
+const CommentsSection = lazy(() => import("@/components/CommentsSection"));
+
 import { MovieDetailSkeleton } from "@/components/Skeleton";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { toMovieTitleCase } from "@/lib/utils";
@@ -67,33 +69,21 @@ const extractSeriesName = (originName: string): string => {
 
 // Component LazyImage dùng cho ảnh diễn viên
 const LazyImage = ({ src, alt, className }: { src: string; alt: string; className: string }) => {
-  const [loaded, setLoaded] = useState(false);
-  const imgRef = useRef<HTMLImageElement>(null);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setLoaded(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "200px" }
-    );
-    if (imgRef.current) observer.observe(imgRef.current);
-    return () => observer.disconnect();
-  }, []);
-
   return (
     <img
-      ref={imgRef}
-      src={(loaded && src) ? src : CAST_PLACEHOLDER}
+      src={src || CAST_PLACEHOLDER}
       alt={alt}
       className={className}
       referrerPolicy="no-referrer"
+      loading="lazy"
+      decoding="async"
+      onError={(e) => {
+        (e.target as HTMLImageElement).src = CAST_PLACEHOLDER;
+      }}
     />
   );
 };
+
 
 export default function Detail() {
   const { slug } = useParams<{ slug: string }>();
@@ -119,6 +109,7 @@ export default function Detail() {
   useDocumentTitle(pageTitle);
 
   const [relatedMovies, setRelatedMovies] = useState<any[]>([]);
+  const [collection, setCollection] = useState<any>(null);
   const [loadingRelated, setLoadingRelated] = useState(false);
   const [hasFetchedRelated, setHasFetchedRelated] = useState(false);
   const relatedMoviesRef = useRef<HTMLDivElement>(null);
@@ -449,40 +440,55 @@ export default function Detail() {
 
           if (collectionId) {
             // 1.3. Lấy danh sách phim trong collection
-            const collectionUrl = `https://api.themoviedb.org/3/collection/${collectionId}?api_key=${apiKey}&language=vi-VN`;
+            const collectionUrl = `https://api.themoviedb.org/3/collection/${collectionId}?api_key=${apiKey}&language=vi-VN&append_to_response=translations`;
             const collectionData = await fetchWithCache(`tmdb_collection_${collectionId}`, () => fetch(collectionUrl).then(r => r.json()), TTL.TMDB_STATIC);
             
+            // Fallback overview sang tiếng Anh nếu tiếng Việt trống
+            if (collectionData && !collectionData.overview && collectionData.translations) {
+              const enOverview = collectionData.translations.translations?.find((t: any) => t.iso_639_1 === 'en')?.data?.overview;
+              if (enOverview) collectionData.overview = enOverview;
+            }
+
             if (collectionData?.parts && collectionData.parts.length > 0) {
-              // 1.4. Tìm các phim này trong cơ sở dữ liệu của bạn bằng cách search tiêu đề Việt hoặc gốc
-              const searchPromises = collectionData.parts.map(async (part: any) => {
-                if (part.id === tmdbId) return null; // Bỏ qua phim hiện tại
+
+              const sortedParts = [...collectionData.parts].sort((a: any, b: any) => {
+                if (!a.release_date) return 1;
+                if (!b.release_date) return -1;
+                return new Date(a.release_date).getTime() - new Date(b.release_date).getTime();
+              });
+              const allPartsPromises = sortedParts.map(async (part: any) => {
+
+                if (part.id === tmdbId) return movie;
                 try {
                   const searchInDB = await api.search(part.title);
-                  if (searchInDB?.items && searchInDB.items.length > 0) {
-                    return searchInDB.items[0];
-                  }
-                  
+                  if (searchInDB?.items && searchInDB.items.length > 0) return searchInDB.items[0];
                   if (part.original_title && part.original_title !== part.title) {
                     const searchInDBOriginal = await api.search(part.original_title);
-                    if (searchInDBOriginal?.items && searchInDBOriginal.items.length > 0) {
-                      return searchInDBOriginal.items[0];
-                    }
+                    if (searchInDBOriginal?.items && searchInDBOriginal.items.length > 0) return searchInDBOriginal.items[0];
                   }
-                  return null;
-                } catch {
-                  return null;
-                }
+                  return {
+                    _id: part.id.toString(),
+                    name: part.title,
+                    origin_name: part.original_title,
+                    thumb_url: part.poster_path ? `https://image.tmdb.org/t/p/w500${part.poster_path}` : '',
+                    poster_url: part.poster_path ? `https://image.tmdb.org/t/p/w500${part.poster_path}` : '',
+                    year: part.release_date ? parseInt(part.release_date.substring(0, 4)) : null,
+                    slug: '', 
+                    tmdb: { type: 'movie', id: part.id, vote_average: part.vote_average }
+                  };
+                } catch { return null; }
               });
-
-              const results = await Promise.all(searchPromises);
+              const resolvedParts = await Promise.all(allPartsPromises);
+              if (isMounted) setCollection({ ...collectionData, parts: resolvedParts.filter(Boolean) });
               const uniqueResults: any[] = [];
-              results.forEach((m: any) => {
-                if (m && m.slug !== slug && !uniqueResults.some(u => u.slug === m.slug)) {
+              resolvedParts.forEach((m: any) => {
+                if (m && m.slug && m.slug !== slug && !uniqueResults.some(u => u.slug === m.slug)) {
                   uniqueResults.push(m);
                 }
               });
               relatedFromDB = uniqueResults;
             }
+
           }
         }
 
@@ -811,7 +817,11 @@ export default function Detail() {
                 alt={movie.name}
                 className="w-full h-full object-cover object-top"
                 referrerPolicy="no-referrer"
+                fetchPriority="high"
+                loading="eager"
+                decoding="async"
               />
+
             </motion.div>
           </motion.div>
 
@@ -855,13 +865,17 @@ export default function Detail() {
                 alt={movie.name}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 referrerPolicy="no-referrer"
+                fetchPriority="high"
+                loading="eager"
+                decoding="async"
               />
             </div>
           </motion.div>
 
+
           {/* Info */}
-          <div className="flex-grow text-center md:text-left pt-4 md:pt-12">
-            <motion.div
+          <div className="flex-grow text-center lg:text-left pt-4 md:pt-12">
+            <motion.div 
               variants={containerVariants}
               initial="hidden"
               animate="show"
@@ -878,7 +892,7 @@ export default function Detail() {
               />
               <motion.div 
                 variants={itemVariants}
-                className="flex items-center gap-4 text-gray-300 mb-6 font-medium drop-shadow-md flex-wrap justify-center md:justify-start"
+                className="flex items-center gap-4 text-gray-300 mb-6 font-medium drop-shadow-md flex-wrap justify-center lg:justify-start"
               >
                 <div className="flex items-center text-[#F5C518] gap-1">
                   <Star className="w-5 h-5" fill="currentColor" />
@@ -892,7 +906,8 @@ export default function Detail() {
               </motion.div>
             </motion.div>
 
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 mb-6 text-sm">
+            <div className="flex flex-wrap items-center justify-center lg:justify-start gap-4 mb-6 text-sm">
+
               <div className="flex items-center gap-2 flex-wrap">
                 {movie.category && (Array.isArray(movie.category) ? movie.category : Object.values(movie.category)).map((cat: any, index: number) => (
                   <span key={cat.id || index} className="px-3 py-1 rounded-full bg-white/10 border border-white/20 text-sm text-white backdrop-blur-md">
@@ -902,10 +917,10 @@ export default function Detail() {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mb-8">
+            <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2 mb-8">
               {movie.lang && (
                 <span className="bg-[#3B82F6]/10 text-[#3B82F6] text-sm font-bold px-3 py-1.5 rounded-md border border-[#3B82F6]/30 flex items-center gap-2">
-                  {getAudioIcon(movie.lang)} {movie.lang}
+                  {getAudioIcon(movie.lang)} {cleanLangString(movie.lang)}
                 </span>
               )}
               {movie.quality && (
@@ -920,7 +935,7 @@ export default function Detail() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.4 }}
-              className="relative max-w-2xl mb-8"
+              className="relative max-w-2xl mx-auto lg:mx-0 mb-8"
             >
               <div className="relative">
                 <p
@@ -943,12 +958,14 @@ export default function Detail() {
 
                 {/* Nút "Xem thêm" chỉ hiển thị khi nội dung bị truncate */}
                 {isDescriptionTruncated && (
-                  <button
-                    onClick={toggleDescription}
-                    className="mt-2 text-[#E50914] hover:text-red-400 text-sm font-semibold transition-colors duration-300 flex items-center gap-1 cursor-pointer"
-                  >
-                    {isDescriptionExpanded ? 'Thu gọn ▲' : 'Xem thêm ▼'}
-                  </button>
+                  <div className="flex justify-end">
+                    <button
+                      onClick={toggleDescription}
+                      className="mt-2 text-[#E50914] hover:text-red-400 text-sm font-semibold transition-colors duration-300 flex items-center gap-1 cursor-pointer"
+                    >
+                      {isDescriptionExpanded ? 'Thu gọn ▲' : 'Xem thêm ▼'}
+                    </button>
+                  </div>
                 )}
               </div>
             </motion.div>
@@ -958,8 +975,9 @@ export default function Detail() {
               variants={buttonContainerVariants}
               initial="hidden"
               animate="show"
-              className="relative z-20 flex items-center flex-wrap gap-4 pt-4 pb-2 md:pb-0 mt-2"
+              className="relative z-20 flex items-center justify-center lg:justify-start flex-wrap gap-4 pt-4 pb-2 md:pb-0 mt-2"
             >
+
               {/* ========== PRIMARY BUTTON: XEM NGAY ========== */}
               <motion.div variants={buttonVariants} whileHover={{ scale: 1.02 }} className="flex-shrink-0">
                 <Link
@@ -989,11 +1007,8 @@ export default function Detail() {
                 </motion.div>
               )}
 
-              {/* Spacer on Desktop */}
-              <div className="flex-grow hidden sm:block"></div>
-
               {/* ========== TERTIARY BUTTON: YÊU THÍCH ========== */}
-              <motion.div variants={buttonVariants} whileHover={{ scale: 1.1 }} className="flex-shrink-0 ml-auto sm:ml-0">
+              <motion.div variants={buttonVariants} whileHover={{ scale: 1.1 }} className="flex-shrink-0">
                 <button 
                   onClick={handleFavoriteClick}
                   className={`w-12 h-12 flex items-center justify-center bg-white/10 hover:bg-white/20 border border-white/10 text-gray-200 rounded-full transition-all cursor-pointer ${
@@ -1294,18 +1309,21 @@ export default function Detail() {
                             alt={`Hình ảnh ${idx + 1}`}
                             className="w-full h-full object-cover"
                             referrerPolicy="no-referrer"
+                            loading="lazy"
+                            decoding="async"
                           />
                         </motion.div>
                       ))
                     ) : (
                       <div className="col-span-full grid grid-cols-2 sm:grid-cols-3 gap-4">
                         <motion.div variants={itemVariants} className="aspect-video rounded-xl overflow-hidden bg-[#2A2A2A]">
-                          <img src={getImageUrl(movie.thumb_url || movie.poster_url, 'banner')} className="w-full h-full object-cover" alt="Gallery 1" referrerPolicy="no-referrer" />
+                          <img src={getImageUrl(movie.thumb_url || movie.poster_url, 'banner')} className="w-full h-full object-cover" alt="Gallery 1" referrerPolicy="no-referrer" loading="lazy" decoding="async" />
                         </motion.div>
                         <motion.div variants={itemVariants} className="aspect-video rounded-xl overflow-hidden bg-[#2A2A2A]">
-                          <img src={getImageUrl(movie.poster_url || movie.thumb_url, 'banner')} className="w-full h-full object-cover" alt="Gallery 2" referrerPolicy="no-referrer" />
+                          <img src={getImageUrl(movie.poster_url || movie.thumb_url, 'banner')} className="w-full h-full object-cover" alt="Gallery 2" referrerPolicy="no-referrer" loading="lazy" decoding="async" />
                         </motion.div>
                       </div>
+
                     )}
                   </motion.div>
                 )}
@@ -1315,12 +1333,92 @@ export default function Detail() {
         </motion.div>
 
           {/* Comments Section */}
-          <CommentsSection movieId={movie._id || movie.slug} />
+          {/* Collection Section */}
+          {collection && collection.parts && collection.parts.length > 1 && (
+            <div className="mt-16 md:mt-24 relative rounded-[24px] overflow-hidden bg-[#0a0a0a] shadow-2xl border border-white/5">
+              {/* Background Image & Overlay */}
+              <div className="absolute inset-0 z-0">
+                {collection.backdrop_path && (
+                  <img
+                    src={`https://image.tmdb.org/t/p/original${collection.backdrop_path}`}
+                    alt={collection.name}
+                    className="absolute inset-0 w-full h-full object-cover"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                )}
+                {/* Thick linear gradient for readability */}
+                <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/80 to-[#0a0a0a]/40 z-10" />
+                <div className="absolute inset-0 bg-gradient-to-r from-[#0a0a0a]/90 via-[#0a0a0a]/60 to-transparent z-10" />
+              </div>
+
+              {/* Content */}
+              <div className="relative z-20 p-6 md:p-10 lg:p-12 w-full flex flex-col h-full">
+                <div className="max-w-2xl mt-auto mb-12">
+                  <h2 className="text-4xl md:text-5xl lg:text-6xl font-heading font-bold text-white mb-4 tracking-tight drop-shadow-md">{collection.name}</h2>
+                  <p className="text-gray-300 font-medium text-sm md:text-base mb-6 drop-shadow-sm">{collection.parts.length} Movies</p>
+                  
+                  {collection.overview && (
+                    <div className="bg-black/30 backdrop-blur-sm border border-white/10 p-5 rounded-xl max-w-[90%] md:max-w-full">
+                      <h3 className="text-sm uppercase tracking-widest text-gray-400 font-bold mb-3">Overview</h3>
+                      <p className="text-gray-200 text-sm md:text-base leading-relaxed line-clamp-3 md:line-clamp-4">
+                        {collection.overview}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="w-full">
+                  <h3 className="text-sm uppercase tracking-widest text-gray-400 font-bold mb-6 flex items-center gap-3">
+                    Movies in Collection
+                    <div className="h-px bg-white/10 flex-grow"></div>
+                  </h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
+                    {collection.parts.map((part: any, index: number) => (
+                      <div key={part.slug || index} className="group relative transition-transform duration-300 hover:scale-105 hover:z-10 cursor-pointer">
+                        <div className="relative overflow-hidden rounded-lg shadow-lg aspect-[2/3] bg-[#2A2A2A]">
+                          <img 
+                            src={getImageUrl(part.poster_url || part.thumb_url || `https://image.tmdb.org/t/p/w500${part.poster_path}`, 'poster')} 
+                            alt={part.name || part.title} 
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                            loading="lazy"
+                            decoding="async"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = CAST_PLACEHOLDER;
+                            }}
+                          />
+                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                            {part.slug ? (
+                              <Link to={`/movie/${part.slug}`} className="border border-white text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-white hover:text-black transition-colors">
+                                Chi tiết
+                              </Link>
+                            ) : (
+                              <span className="text-white/70 text-xs">Chưa có vietsub</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="mt-3">
+                          <p className="text-xs text-[#E50914] font-bold mb-1">{part.year || new Date(part.release_date).getFullYear() || ''}</p>
+                          <h3 className="text-white font-bold truncate leading-tight text-sm drop-shadow-sm">{part.name || part.title}</h3>
+                          <h4 className="text-gray-400 text-xs truncate mt-0.5">{part.origin_name || part.original_title}</h4>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          <Suspense fallback={<div className="h-64 flex justify-center py-10"><div className="w-8 h-8 border-4 border-[#E50914] border-t-transparent rounded-full animate-spin"></div></div>}>
+            <CommentsSection movieId={movie._id || movie.slug} />
+          </Suspense>
+
 
           {/* Related Movies */}
-          <div ref={relatedMoviesRef} className="mt-16 md:mt-24 min-h-[200px]">
+          <div ref={relatedMoviesRef} className="mt-16 md:mt-24 min-h-[200px]" style={{ contentVisibility: 'auto' }}>
             {loadingRelated ? (
               <div className="flex justify-center py-10">
+
                 <div className="w-8 h-8 border-4 border-[#E50914] border-t-transparent rounded-full animate-spin"></div>
               </div>
             ) : relatedMovies.length > 0 ? (

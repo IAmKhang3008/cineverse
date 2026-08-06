@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { Search, User as UserIcon, LogOut, Settings, Heart, History, Play, Menu, X, LogIn, Bell, Clock, TrendingUp, Home, Film, Tv, Tag } from "lucide-react";
-import { cn, DEFAULT_USER_AVATAR } from "@/lib/utils";
+import { cn, DEFAULT_USER_AVATAR, cleanLangString } from "@/lib/utils";
 import { api, getImageUrl } from "@/lib/api";
 import { SearchSuggestionSkeleton, Skeleton } from "@/components/Skeleton";
 import { useAuth } from "@/contexts/AuthContext";
@@ -410,7 +410,7 @@ export default function Header() {
                               <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                                 <span className="text-[10px] bg-input-bg text-secondary-text px-1.5 py-0.5 rounded">{movie.year || "N/A"}</span>
                                 {movie.quality && <span className="text-[10px] bg-foreground/10 border border-card-border text-foreground px-1.5 py-0.5 rounded">{movie.quality}</span>}
-                                {movie.lang && <span className="text-[10px] bg-[#3B82F6]/20 border border-[#3B82F6]/30 text-[#3B82F6] px-1.5 py-0.5 rounded">{movie.lang}</span>}
+                                {movie.lang && <span className="text-[10px] bg-[#3B82F6]/20 border border-[#3B82F6]/30 text-[#3B82F6] px-1.5 py-0.5 rounded">{cleanLangString(movie.lang)}</span>}
                               </div>
                             </div>
                           </button>

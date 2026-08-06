@@ -18,6 +18,7 @@
  */
 
 import { fetchWithCache, TTL } from './cache';
+import { cleanLangString } from './utils';
 
 // ─────────────────────────────────────────────────────────────
 // CẤU HÌNH
@@ -317,7 +318,7 @@ export function normalizePrimary(raw: any, domain?: string): NormalizedMovie {
     content:         m.content         || m.description || '',
     year:            m.year            || '',
     quality:         m.quality         || 'HD',
-    lang:            m.lang            || 'Vietsub',
+    lang:            cleanLangString(m.lang || 'Vietsub'),
     time:            m.time            || '',
     episode_current: m.episode_current || 'Full',
     episode_total:   m.episode_total   || '1',
@@ -347,7 +348,7 @@ export function normalizeFallback(raw: any, domain?: string): NormalizedMovie {
     content:         m.content         || m.description || '',
     year:            m.year            || '',
     quality:         m.quality         || 'HD',
-    lang:            m.lang            || m.language || 'Vietsub',
+    lang:            cleanLangString(m.lang || m.language || 'Vietsub'),
     time:            m.time            || m.duration || '',
     episode_current: m.episode_current || m.current_episode || 'Full',
     episode_total:   m.episode_total   || m.total_episodes  || '1',

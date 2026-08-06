@@ -18,8 +18,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { fetchWithCache, TTL } from "@/lib/cache";
 import ErrorBoundary from "@/components/ErrorBoundary";
-
-const MovieCard = React.lazy(() => import("@/components/MovieCard"));
+import MovieCard from "@/components/MovieCard";
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -185,9 +184,7 @@ const SwiperSection = memo(({
       >
         {items.slice(0, 15).map((movie: any, index: number) => (
           <SwiperSlide key={`${keyPrefix}-${movie.slug || index}`}>
-            <Suspense fallback={<MovieCardSkeleton />}>
-              <MovieCard movie={movie} onHoldChange={onHoldChange} />
-            </Suspense>
+            <MovieCard movie={movie} onHoldChange={onHoldChange} priority={index < 4} />
           </SwiperSlide>
         ))}
       </Swiper>
@@ -745,9 +742,7 @@ export default function Home() {
                         >
                           {trendingMovies.map((movie, i) => (
                             <SwiperSlide key={`trending-${activeTab}-${movie.slug || i}`}>
-                              <Suspense fallback={<MovieCardSkeleton />}>
-                                <MovieCard movie={movie} onHoldChange={setIsCardHolding} />
-                              </Suspense>
+                              <MovieCard movie={movie} onHoldChange={setIsCardHolding} priority={i < 4} />
                             </SwiperSlide>
                           ))}
                         </Swiper>

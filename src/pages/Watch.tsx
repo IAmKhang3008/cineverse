@@ -5,7 +5,7 @@ import { Play, Settings, SkipForward, Volume2, Maximize, AlertCircle, Film, Hear
 import { useHistory } from "@/hooks/useHistory";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
-import { decodeHtml, cn } from "@/lib/utils";
+import { decodeHtml, cn, cleanLangString } from "@/lib/utils";
 import { motion } from "motion/react";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { toMovieTitleCase } from "@/lib/utils";
@@ -367,7 +367,7 @@ export default function Watch() {
                     <span>•</span>
                     <span className="text-white font-bold">{movie.quality || 'HD'}</span>
                     <span>•</span>
-                    <span>{movie.lang || 'Vietsub'}</span>
+                    <span>{cleanLangString(movie.lang) || 'Vietsub'}</span>
                   </p>
                 </div>
                 

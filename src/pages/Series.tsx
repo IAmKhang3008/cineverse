@@ -192,7 +192,7 @@ export default function Series() {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6 gap-y-8 md:gap-y-10">
             {movies.map((movie, index) => (
               <div key={`${movie.slug || movie._id || 'series'}-${index}`} className="relative">
-                <MovieCard movie={movie} />
+                <MovieCard movie={movie} priority={index < 4} />
                 {movie.episode_current && (
                   <div className="absolute top-2 right-2 z-20">
                     <span className="bg-[#10B981] text-white text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider shadow-[0_2px_10px_rgba(16,185,129,0.4)]">
