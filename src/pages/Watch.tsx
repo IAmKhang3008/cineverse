@@ -388,22 +388,23 @@ export default function Watch() {
                 {/* Glowing Badge */}
                 <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#E50914]/15 border border-[#E50914]/40 text-[#E50914] text-xs font-semibold tracking-wide mb-5 shadow-[0_0_15px_rgba(229,9,20,0.25)] animate-pulse">
                   <Sparkles className="w-4 h-4 text-[#E50914]" />
-                  <span>Nguồn phát ngoài • VidSrc Multi-Sub</span>
+                  <span>Nguồn: VidSrc Multi-Sub</span>
                 </div>
 
                 {/* Main Heading requested by user */}
                 <h3 className="text-lg sm:text-2xl md:text-3xl font-heading font-extrabold text-white leading-snug mb-3 tracking-wide drop-shadow-md">
-                  Bộ phim đang được chiếu trên tab khác, nếu không hoạt động, hãy thử{" "}
+                  Phim đang chiếu ở tab khác. Nếu không xem được, thử{" "}
                   <button 
                     onClick={handleSwitchToVietsub}
                     className="text-[#E50914] hover:underline underline-offset-4 cursor-pointer font-extrabold transition-colors inline-block"
                   >
                     #Vietsub
                   </button>
+                  .
                 </h3>
 
                 <p className="text-gray-400 text-xs sm:text-sm mb-6 max-w-md leading-relaxed">
-                  Trình phát VidSrc đã tự động mở trong tab mới để đem lại trải nghiệm xem phim mượt mà và chất lượng cao nhất.
+                  Tự động mở tab mới để trải nghiệm mượt mà hơn.
                 </p>
 
                 {/* Action buttons */}
@@ -417,7 +418,7 @@ export default function Watch() {
                     className="bg-[#E50914] hover:bg-red-700 text-white px-5 py-2.5 sm:px-6 sm:py-3 rounded-xl font-bold text-sm sm:text-base flex items-center gap-2.5 transition-all shadow-[0_4px_20px_rgba(229,9,20,0.4)] hover:scale-105 active:scale-95 cursor-pointer"
                   >
                     <ExternalLink className="w-4 h-4 sm:w-5 sm:h-5" />
-                    <span>Mở lại trong Tab Mới</span>
+                    <span>Mở lại Tab Mới</span>
                   </button>
 
                   {vietsubServer && (
@@ -426,7 +427,7 @@ export default function Watch() {
                       className="bg-white/10 hover:bg-white/20 border border-white/15 text-white px-5 py-2.5 sm:px-6 sm:py-3 rounded-xl font-semibold text-sm sm:text-base flex items-center gap-2.5 transition-all hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-md"
                     >
                       <Tv className="w-4 h-4 sm:w-5 sm:h-5 text-[#E50914]" />
-                      <span>Chuyển sang {formatServerDisplayName(vietsubServer.server_name)}</span>
+                      <span>Chuyển sang #Vietsub</span>
                     </button>
                   )}
                 </div>
@@ -470,7 +471,7 @@ export default function Watch() {
               title={currentEpisode.name || "Video player"}
               className="w-full h-full"
               allowFullScreen
-              sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-fullscreen"
+              sandbox="allow-scripts allow-same-origin allow-fullscreen"
               allow="autoplay; fullscreen; picture-in-picture"
               frameBorder="0"
             ></iframe>
@@ -521,6 +522,21 @@ export default function Watch() {
               <Film className="w-4 h-4" />
               Rạp phim: {cinemaMode ? 'Bật' : 'Tắt'}
             </button>
+
+            {currentEpisode?.link_embed && (
+              <button
+                onClick={() => {
+                  if (currentEpisode?.link_embed) {
+                    window.open(currentEpisode.link_embed, '_blank', 'noopener,noreferrer');
+                  }
+                }}
+                className="flex items-center gap-2 text-sm font-medium text-[#A0A0A0] hover:text-white transition-colors whitespace-nowrap bg-[#2A2A2A] px-3 py-1.5 rounded-lg hover:bg-white/10"
+                title="Mở trình phát trong tab mới nếu gặp sự cố iframe/sandbox"
+              >
+                <ExternalLink className="w-4 h-4 text-[#E50914]" />
+                Mở trong tab mới
+              </button>
+            )}
           </div>
           
           {/* Nhóm bên phải: Status & Auto-play */}
