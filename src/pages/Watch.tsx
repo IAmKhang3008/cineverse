@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { api, getImageUrl } from "@/lib/api";
-import { Play, Settings, SkipForward, Volume2, Maximize, AlertCircle, Film, Heart, ArrowLeft } from "lucide-react";
+import { Play, Settings, SkipForward, Volume2, Maximize, AlertCircle, Film, Heart, ArrowLeft, ExternalLink, Tv, Sparkles } from "lucide-react";
 import { useHistory } from "@/hooks/useHistory";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
@@ -54,30 +54,42 @@ export default function Watch() {
         // Inject VidSrc Server if TMDB ID is available
         const tmdbId = res.movie?.tmdb?.id;
         if (tmdbId) {
-          const isTv = res.movie?.type === 'series' || res.movie?.tmdb?.type === 'tv';
+          const isTv = res.movie?.type === 'series' || res.movie?.tmdb?.type === 'tv' || res.movie?.type === 'hoathinh' || res.movie?.type === 'tvshows';
           
-          const vidsrcServerData = (fetchedEpisodes[0]?.server_data || []).map((ep: any) => {
-             const epMatch = ep.name.match(/\d+/);
-             const epNum = epMatch ? epMatch[0] : '1';
-             
-             let link_embed = '';
-             if (isTv) {
-               // API might not provide season, default to 1
-               const seasonNum = res.movie?.tmdb?.season || 1; 
-               link_embed = `https://vidsrc-embed.ru/embed/tv?tmdb=${tmdbId}&season=${seasonNum}&episode=${epNum}`;
-             } else {
-               link_embed = `https://vidsrc-embed.ru/embed/movie?tmdb=${tmdbId}`;
-             }
+          let vidsrcServerData: any[] = [];
+          if (fetchedEpisodes[0]?.server_data?.length) {
+            vidsrcServerData = fetchedEpisodes[0].server_data.map((ep: any) => {
+               const epMatch = ep.name.match(/\d+/);
+               const epNum = epMatch ? epMatch[0] : '1';
+               
+               let link_embed = '';
+               if (isTv) {
+                 const seasonNum = res.movie?.tmdb?.season || 1; 
+                 link_embed = `https://vsembed.ru/embed/tv?tmdb=${tmdbId}&season=${seasonNum}&episode=${epNum}`;
+               } else {
+                 link_embed = `https://vsembed.ru/embed/movie?tmdb=${tmdbId}`;
+               }
 
-             return {
-               ...ep,
-               link_embed
-             };
-          });
+               return {
+                 ...ep,
+                 link_embed
+               };
+            });
+          } else {
+            let link_embed = isTv
+              ? `https://vsembed.ru/embed/tv?tmdb=${tmdbId}&season=1&episode=1`
+              : `https://vsembed.ru/embed/movie?tmdb=${tmdbId}`;
+            vidsrcServerData = [{
+              name: 'Full',
+              slug: 'full',
+              filename: 'Full',
+              link_embed
+            }];
+          }
 
           if (vidsrcServerData.length > 0) {
              fetchedEpisodes.push({
-               server_name: "Multi-sub",
+               server_name: "Thử Vidsrc",
                server_data: vidsrcServerData
              });
           }
@@ -155,6 +167,122 @@ export default function Watch() {
       setCurrentEpisode(server.server_data[currentIndex + 1]);
     }
   };
+
+  const formatServerDisplayName = (name: string) => {
+    if (!name) return '#Vietsub';
+    let clean = name.trim();
+    if (/vietsub/i.test(clean)) {
+      return '#Vietsub';
+    }
+    if (!clean.startsWith('#')) {
+      clean = `#${clean}`;
+    }
+    return clean;
+  };
+
+  const isVidsrc = currentServer === 'Thử Vidsrc' || currentServer?.toLowerCase().includes('vidsrc');
+  const vietsubServer = episodes.find(s => s.server_name !== 'Thử Vidsrc' && !s.server_name?.toLowerCase().includes('vidsrc')) || episodes[0];
+
+  const handleSwitchToVietsub = () => {
+    if (vietsubServer && vietsubServer.server_data?.[0]) {
+      setCurrentServer(vietsubServer.server_name);
+      setCurrentEpisode(vietsubServer.server_data[0]);
+      showToast(`Đã chuyển sang server ${formatServerDisplayName(vietsubServer.server_name)}`, "info");
+    }
+  };
+
+  // Kiểm tra nếu link bị hỏng, thiếu link hoặc chỉ có trailer
+  const isLinkBroken = !currentEpisode?.link_embed || !currentEpisode.link_embed.includes('http');
+  const isOnlyTrailer = Boolean(
+    (currentEpisode?.name?.toLowerCase().trim() === 'trailer' || currentEpisode?.slug?.toLowerCase().trim() === 'trailer') &&
+    !episodes.some(s => 
+      s.server_name !== 'Thử Vidsrc' && 
+      !s.server_name?.toLowerCase().includes('vidsrc') && 
+      s.server_data?.some((ep: any) => 
+        ep.slug?.toLowerCase().trim() !== 'trailer' && 
+        ep.name?.toLowerCase().trim() !== 'trailer'
+      )
+    )
+  );
+
+  const isStreamBrokenOrTrailer = Boolean(!loading && movie && currentEpisode && !isVidsrc && (isLinkBroken || isOnlyTrailer));
+
+  const [autoRedirectTimer, setAutoRedirectTimer] = useState<number>(3);
+  const hasTriggeredRef = useRef<boolean>(false);
+
+  const triggerVidsrcAuto = () => {
+    const vidsrcServerObj = episodes.find(s => s.server_name === 'Thử Vidsrc' || s.server_name?.toLowerCase().includes('vidsrc'));
+    const targetEp = vidsrcServerObj?.server_data?.[0];
+    const tmdbId = movie?.tmdb?.id;
+    const isTv = movie?.type === 'series' || movie?.tmdb?.type === 'tv' || movie?.type === 'hoathinh' || movie?.type === 'tvshows';
+    const fallbackUrl = tmdbId ? (isTv ? `https://vsembed.ru/embed/tv?tmdb=${tmdbId}&season=1&episode=1` : `https://vsembed.ru/embed/movie?tmdb=${tmdbId}`) : '';
+    const urlToOpen = targetEp?.link_embed || fallbackUrl;
+
+    if (vidsrcServerObj && targetEp) {
+      setCurrentServer(vidsrcServerObj.server_name);
+      setCurrentEpisode(targetEp);
+    } else if (fallbackUrl) {
+      setCurrentServer('Thử Vidsrc');
+      setCurrentEpisode({
+        name: 'Tập 1 (VidSrc)',
+        slug: 'tap-1-vidsrc',
+        filename: 'VidSrc',
+        link_embed: fallbackUrl,
+        link_m3u8: '',
+      });
+    } else {
+      setCurrentServer('Thử Vidsrc');
+    }
+
+    if (urlToOpen) {
+      let opened = false;
+      try {
+        const win = window.open(urlToOpen, '_blank', 'noopener,noreferrer');
+        if (win && !win.closed && typeof win.closed !== 'undefined') {
+          opened = true;
+        }
+      } catch (err) {
+        console.warn('window.open failed:', err);
+      }
+
+      if (!opened) {
+        try {
+          const a = document.createElement('a');
+          a.href = urlToOpen;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        } catch (err) {
+          console.warn('anchor click failed:', err);
+        }
+      }
+    }
+    showToast("Đã tự động chuyển sang trình phát VidSrc", "info");
+  };
+
+  useEffect(() => {
+    if (isStreamBrokenOrTrailer) {
+      setAutoRedirectTimer(3);
+      hasTriggeredRef.current = false;
+      let count = 3;
+      const interval = setInterval(() => {
+        count -= 1;
+        if (count <= 0) {
+          clearInterval(interval);
+          setAutoRedirectTimer(0);
+          if (!hasTriggeredRef.current) {
+            hasTriggeredRef.current = true;
+            triggerVidsrcAuto();
+          }
+        } else {
+          setAutoRedirectTimer(count);
+        }
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [isStreamBrokenOrTrailer, currentServer, currentEpisode]);
 
   if (loading) {
     return (
@@ -237,7 +365,7 @@ export default function Watch() {
           </Link>
         )}
         
-        {/* Player Section - ĐÃ NÂNG CẤP CHẶN QUẢNG CÁO */}
+        {/* Player Section */}
         <div 
           ref={playerRef}
           className={cn(
@@ -245,32 +373,111 @@ export default function Watch() {
             cinemaMode ? "z-50" : ""
           )}
         >
-          {currentServer === 'Multi-sub' ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#121212] p-8 text-center z-20">
-              <h3 className="text-2xl md:text-3xl font-bold text-white mb-4">Trình phát đa phụ đề</h3>
-              <p className="text-gray-400 mb-8 max-w-lg text-sm md:text-base">
-                Tính năng này chưa hỗ trợ nhúng trực tiếp tại đây. Đừng lo, chỉ cần nhấn nút bên dưới để xem trong tab mới nhé!
-              </p>
-              <a
-                href={currentEpisode.link_embed}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-[#E50914] hover:bg-red-700 text-white px-8 py-4 rounded-xl font-bold text-lg flex items-center gap-2 transition-all shadow-[0_4px_20px_rgba(229,9,20,0.5)] hover:scale-105 active:scale-95"
-              >
-                <Play className="w-6 h-6" fill="currentColor" />
-                Xem trong Tab Mới
-              </a>
+          {isVidsrc ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0d0d12] p-6 text-center z-20 overflow-hidden">
+              {/* Subtle blurred poster backdrop */}
+              {movie?.poster_url && (
+                <div 
+                  className="absolute inset-0 bg-cover bg-center opacity-15 blur-2xl scale-125 pointer-events-none"
+                  style={{ backgroundImage: `url(${getImageUrl(movie.poster_url)})` }}
+                />
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0d0d12] via-[#0d0d12]/85 to-[#0d0d12]/95 pointer-events-none" />
+
+              <div className="relative z-10 max-w-xl mx-auto flex flex-col items-center px-4">
+                {/* Glowing Badge */}
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#E50914]/15 border border-[#E50914]/40 text-[#E50914] text-xs font-semibold tracking-wide mb-5 shadow-[0_0_15px_rgba(229,9,20,0.25)] animate-pulse">
+                  <Sparkles className="w-4 h-4 text-[#E50914]" />
+                  <span>Nguồn phát ngoài • VidSrc Multi-Sub</span>
+                </div>
+
+                {/* Main Heading requested by user */}
+                <h3 className="text-lg sm:text-2xl md:text-3xl font-heading font-extrabold text-white leading-snug mb-3 tracking-wide drop-shadow-md">
+                  Bộ phim đang được chiếu trên tab khác, nếu không hoạt động, hãy thử{" "}
+                  <button 
+                    onClick={handleSwitchToVietsub}
+                    className="text-[#E50914] hover:underline underline-offset-4 cursor-pointer font-extrabold transition-colors inline-block"
+                  >
+                    #Vietsub
+                  </button>
+                </h3>
+
+                <p className="text-gray-400 text-xs sm:text-sm mb-6 max-w-md leading-relaxed">
+                  Trình phát VidSrc đã tự động mở trong tab mới để đem lại trải nghiệm xem phim mượt mà và chất lượng cao nhất.
+                </p>
+
+                {/* Action buttons */}
+                <div className="flex flex-wrap items-center justify-center gap-3">
+                  <button
+                    onClick={() => {
+                      if (currentEpisode?.link_embed) {
+                        window.open(currentEpisode.link_embed, '_blank', 'noopener,noreferrer');
+                      }
+                    }}
+                    className="bg-[#E50914] hover:bg-red-700 text-white px-5 py-2.5 sm:px-6 sm:py-3 rounded-xl font-bold text-sm sm:text-base flex items-center gap-2.5 transition-all shadow-[0_4px_20px_rgba(229,9,20,0.4)] hover:scale-105 active:scale-95 cursor-pointer"
+                  >
+                    <ExternalLink className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <span>Mở lại trong Tab Mới</span>
+                  </button>
+
+                  {vietsubServer && (
+                    <button
+                      onClick={handleSwitchToVietsub}
+                      className="bg-white/10 hover:bg-white/20 border border-white/15 text-white px-5 py-2.5 sm:px-6 sm:py-3 rounded-xl font-semibold text-sm sm:text-base flex items-center gap-2.5 transition-all hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-md"
+                    >
+                      <Tv className="w-4 h-4 sm:w-5 sm:h-5 text-[#E50914]" />
+                      <span>Chuyển sang {formatServerDisplayName(vietsubServer.server_name)}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
-          ) : (
+          ) : isStreamBrokenOrTrailer ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0d0d12] p-6 text-center z-20 overflow-hidden">
+              {movie?.poster_url && (
+                <div 
+                  className="absolute inset-0 bg-cover bg-center opacity-15 blur-2xl scale-125 pointer-events-none"
+                  style={{ backgroundImage: `url(${getImageUrl(movie.poster_url)})` }}
+                />
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0d0d12] via-[#0d0d12]/85 to-[#0d0d12]/95 pointer-events-none" />
+
+              <div className="relative z-10 max-w-xl mx-auto flex flex-col items-center px-4">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-400 text-xs font-semibold tracking-wide mb-5 shadow-[0_0_15px_rgba(245,158,11,0.25)] animate-pulse">
+                  <AlertCircle className="w-4 h-4 text-amber-400" />
+                  <span>Tự động chuyển nguồn phát ({autoRedirectTimer}s)</span>
+                </div>
+
+                <h3 className="text-xl sm:text-2xl md:text-3xl font-heading font-extrabold text-white leading-snug mb-2 tracking-wide drop-shadow-md text-center">
+                  Không tìm thấy nguồn phát cho phim này.
+                </h3>
+                <p className="text-base sm:text-lg font-semibold text-[#E50914] mb-6 text-center">
+                  Bạn sẽ được chuyển sang trình VidSrc.
+                </p>
+
+                <button
+                  onClick={triggerVidsrcAuto}
+                  className="bg-[#E50914] hover:bg-red-700 text-white px-6 py-3 rounded-xl font-bold text-sm sm:text-base flex items-center gap-2.5 transition-all shadow-[0_4px_20px_rgba(229,9,20,0.4)] hover:scale-105 active:scale-95 cursor-pointer"
+                >
+                  <ExternalLink className="w-5 h-5" />
+                  <span>Chuyển sang VidSrc ngay ({autoRedirectTimer}s)</span>
+                </button>
+              </div>
+            </div>
+          ) : currentEpisode?.link_embed ? (
             <iframe
               src={getCleanedEmbedUrl(currentEpisode.link_embed) || undefined}
-              title={currentEpisode.name}
+              title={currentEpisode.name || "Video player"}
               className="w-full h-full"
               allowFullScreen
               sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-fullscreen"
               allow="autoplay; fullscreen; picture-in-picture"
               frameBorder="0"
             ></iframe>
+          ) : (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#121212] p-8 text-center z-20">
+              <p className="text-gray-400">Không tìm thấy nguồn phát cho tập này.</p>
+            </div>
           )}
           
           {/* Overlay bảo vệ: Ngăn chặn click chuột phải hoặc click nhầm vào banner ẩn */}
@@ -394,40 +601,55 @@ export default function Watch() {
               </h3>
               
               <div className="max-h-[300px] md:max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                {episodes.map((server: any, serverIdx: number) => (
-                  <div key={serverIdx} className="mb-6 last:mb-0">
-                    <h4 className="text-[#A0A0A0] text-[10px] md:text-xs font-bold uppercase mb-3 pl-1 tracking-wider">
-                      {server.server_name ? (server.server_name.startsWith('#') ? server.server_name : `#${server.server_name}`) : ''}
-                    </h4>
-                    <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-2">
-                      {server.server_data.map((ep: any, idx: number) => {
-                        const isCurrent = currentEpisode?.slug === ep.slug && currentServer === server.server_name;
-                        const watched = isWatched(ep.name);
-                        
-                        return (
-                          <button
-                            key={idx}
-                            onClick={() => {
-                              setCurrentEpisode(ep);
-                              setCurrentServer(server.server_name);
-                            }}
-                            className={`
-                              h-[36px] md:h-[40px] rounded-[8px] text-xs md:text-sm font-medium transition-all flex items-center justify-center
-                              ${isCurrent 
-                                ? 'bg-[#E50914] text-white shadow-[0_4px_10px_rgba(229,9,20,0.3)]' 
-                                : watched
-                                ? 'bg-[#4A4A4A] text-[#E0E0E0]'
-                                : 'bg-[#2A2A2A]  text-[#A0A0A0]  hover:bg-[#333] :bg-gray-200 hover:text-white :text-black'
-                              }
-                            `}
-                          >
-                            {ep.name}
-                          </button>
-                        );
-                      })}
+                {episodes.map((server: any, serverIdx: number) => {
+                  const isVidsrcServer = server.server_name === 'Thử Vidsrc' || server.server_name?.toLowerCase().includes('vidsrc');
+                  return (
+                    <div key={serverIdx} className="mb-6 last:mb-0">
+                      <div className="flex items-center justify-between mb-3 pl-1">
+                        <h4 className="text-[#A0A0A0] text-[10px] md:text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                          <span>{formatServerDisplayName(server.server_name)}</span>
+                        </h4>
+                        {isVidsrcServer && (
+                          <span className="text-[10px] bg-[#E50914]/20 text-[#E50914] border border-[#E50914]/40 px-2 py-0.5 rounded-full font-semibold">
+                            Mở Tab Mới
+                          </span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-2">
+                        {server.server_data.map((ep: any, idx: number) => {
+                          const isCurrent = currentEpisode?.slug === ep.slug && currentServer === server.server_name;
+                          const watched = isWatched(ep.name);
+                          
+                          return (
+                            <button
+                              key={idx}
+                              onClick={() => {
+                                setCurrentEpisode(ep);
+                                setCurrentServer(server.server_name);
+                                if (isVidsrcServer && ep.link_embed) {
+                                  window.open(ep.link_embed, '_blank', 'noopener,noreferrer');
+                                }
+                              }}
+                              className={`
+                                h-[36px] md:h-[40px] rounded-[8px] text-xs md:text-sm font-medium transition-all flex items-center justify-center cursor-pointer
+                                ${isCurrent 
+                                  ? 'bg-[#E50914] text-white shadow-[0_4px_12px_rgba(229,9,20,0.4)] ring-2 ring-[#E50914]/50 font-bold' 
+                                  : isVidsrcServer
+                                  ? 'bg-[#E50914]/15 text-[#E50914] border border-[#E50914]/30 hover:bg-[#E50914] hover:text-white font-semibold'
+                                  : watched
+                                  ? 'bg-[#4A4A4A] text-[#E0E0E0]'
+                                  : 'bg-[#2A2A2A] text-[#A0A0A0] hover:bg-[#333] hover:text-white'
+                                }
+                              `}
+                            >
+                              {ep.name}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>

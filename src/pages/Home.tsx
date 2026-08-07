@@ -1,6 +1,6 @@
 import React, {
   useEffect, useState, Suspense,
-  useRef, useCallback, memo,
+  useRef, useCallback, memo, useMemo,
 } from "react";
 import { api, getImageUrl, NormalizedMovie } from "@/lib/api";
 import { Play, Info, ChevronRight, Heart, X, Flame, TrendingUp, Star } from "lucide-react";
@@ -147,6 +147,17 @@ const SwiperSection = memo(({
 }: SwiperSectionProps) => {
   const swiperRef = useRef<SwiperType | null>(null);
 
+  // Deduplicate items to prevent duplicate rendering and key collisions
+  const uniqueItems = useMemo(() => {
+    const seen = new Set<string>();
+    return (items || []).filter((m, idx) => {
+      const id = m?.slug || m?._id || m?.id || idx;
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }, [items]);
+
   return (
     <section>
       <div className="flex items-center justify-between mb-6 md:mb-8">
@@ -182,8 +193,8 @@ const SwiperSection = memo(({
         breakpoints={SWIPER_BREAKPOINTS}
         className="pb-2 md:pb-4 !overflow-visible"
       >
-        {items.slice(0, 15).map((movie: any, index: number) => (
-          <SwiperSlide key={`${keyPrefix}-${movie.slug || index}`}>
+        {uniqueItems.slice(0, 15).map((movie: any, index: number) => (
+          <SwiperSlide key={`${keyPrefix}-${movie.slug || movie._id || index}-${index}`}>
             <MovieCard movie={movie} onHoldChange={onHoldChange} priority={index < 4} />
           </SwiperSlide>
         ))}
@@ -198,6 +209,7 @@ SwiperSection.displayName = 'SwiperSection';
 // ─────────────────────────────────────────────────────────────
 async function batchLookup(tmdbList: any[], batchSize = 5): Promise<any[]> {
   const results: any[] = [];
+  const seenSlugs = new Set<string>();
   for (let i = 0; i < tmdbList.length; i += batchSize) {
     const batch   = tmdbList.slice(i, i + batchSize);
     const settled = await Promise.allSettled(
@@ -211,7 +223,15 @@ async function batchLookup(tmdbList: any[], batchSize = 5): Promise<any[]> {
         return { ...found, tmdb: { ...found.tmdb, vote_average: tmdbMovie.vote_average } };
       })
     );
-    settled.forEach(r => { if (r.status === 'fulfilled' && r.value) results.push(r.value); });
+    settled.forEach(r => {
+      if (r.status === 'fulfilled' && r.value) {
+        const slug = r.value.slug || r.value._id || r.value.name;
+        if (slug && !seenSlugs.has(slug)) {
+          seenSlugs.add(slug);
+          results.push(r.value);
+        }
+      }
+    });
     if (results.length >= 15) break;
   }
   return results.slice(0, 15);
@@ -262,11 +282,49 @@ function useTrendingMovies() {
 interface SectionsState {
   newMovies: any[]; series: any[]; hoatHinh: any[]; tvShows: any[];
   thaiLan:   any[]; hongKong: any[]; auMy: any[]; vietNam: any[]; kinhDi: any[];
+  chieuRap:  any[];
 }
 const SECTIONS_INIT: SectionsState = {
   newMovies: [], series: [], hoatHinh: [], tvShows: [],
-  thaiLan: [], hongKong: [], auMy: [], vietNam: [], kinhDi: [],
+  thaiLan: [], hongKong: [], auMy: [], vietNam: [], kinhDi: [], chieuRap: [],
 };
+
+// ─────────────────────────────────────────────────────────────
+// FETCH TMDB PHIM CHIẾU RẠP (NOW PLAYING / DISCOVER THEATRICAL)
+// ─────────────────────────────────────────────────────────────
+async function fetchChieuRap(): Promise<{ items: any[] }> {
+  if (TMDB_ENABLED) {
+    try {
+      const tmdbData = await fetchWithCache(
+        'tmdb_now_playing',
+        () => fetch(`https://api.themoviedb.org/3/movie/now_playing?api_key=${TMDB_KEY}&language=vi-VN&page=1`)
+              .then(r => { if (!r.ok) throw new Error(`TMDB ${r.status}`); return r.json(); }),
+        TTL.TMDB_STATIC,
+      );
+
+      let results = tmdbData.results || [];
+      if (results.length === 0) {
+        const discoverData = await fetchWithCache(
+          'tmdb_discover_theatrical',
+          () => fetch(`https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_KEY}&with_release_type=2|3&language=vi-VN&sort_by=popularity.desc`)
+                .then(r => { if (!r.ok) throw new Error(`TMDB ${r.status}`); return r.json(); }),
+          TTL.TMDB_STATIC,
+        );
+        results = discoverData.results || [];
+      }
+
+      if (results.length > 0) {
+        const matched = await batchLookup(results, 5);
+        if (matched.length > 0) {
+          return { items: matched };
+        }
+      }
+    } catch (err) {
+      console.warn('[Phim Chiếu Rạp] TMDB fetch failed, fallback to local category:', err);
+    }
+  }
+  return api.getByCategory('phim-chieu-rap', 1).catch(() => ({ items: [] }));
+}
 
 // ─────────────────────────────────────────────────────────────
 // COMPONENT CHÍNH
@@ -315,7 +373,7 @@ export default function Home() {
         const [newRes, trendingRes, chieuRapRes, hanQuocRes, vietNamRes] = await Promise.all([
           api.getNewUpdated(1).catch(() => empty),
           api.getByCategory('phim-le', 1).catch(() => empty),
-          api.getByCategory('phim-chieu-rap', 1).catch(() => empty),
+          fetchChieuRap().catch(() => empty),
           api.getByCountry('han-quoc', 1).catch(() => empty),
           api.getByCountry('viet-nam', 1).catch(() => empty),
         ]);
@@ -324,6 +382,7 @@ export default function Home() {
         setSections(prev => ({
           ...prev,
           newMovies: newRes.items    || [],
+          chieuRap:  chieuRapRes.items || [],
           vietNam:   vietNamRes.items || [],
         }));
 
@@ -364,7 +423,7 @@ export default function Home() {
                     );
                     if (imgData.backdrops?.length > 0) {
                       const best = [...imgData.backdrops].sort((a: any, b: any) => b.width - a.width)[0];
-                      highQualityBanner = `https://image.tmdb.org/t/p/original${best.file_path}`;
+                      highQualityBanner = `https://image.tmdb.org/t/p/w1280${best.file_path}`;
                     }
                   }
                 } catch { /* TMDB fail silently */ }
@@ -378,7 +437,7 @@ export default function Home() {
                     const backdrops = imgData.images.filter((img: any) => img.width && img.height && img.width > img.height);
                     if (backdrops.length > 0) {
                       const best = [...backdrops].sort((a: any, b: any) => b.width - a.width)[0];
-                      highQualityBanner = `https://image.tmdb.org/t/p/original${best.file_path}`;
+                      highQualityBanner = `https://image.tmdb.org/t/p/w1280${best.file_path}`;
                     }
                   }
                 } catch { /* Fallback fail silently */ }
@@ -459,7 +518,7 @@ export default function Home() {
     );
   }
 
-  const { newMovies, series, hoatHinh, tvShows, thaiLan, hongKong, auMy, vietNam, kinhDi } = sections;
+  const { newMovies, series, hoatHinh, tvShows, thaiLan, hongKong, auMy, vietNam, kinhDi, chieuRap } = sections;
 
   // ─── RENDER ───────────────────────────────────────────────
   return (
@@ -778,6 +837,7 @@ export default function Home() {
           />
         )}
 
+        {chieuRap.length > 0 && <SwiperSection title="Phim Chiếu Rạp" color="#F59E0B" link="/genres?category=phim-chieu-rap" items={chieuRap} keyPrefix="chieurap" delay={4800} onHoldChange={setIsCardHolding} />}
         {series.length   > 0 && <SwiperSection title="Phim Bộ Nổi Bật"    color="#3B82F6" link="/series"                   items={series}   keyPrefix="series"   delay={6000} onHoldChange={setIsCardHolding} />}
         {hoatHinh.length > 0 && <SwiperSection title="Phim Hoạt Hình"      color="#10B981" link="/genres?genre=hoat-hinh"   items={hoatHinh} keyPrefix="hoathinh" delay={5500} onHoldChange={setIsCardHolding} />}
         {tvShows.length  > 0 && <SwiperSection title="Chương trình TV"      color="#8B5CF6" link="/genres?genre=tv-shows"    items={tvShows}  keyPrefix="tv"       delay={6500} onHoldChange={setIsCardHolding} />}

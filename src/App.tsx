@@ -13,20 +13,20 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { FavoritesProvider } from "./contexts/FavoritesContext";
 import ScrollToTop from "./components/ScrollToTop";
 
-const Home = React.lazy(() => import("./pages/Home"));
-const Movies = React.lazy(() => import("./pages/Movies"));
-const Series = React.lazy(() => import("./pages/Series"));
-const Detail = React.lazy(() => import("./pages/Detail"));
-const Watch = React.lazy(() => import("./pages/Watch"));
-const Search = React.lazy(() => import("./pages/Search"));
-const Genres = React.lazy(() => import("./pages/Genres"));
-const Favorites = React.lazy(() => import("./pages/Favorites"));
-const History = React.lazy(() => import("./pages/History"));
-const Terms = React.lazy(() => import("./pages/Terms"));
-const NotFound = React.lazy(() => import("./pages/NotFound"));
-const Login = React.lazy(() => import("./pages/Login"));
-const Profile = React.lazy(() => import("./pages/Profile"));
-const Settings = React.lazy(() => import("./pages/Settings"));
+import Home from "./pages/Home";
+import Movies from "./pages/Movies";
+import Series from "./pages/Series";
+import Detail from "./pages/Detail";
+import Watch from "./pages/Watch";
+import Search from "./pages/Search";
+import Genres from "./pages/Genres";
+import Favorites from "./pages/Favorites";
+import History from "./pages/History";
+import Terms from "./pages/Terms";
+import NotFound from "./pages/NotFound";
+import Login from "./pages/Login";
+import Profile from "./pages/Profile";
+import Settings from "./pages/Settings";
 
 function LoadingFallback() {
   return (

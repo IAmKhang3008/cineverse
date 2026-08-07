@@ -211,9 +211,6 @@ export type NormalizedMovie = {
 
 export function upgradeImageUrl(url: string) {
   if (!url) return url;
-  if (url.includes('image.tmdb.org') && url.includes('/w500')) {
-    return url.replace('/w500', '/original');
-  }
   if (url.includes('ophim.live') || url.includes('img.ophim')) {
     return url.replace('img.ophim.live', 'img.ophim.cc').replace('img.ophim.cc', 'img.ophim.live');
   }
@@ -221,25 +218,40 @@ export function upgradeImageUrl(url: string) {
 }
 
 export function needsImageUpgrade(url: string) {
-  return url.includes('placehold.co') || url.includes('/w500') || !url.includes('image.tmdb.org');
+  return !url || url.includes('placehold.co') || !url.includes('image.tmdb.org');
+}
+
+export function getTmdbPosterUrl(
+  posterPath: string | null | undefined, 
+  size: 'w92' | 'w154' | 'w185' | 'w342' | 'w500' | 'w780' | 'w1280' | 'original' = 'w500',
+  fallbackUrl?: string
+): string {
+  if (!posterPath) {
+    return fallbackUrl ? getImageUrl(fallbackUrl, 'poster') : PLACEHOLDER_URL;
+  }
+  if (posterPath.startsWith('http')) {
+    return posterPath;
+  }
+  const cleanPath = posterPath.startsWith('/') ? posterPath : `/${posterPath}`;
+  return `https://image.tmdb.org/t/p/${size}${cleanPath}`;
 }
 
 export function extractBestPoster(images: any) {
   if (!images?.posters?.length) return null;
   const vi = images.posters.find((i: any) => i.iso_639_1 === 'vi');
-  if (vi) return `https://image.tmdb.org/t/p/original${vi.file_path}`;
+  if (vi) return `https://image.tmdb.org/t/p/w500${vi.file_path}`;
   const en = images.posters.find((i: any) => i.iso_639_1 === 'en');
-  if (en) return `https://image.tmdb.org/t/p/original${en.file_path}`;
-  return `https://image.tmdb.org/t/p/original${images.posters[0].file_path}`;
+  if (en) return `https://image.tmdb.org/t/p/w500${en.file_path}`;
+  return `https://image.tmdb.org/t/p/w500${images.posters[0].file_path}`;
 }
 
 export function extractBestBackdrop(images: any) {
   if (!images?.backdrops?.length) return null;
   const vi = images.backdrops.find((i: any) => i.iso_639_1 === 'vi');
-  if (vi) return `https://image.tmdb.org/t/p/original${vi.file_path}`;
+  if (vi) return `https://image.tmdb.org/t/p/w1280${vi.file_path}`;
   const en = images.backdrops.find((i: any) => i.iso_639_1 === 'en');
-  if (en) return `https://image.tmdb.org/t/p/original${en.file_path}`;
-  return `https://image.tmdb.org/t/p/original${images.backdrops[0].file_path}`;
+  if (en) return `https://image.tmdb.org/t/p/w1280${en.file_path}`;
+  return `https://image.tmdb.org/t/p/w1280${images.backdrops[0].file_path}`;
 }
 
 export function extractBestTrailer(videos: any) {
@@ -273,6 +285,9 @@ export const getImageUrl = (path: string, _type: 'poster' | 'banner' = 'poster',
   let url = path;
   if (path.includes('image.tmdb.org')) {
     url = upgradeImageUrl(path);
+  } else if (path.startsWith('/') && !path.includes('upload/vod/')) {
+    const size = _type === 'banner' ? 'w1280' : 'w500';
+    url = `https://image.tmdb.org/t/p/${size}${path}`;
   } else if (path.includes('phimapi.com/image.php')) {
     try {
       const urlObj = new URL(path);
@@ -307,13 +322,24 @@ function normalizeCountries(raw: any): any[] {
 
 export function normalizePrimary(raw: any, domain?: string): NormalizedMovie {
   const m = raw.movie || raw;
+  const tmdbPosterPath = m.poster_path || m.tmdb?.poster_path || m.tmdb?.poster;
+  const tmdbBackdropPath = m.backdrop_path || m.tmdb?.backdrop_path || m.tmdb?.backdrop;
+
+  const poster_url = tmdbPosterPath 
+    ? getTmdbPosterUrl(tmdbPosterPath, 'w500')
+    : getImageUrl(m.poster_url || m.thumb_url, 'poster', domain);
+
+  const thumb_url = tmdbBackdropPath 
+    ? getTmdbPosterUrl(tmdbBackdropPath, 'w1280')
+    : getImageUrl(m.thumb_url  || m.poster_url, 'banner', domain);
+
   return {
     _id:             m._id             || m.id    || '',
     slug:            m.slug            || '',
     name:            m.name            || '',
     origin_name:     m.origin_name     || m.name  || '',
-    poster_url:      getImageUrl(m.poster_url || m.thumb_url, 'poster', domain),
-    thumb_url:       getImageUrl(m.thumb_url  || m.poster_url, 'banner', domain),
+    poster_url:      poster_url,
+    thumb_url:       thumb_url,
     description:     m.content         || m.description || '',
     content:         m.content         || m.description || '',
     year:            m.year            || '',
@@ -335,15 +361,27 @@ export function normalizePrimary(raw: any, domain?: string): NormalizedMovie {
 
 export function normalizeFallback(raw: any, domain?: string): NormalizedMovie {
   const m         = raw.movie || raw;
+  const tmdbPosterPath = m.poster_path || m.tmdb?.poster_path || m.tmdb?.poster;
+  const tmdbBackdropPath = m.backdrop_path || m.tmdb?.backdrop_path || m.tmdb?.backdrop;
+
   const rawPoster = m.poster_url || m.thumb_url || '';
   const rawThumb  = m.thumb_url  || m.poster_url || '';
+
+  const poster_url = tmdbPosterPath 
+    ? getTmdbPosterUrl(tmdbPosterPath, 'w500')
+    : upgradeImageUrl(getImageUrl(rawPoster, 'poster', domain));
+
+  const thumb_url = tmdbBackdropPath 
+    ? getTmdbPosterUrl(tmdbBackdropPath, 'w1280')
+    : upgradeImageUrl(getImageUrl(rawThumb,  'banner', domain));
+
   return {
     _id:             m._id             || m.id    || '',
     slug:            m.slug            || '',
     name:            m.name            || '',
     origin_name:     m.original_name   || m.origin_name || m.name || '',
-    poster_url:      upgradeImageUrl(getImageUrl(rawPoster, 'poster', domain)),
-    thumb_url:       upgradeImageUrl(getImageUrl(rawThumb,  'banner', domain)),
+    poster_url:      poster_url,
+    thumb_url:       thumb_url,
     description:     m.content         || m.description || '',
     content:         m.content         || m.description || '',
     year:            m.year            || '',
@@ -655,15 +693,15 @@ export const api = {
           runtime:       tmdbDetail.runtime,
         };
 
-        // [FIX 11] Ảnh — điều kiện upgrade rộng hơn + score-based
+        // [FIX 11] Ảnh — TMDB Primary (w500 cho poster, w1280 cho backdrop)
         const bestBackdrop = extractBestBackdrop(tmdbDetail.images);
         const bestPoster   = extractBestPoster(tmdbDetail.images);
         // Fallback về poster_path/backdrop_path nếu images rỗng
-        const tmdbPoster   = bestPoster   || (tmdbDetail.poster_path   ? `https://image.tmdb.org/t/p/original${tmdbDetail.poster_path}`   : '');
-        const tmdbBackdrop = bestBackdrop || (tmdbDetail.backdrop_path ? `https://image.tmdb.org/t/p/original${tmdbDetail.backdrop_path}` : '');
+        const tmdbPoster   = bestPoster   || (tmdbDetail.poster_path   ? `https://image.tmdb.org/t/p/w500${tmdbDetail.poster_path}`   : '');
+        const tmdbBackdrop = bestBackdrop || (tmdbDetail.backdrop_path ? `https://image.tmdb.org/t/p/w1280${tmdbDetail.backdrop_path}` : '');
 
-        if (tmdbPoster   && needsImageUpgrade(normalized.poster_url)) normalized.poster_url = tmdbPoster;
-        if (tmdbBackdrop && needsImageUpgrade(normalized.thumb_url))  normalized.thumb_url  = tmdbBackdrop;
+        if (tmdbPoster) normalized.poster_url = tmdbPoster;
+        if (tmdbBackdrop) normalized.thumb_url = tmdbBackdrop;
 
       } else if (tmdbSearch) {
         // Có search result nhưng detail fetch fail — dùng search data tối thiểu
@@ -680,10 +718,10 @@ export const api = {
           vote_average: tmdbSearch.vote_average,
           vote_count:   tmdbSearch.vote_count,
         };
-        if (tmdbSearch.poster_path   && needsImageUpgrade(normalized.poster_url))
-          normalized.poster_url = `https://image.tmdb.org/t/p/original${tmdbSearch.poster_path}`;
-        if (tmdbSearch.backdrop_path && needsImageUpgrade(normalized.thumb_url))
-          normalized.thumb_url  = `https://image.tmdb.org/t/p/original${tmdbSearch.backdrop_path}`;
+        if (tmdbSearch.poster_path)
+          normalized.poster_url = `https://image.tmdb.org/t/p/w500${tmdbSearch.poster_path}`;
+        if (tmdbSearch.backdrop_path)
+          normalized.thumb_url  = `https://image.tmdb.org/t/p/w1280${tmdbSearch.backdrop_path}`;
       }
 
       // ── STAGE 5.5: Fallback to phimapi.com images if poster or banner needs upgrade ──
@@ -700,14 +738,14 @@ export const api = {
                 const scoreB = (b.width / 3840) * 0.7 + ((b.vote_average || 0) / 10) * 0.3;
                 return scoreB - scoreA;
               })[0];
-              normalized.thumb_url = `https://image.tmdb.org/t/p/original${bestBackdrop.file_path}`;
+              normalized.thumb_url = `https://image.tmdb.org/t/p/w1280${bestBackdrop.file_path}`;
             }
 
             if (posters.length > 0 && needsImageUpgrade(normalized.poster_url)) {
               const bestPoster = [...posters].sort((a: any, b: any) => {
                 return ((b.vote_average || 0) - (a.vote_average || 0)) || (b.width - a.width);
               })[0];
-              normalized.poster_url = `https://image.tmdb.org/t/p/original${bestPoster.file_path}`;
+              normalized.poster_url = `https://image.tmdb.org/t/p/w500${bestPoster.file_path}`;
             }
           }
         } catch (err) {

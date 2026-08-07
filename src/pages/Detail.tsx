@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useLayoutEffect } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
-import { api, getImageUrl } from "@/lib/api";
+import { api, getImageUrl, getTmdbPosterUrl } from "@/lib/api";
 import { Play, Plus, Star, Clock, Calendar, Globe, Heart, X, ArrowLeft, Share2, Copy, Link as LinkIcon } from "lucide-react";
 import MovieCard from "@/components/MovieCard";
 import { useFavorites } from "@/hooks/useFavorites";
@@ -9,7 +9,7 @@ import { decodeHtml, DEFAULT_AVATAR, CAST_PLACEHOLDER, cleanLangString } from "@
 import { fetchWithCache, TTL } from "@/lib/cache";
 import { motion, AnimatePresence } from "motion/react";
 import { Suspense, lazy } from "react";
-const CommentsSection = lazy(() => import("@/components/CommentsSection"));
+import CommentsSection from "@/components/CommentsSection";
 
 import { MovieDetailSkeleton } from "@/components/Skeleton";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
@@ -470,8 +470,8 @@ export default function Detail() {
                     _id: part.id.toString(),
                     name: part.title,
                     origin_name: part.original_title,
-                    thumb_url: part.poster_path ? `https://image.tmdb.org/t/p/w500${part.poster_path}` : '',
-                    poster_url: part.poster_path ? `https://image.tmdb.org/t/p/w500${part.poster_path}` : '',
+                    thumb_url: getTmdbPosterUrl(part.poster_path, 'w500'),
+                    poster_url: getTmdbPosterUrl(part.poster_path, 'w500'),
                     year: part.release_date ? parseInt(part.release_date.substring(0, 4)) : null,
                     slug: '', 
                     tmdb: { type: 'movie', id: part.id, vote_average: part.vote_average }
@@ -1378,7 +1378,7 @@ export default function Detail() {
                       <div key={part.slug || index} className="group relative transition-transform duration-300 hover:scale-105 hover:z-10 cursor-pointer">
                         <div className="relative overflow-hidden rounded-lg shadow-lg aspect-[2/3] bg-[#2A2A2A]">
                           <img 
-                            src={getImageUrl(part.poster_url || part.thumb_url || `https://image.tmdb.org/t/p/w500${part.poster_path}`, 'poster')} 
+                            src={part.poster_path ? getTmdbPosterUrl(part.poster_path, 'w500', part.poster_url || part.thumb_url) : getImageUrl(part.poster_url || part.thumb_url, 'poster')} 
                             alt={part.name || part.title} 
                             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                             loading="lazy"
@@ -1537,7 +1537,7 @@ export default function Detail() {
                                   >
                                     <div className="flex gap-2">
                                       <img 
-                                        src={credit.poster_path ? `https://image.tmdb.org/t/p/w92${credit.poster_path}` : CAST_PLACEHOLDER}
+                                        src={credit.poster_path ? getTmdbPosterUrl(credit.poster_path, 'w92', credit.poster_url) : CAST_PLACEHOLDER}
                                         alt={title}
                                         className="w-10 h-15 object-cover rounded bg-[#2A2A2A]"
                                         referrerPolicy="no-referrer"

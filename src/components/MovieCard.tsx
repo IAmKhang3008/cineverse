@@ -30,7 +30,7 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating, pri
   const [posterUrl, setPosterUrl] = useState<string | null>(null);
   const [posterLoading, setPosterLoading] = useState(true); // cho skeleton
 
-  // 🚀 TỐI ƯU: Fetch poster chất lượng cao từ phimapi → TMDb
+  // 🚀 TỐI ƯU: Primary: TMDB (w500) → Secondary (Fallback): phimapi.com
   useEffect(() => {
     if (!movie) return;
 
@@ -41,22 +41,20 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating, pri
       setImgError(false);
 
       try {
-        // 1. Thử lấy ảnh từ phimapi images trước
-        const imagesData = await api.getMovieImages(movie.slug).catch(() => null);
+        const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
 
-        if (imagesData?.images?.length > 0) {
-          const basePosterUrl = imagesData.image_sizes?.poster?.w500 || "https://image.tmdb.org/t/p/w500";
-          // Tìm poster đầu tiên có aspect ratio < 1.0 (ảnh dọc)
-          const posterImg = imagesData.images.find((img: any) => img.aspect_ratio && img.aspect_ratio < 1.0);
-          if (posterImg && !cancelled) {
-            setPosterUrl(getImageUrl(`${basePosterUrl}${posterImg.file_path}`, 'poster'));
-            setPosterLoading(false);
-            return;
-          }
+        // 1. PRIMARY: Nếu movie đã có poster_path trực tiếp từ TMDB
+        const directTmdbPath = movie.poster_path || movie.tmdb?.poster_path;
+        if (directTmdbPath && !cancelled) {
+          const tmdbUrl = directTmdbPath.startsWith('http') 
+            ? directTmdbPath 
+            : `https://image.tmdb.org/t/p/w500${directTmdbPath.startsWith('/') ? '' : '/'}${directTmdbPath}`;
+          setPosterUrl(tmdbUrl);
+          setPosterLoading(false);
+          return;
         }
 
-        // 2. Fallback: Tìm TMDB ID rồi gọi API kết hợp lấy ảnh
-        const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
+        // 2. PRIMARY: Gọi API TMDB (hoặc search) để lấy poster chất lượng cao
         let tmdbId = movie.tmdb?.id;
         let tmdbType = movie.tmdb?.type || 'movie';
 
@@ -67,6 +65,11 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating, pri
           if (searchData.results?.length > 0) {
             tmdbId = searchData.results[0].id;
             tmdbType = searchData.results[0].media_type || (searchData.results[0].first_air_date ? 'tv' : 'movie');
+            if (searchData.results[0].poster_path && !cancelled) {
+              setPosterUrl(`https://image.tmdb.org/t/p/w500${searchData.results[0].poster_path}`);
+              setPosterLoading(false);
+              return;
+            }
           }
         }
 
@@ -76,21 +79,37 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating, pri
 
           const posters = combinedData.images?.posters;
           if (posters?.length > 0 && !cancelled) {
-            // Ưu tiên poster có vote_count cao nhất (chất lượng)
             const bestPoster = posters.sort((a: any, b: any) => b.vote_count - a.vote_count)[0];
-            setPosterUrl(getImageUrl(`https://image.tmdb.org/t/p/w500${bestPoster.file_path}`, 'poster'));
+            setPosterUrl(`https://image.tmdb.org/t/p/w500${bestPoster.file_path}`);
+            setPosterLoading(false);
+            return;
+          }
+          if (combinedData.poster_path && !cancelled) {
+            setPosterUrl(`https://image.tmdb.org/t/p/w500${combinedData.poster_path}`);
             setPosterLoading(false);
             return;
           }
         }
 
-        // 3. Không tìm được poster mới, fallback về poster_url gốc
+        // 3. SECONDARY (FALLBACK): phimapi.com images
+        const imagesData = await api.getMovieImages(movie.slug).catch(() => null);
+        if (imagesData?.images?.length > 0) {
+          const basePosterUrl = imagesData.image_sizes?.poster?.w500 || "https://image.tmdb.org/t/p/w500";
+          const posterImg = imagesData.images.find((img: any) => img.aspect_ratio && img.aspect_ratio < 1.0);
+          if (posterImg && !cancelled) {
+            setPosterUrl(getImageUrl(`${basePosterUrl}${posterImg.file_path}`, 'poster'));
+            setPosterLoading(false);
+            return;
+          }
+        }
+
+        // 4. FINAL FALLBACK: phimapi.com poster_url / thumb_url
         if (!cancelled) {
           setPosterUrl(getImageUrl(movie.poster_url || movie.thumb_url, 'poster'));
         }
 
       } catch (err) {
-        console.warn("MovieCard: failed to fetch high-quality poster, using original", err);
+        console.warn("MovieCard: TMDB poster fetch failed, using phimapi fallback", err);
         if (!cancelled) setPosterUrl(getImageUrl(movie.poster_url || movie.thumb_url, 'poster'));
       } finally {
         if (!cancelled) setPosterLoading(false);
@@ -100,7 +119,7 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating, pri
     fetchBestPoster();
 
     return () => { cancelled = true; };
-  }, [movie?.slug, movie?.poster_url, movie?.thumb_url]); // fetch khi slug hoặc poster gốc thay đổi
+  }, [movie?.slug, movie?.poster_url, movie?.thumb_url, movie?.poster_path]); // fetch khi slug hoặc poster gốc thay đổi
 
   // Hiệu ứng touch giữ nguyên
   const setActive = useCallback((val: boolean) => {

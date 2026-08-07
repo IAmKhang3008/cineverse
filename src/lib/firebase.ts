@@ -5,6 +5,8 @@ import {
   initializeFirestore,
   persistentLocalCache,
   persistentMultipleTabManager,
+  doc,
+  getDocFromServer,
 } from "firebase/firestore";
 import firebaseConfigJson from "../../firebase-applet-config.json";
 
@@ -30,6 +32,18 @@ export const db = initializeFirestore(
   { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) },
   firebaseConfigJson.firestoreDatabaseId
 );
+
+// Validate Connection to Firestore (Skill Requirement & Offline Resilience)
+async function testConnection() {
+  try {
+    await getDocFromServer(doc(db, 'test', 'connection'));
+  } catch (error) {
+    if (error instanceof Error && (error.message.includes('offline') || error.message.includes('unavailable'))) {
+      console.warn("[Firebase] Operating in offline cache mode or initial connection pending:", error.message);
+    }
+  }
+}
+testConnection();
 
 // ============================================================
 // ERROR HANDLER
