@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useLayoutEffect } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { api, getImageUrl, getTmdbPosterUrl } from "@/lib/api";
+import { getMoviePoster, getMoviePosterSync } from "@/utils/imageUtils";
 import { Play, Plus, Star, Clock, Calendar, Globe, Heart, X, ArrowLeft, Share2, Copy, Link as LinkIcon } from "lucide-react";
 import MovieCard from "@/components/MovieCard";
 import { useFavorites } from "@/hooks/useFavorites";
@@ -169,7 +170,7 @@ export default function Detail() {
         
         if (!tmdbId) {
           const yearQuery = movie.year ? `&year=${movie.year}` : '';
-          const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.origin_name || movie.name)}${yearQuery}&language=vi-VN`;
+          const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.origin_name || movie.name)}${yearQuery}&language=en-US`;
           const searchData = await fetchWithCache(`tmdb_search_${movie.slug}`, () => fetch(searchUrl).then(r => r.json()), TTL.TMDB_STATIC);
           if (searchData.results?.length > 0) {
             tmdbId = searchData.results[0].id;
@@ -635,7 +636,7 @@ export default function Detail() {
         
         if (!tmdbId) {
           const yearQuery = movie.year ? `&year=${movie.year}` : '';
-          const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.origin_name || movie.name)}${yearQuery}&language=vi-VN`;
+          const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.origin_name || movie.name)}${yearQuery}&language=en-US`;
           const searchData = await fetchWithCache(`tmdb_search_${movie.slug}`, () => fetch(searchUrl).then(r => r.json()), TTL.TMDB_STATIC);
           if (searchData.results?.length > 0) {
             tmdbId = searchData.results[0].id;
@@ -654,7 +655,7 @@ export default function Detail() {
           }
           
           if (!rating || !gotImages) {
-             const detailUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=vi-VN&append_to_response=images&include_image_language=en,null,vi`;
+             const detailUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=en-US&append_to_response=images&include_image_language=en,null`;
              const detailData = await fetchWithCache(`tmdb_detail_${tmdbType}_${tmdbId}`, () => fetch(detailUrl).then(r => r.json()), TTL.TMDB_STATIC);
 
              if (!rating && detailData.vote_average) {
@@ -861,7 +862,7 @@ export default function Detail() {
           >
             <div className="rounded-2xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.7)] aspect-[2/3] border border-white/10 group">
               <img
-                src={getImageUrl(movie.poster_url || movie.thumb_url, 'poster')}
+                src={getMoviePosterSync(movie.poster_path, movie.poster_url || movie.thumb_url)}
                 alt={movie.name}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 referrerPolicy="no-referrer"

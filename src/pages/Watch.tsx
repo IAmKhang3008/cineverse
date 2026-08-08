@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { api, getImageUrl } from "@/lib/api";
+import { getMoviePosterSync } from "@/utils/imageUtils";
 import { Play, Settings, SkipForward, Volume2, Maximize, AlertCircle, Film, Heart, ArrowLeft, ExternalLink, Tv, Sparkles } from "lucide-react";
 import { useHistory } from "@/hooks/useHistory";
 import { useFavorites } from "@/hooks/useFavorites";
@@ -686,7 +687,7 @@ export default function Watch() {
                   >
                     <div className="w-[50px] h-[75px] md:w-[60px] md:h-[90px] rounded-md overflow-hidden flex-shrink-0 bg-gray-800 border border-white/10">
                       <img 
-                        src={getImageUrl(m.poster_url || m.thumb_url, 'poster')} 
+                        src={getMoviePosterSync(m.poster_path, m.poster_url || m.thumb_url)} 
                         alt={m.name}
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                         referrerPolicy="no-referrer"

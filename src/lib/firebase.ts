@@ -29,21 +29,12 @@ export const googleProvider = new GoogleAuthProvider();
 // Firestore với persistent cache (hoạt động offline, multi-tab)
 export const db = initializeFirestore(
   app,
-  { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) },
+  { 
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    experimentalForceLongPolling: true
+  },
   firebaseConfigJson.firestoreDatabaseId
 );
-
-// Validate Connection to Firestore (Skill Requirement & Offline Resilience)
-async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && (error.message.includes('offline') || error.message.includes('unavailable'))) {
-      console.warn("[Firebase] Operating in offline cache mode or initial connection pending:", error.message);
-    }
-  }
-}
-testConnection();
 
 // ============================================================
 // ERROR HANDLER

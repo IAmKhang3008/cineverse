@@ -3,6 +3,7 @@ import { Link, NavLink, useNavigate } from "react-router-dom";
 import { Search, User as UserIcon, LogOut, Settings, Heart, History, Play, Menu, X, LogIn, Bell, Clock, TrendingUp, Home, Film, Tv, Tag } from "lucide-react";
 import { cn, DEFAULT_USER_AVATAR, cleanLangString } from "@/lib/utils";
 import { api, getImageUrl } from "@/lib/api";
+import { getMoviePosterSync } from "@/utils/imageUtils";
 import { SearchSuggestionSkeleton, Skeleton } from "@/components/Skeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import LoginModal from "@/components/LoginModal";
@@ -399,7 +400,7 @@ export default function Header() {
                             className="w-full flex items-start gap-3 px-4 py-3 hover:bg-foreground/5 border-b border-card-border last:border-0 group text-left"
                           >
                             <div className="w-10 h-14 flex-shrink-0 rounded-md overflow-hidden bg-input-bg relative">
-                              <img src={getImageUrl(movie.poster_url || movie.thumb_url, "poster")} alt={movie.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              <img src={getMoviePosterSync(movie.poster_path, movie.poster_url || movie.thumb_url)} alt={movie.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                               <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                 <Play className="w-4 h-4 text-white" fill="currentColor" />
                               </div>

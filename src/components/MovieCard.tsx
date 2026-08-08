@@ -4,7 +4,8 @@ import { Play, Star, Heart, Film } from "lucide-react";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
 import { decodeHtml } from "@/lib/utils";
-import { api, getImageUrl } from "@/lib/api";
+import { api, getImageUrl, extractBestPoster } from "@/lib/api";
+import { getMoviePoster } from "@/utils/imageUtils";
 import { fetchWithCache, TTL } from "@/lib/cache";
 
 const rewriteTMDBUrl = (url: string) => url;
@@ -43,44 +44,41 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating, pri
       try {
         const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
 
-        // 1. PRIMARY: Nếu movie đã có poster_path trực tiếp từ TMDB
-        const directTmdbPath = movie.poster_path || movie.tmdb?.poster_path;
-        if (directTmdbPath && !cancelled) {
-          const tmdbUrl = directTmdbPath.startsWith('http') 
-            ? directTmdbPath 
-            : `https://image.tmdb.org/t/p/w500${directTmdbPath.startsWith('/') ? '' : '/'}${directTmdbPath}`;
-          setPosterUrl(tmdbUrl);
+        // First verify using unified getMoviePoster
+        const tmdbCandidate = movie.poster_path || movie.tmdb?.poster_path;
+        const resolvedUrl = await getMoviePoster(
+          tmdbCandidate,
+          movie.name || movie.origin_name,
+          movie.poster_url || movie.thumb_url
+        );
+
+        if (resolvedUrl && !cancelled) {
+          setPosterUrl(resolvedUrl);
           setPosterLoading(false);
           return;
         }
 
-        // 2. PRIMARY: Gọi API TMDB (hoặc search) để lấy poster chất lượng cao
+        // 2. PRIMARY: Tìm kiếm hoặc lấy chi tiết TMDB để extract best poster đồng bộ
         let tmdbId = movie.tmdb?.id;
         let tmdbType = movie.tmdb?.type || 'movie';
 
         if (!tmdbId && (movie.origin_name || movie.name)) {
           const yearQuery = movie.year ? `&year=${movie.year}` : '';
-          const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.origin_name || movie.name)}${yearQuery}&language=vi-VN`;
+          const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.origin_name || movie.name)}${yearQuery}&language=en-US`;
           const searchData = await fetchWithCache(`tmdb_search_${movie.slug}`, () => fetch(rewriteTMDBUrl(searchUrl)).then(r => r.json()), TTL.TMDB_STATIC);
           if (searchData.results?.length > 0) {
             tmdbId = searchData.results[0].id;
             tmdbType = searchData.results[0].media_type || (searchData.results[0].first_air_date ? 'tv' : 'movie');
-            if (searchData.results[0].poster_path && !cancelled) {
-              setPosterUrl(`https://image.tmdb.org/t/p/w500${searchData.results[0].poster_path}`);
-              setPosterLoading(false);
-              return;
-            }
           }
         }
 
         if (tmdbId) {
-          const combinedUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=vi-VN&append_to_response=images&include_image_language=en,null,vi`;
+          const combinedUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=en-US&append_to_response=images&include_image_language=en,null`;
           const combinedData = await fetchWithCache(`tmdb_combined_${tmdbType}_${tmdbId}`, () => fetch(rewriteTMDBUrl(combinedUrl)).then(r => r.json()), TTL.TMDB_STATIC);
 
-          const posters = combinedData.images?.posters;
-          if (posters?.length > 0 && !cancelled) {
-            const bestPoster = posters.sort((a: any, b: any) => b.vote_count - a.vote_count)[0];
-            setPosterUrl(`https://image.tmdb.org/t/p/w500${bestPoster.file_path}`);
+          const bestPoster = extractBestPoster(combinedData.images);
+          if (bestPoster && !cancelled) {
+            setPosterUrl(bestPoster);
             setPosterLoading(false);
             return;
           }
@@ -206,6 +204,14 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating, pri
         WebkitTouchCallout: 'none',
         touchAction: mobileActive ? 'none' : 'auto',
         contain: 'layout style paint'
+      }}
+      onMouseEnter={() => {
+        // Speculative prefetch for higher resolution poster image when hovering
+        if (finalPosterUrl && finalPosterUrl.includes('image.tmdb.org/t/p/')) {
+          const basePath = finalPosterUrl.substring(finalPosterUrl.lastIndexOf('/'));
+          const img = new Image();
+          img.src = `https://image.tmdb.org/t/p/w780${basePath}`;
+        }
       }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}

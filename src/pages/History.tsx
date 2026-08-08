@@ -2,6 +2,7 @@ import { useHistory } from "@/hooks/useHistory";
 import { Link } from "react-router-dom";
 import { Play, Trash2, ArrowLeft, Clock } from "lucide-react";
 import { getImageUrl } from "@/lib/api";
+import { getMoviePosterSync } from "@/utils/imageUtils";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -58,7 +59,7 @@ export default function History() {
           {history.map((item, index) => (
             <div key={`${item.slug || 'history'}-${index}`} className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6 bg-[#121212] p-3 sm:p-4 rounded-2xl border border-white/5 hover:bg-[#1a1a1a] transition-colors group relative">
               <Link to={`/watch/${item.slug}`} className="w-full sm:w-48 md:w-64 aspect-video rounded-xl overflow-hidden relative flex-shrink-0 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
-                <img src={getImageUrl(item.thumb_url || item.poster_url)} alt={item.name} className="w-full h-full object-cover group-hover:opacity-40 transition-opacity duration-300" referrerPolicy="no-referrer" />
+                <img src={getMoviePosterSync(item.poster_path, item.thumb_url || item.poster_url)} alt={item.name} className="w-full h-full object-cover group-hover:opacity-40 transition-opacity duration-300" referrerPolicy="no-referrer" />
                 <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                   <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-[#E50914] flex items-center justify-center shadow-[0_0_20px_rgba(229,9,20,0.5)] transform scale-75 group-hover:scale-100 transition-transform duration-300">
                     <Play className="w-4 h-4 md:w-5 md:h-5 text-white ml-1" fill="currentColor" />

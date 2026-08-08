@@ -238,19 +238,23 @@ export function getTmdbPosterUrl(
 
 export function extractBestPoster(images: any) {
   if (!images?.posters?.length) return null;
-  const vi = images.posters.find((i: any) => i.iso_639_1 === 'vi');
-  if (vi) return `https://image.tmdb.org/t/p/w500${vi.file_path}`;
   const en = images.posters.find((i: any) => i.iso_639_1 === 'en');
   if (en) return `https://image.tmdb.org/t/p/w500${en.file_path}`;
+  const nullLang = images.posters.find((i: any) => i.iso_639_1 === null);
+  if (nullLang) return `https://image.tmdb.org/t/p/w500${nullLang.file_path}`;
+  const vi = images.posters.find((i: any) => i.iso_639_1 === 'vi');
+  if (vi) return `https://image.tmdb.org/t/p/w500${vi.file_path}`;
   return `https://image.tmdb.org/t/p/w500${images.posters[0].file_path}`;
 }
 
 export function extractBestBackdrop(images: any) {
   if (!images?.backdrops?.length) return null;
-  const vi = images.backdrops.find((i: any) => i.iso_639_1 === 'vi');
-  if (vi) return `https://image.tmdb.org/t/p/w1280${vi.file_path}`;
   const en = images.backdrops.find((i: any) => i.iso_639_1 === 'en');
   if (en) return `https://image.tmdb.org/t/p/w1280${en.file_path}`;
+  const nullLang = images.backdrops.find((i: any) => i.iso_639_1 === null);
+  if (nullLang) return `https://image.tmdb.org/t/p/w1280${nullLang.file_path}`;
+  const vi = images.backdrops.find((i: any) => i.iso_639_1 === 'vi');
+  if (vi) return `https://image.tmdb.org/t/p/w1280${vi.file_path}`;
   return `https://image.tmdb.org/t/p/w1280${images.backdrops[0].file_path}`;
 }
 
@@ -264,7 +268,7 @@ export function extractBestTrailer(videos: any) {
 export async function fetchTmdbSearch(title: string, year: string, type?: string) {
   if (!TMDB_ENABLED) return null;
   try {
-    const res = await fetch(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_KEY}&query=${encodeURIComponent(title)}&language=vi-VN`);
+    const res = await fetch(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_KEY}&query=${encodeURIComponent(title)}&language=en-US`);
     const data = await res.json();
     return data.results?.[0] || null;
   } catch { return null; }
@@ -274,7 +278,7 @@ export async function fetchTmdbDetail(id: string | number, type?: string) {
   if (!TMDB_ENABLED) return null;
   const t = type || 'movie';
   try {
-    const res = await fetch(`https://api.themoviedb.org/3/${t}/${id}?api_key=${TMDB_KEY}&language=vi-VN&append_to_response=images,videos,credits`);
+    const res = await fetch(`https://api.themoviedb.org/3/${t}/${id}?api_key=${TMDB_KEY}&language=en-US&append_to_response=images,videos,credits&include_image_language=en,null`);
     return await res.json();
   } catch { return null; }
 }
@@ -425,6 +429,7 @@ async function apiFetch(endpoint: string): Promise<{ data: any; source: 'primary
       const res = await fetchWithTimeout(`${FALLBACK_URL}${endpoint}`, PRIMARY_TIMEOUT);
       if (!res.ok) throw new Error(`Fallback HTTP ${res.status}`);
       const data = await res.json();
+      if (data && data.status === false) throw new Error(`Fallback API returned status: false (${data.msg || ''})`);
       return { data, source: 'fallback' };
     } catch (e) {
       console.warn('[API] Fallback failed:', e);
@@ -436,13 +441,17 @@ async function apiFetch(endpoint: string): Promise<{ data: any; source: 'primary
     const res = await fetchWithTimeout(`${PRIMARY_URL}${endpoint}`, PRIMARY_TIMEOUT);
     if (!res.ok) throw new Error(`Primary HTTP ${res.status}`);
     
+    const data = await res.json();
+    if (data && data.status === false) {
+      throw new Error(`Primary API returned status: false (${data.msg || ''})`);
+    }
+
     // Success, reset consecutive fails
     apiState.consecutiveFails = 0;
     if (apiState.usingFallback) {
       apiState.switchToPrimary();
     }
     
-    const data = await res.json();
     return { data, source: 'primary' };
   } catch (err) {
     if (canFallback) {
@@ -450,10 +459,11 @@ async function apiFetch(endpoint: string): Promise<{ data: any; source: 'primary
       if (apiState.consecutiveFails >= 2) {
         apiState.switchToFallback();
       }
-      console.warn(`[API] Primary failed for ${endpoint}, using fallback.`);
+      console.warn(`[API] Primary failed for ${endpoint}, using fallback. Reason:`, err);
       const res = await fetchWithTimeout(`${FALLBACK_URL}${endpoint}`, PRIMARY_TIMEOUT);
       if (!res.ok) throw new Error(`Fallback HTTP ${res.status}`);
       const data = await res.json();
+      if (data && data.status === false) throw new Error(`Fallback API returned status: false (${data.msg || ''})`);
       return { data, source: 'fallback' };
     }
     throw err;

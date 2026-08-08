@@ -2,7 +2,7 @@ import React, {
   useEffect, useState, Suspense,
   useRef, useCallback, memo, useMemo,
 } from "react";
-import { api, getImageUrl, NormalizedMovie } from "@/lib/api";
+import { api, getImageUrl, NormalizedMovie, extractBestBackdrop, extractBestPoster } from "@/lib/api";
 import { Play, Info, ChevronRight, Heart, X, Flame, TrendingUp, Star } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Swiper, SwiperSlide } from "swiper/react";
@@ -407,7 +407,7 @@ export default function Home() {
                   if (!tmdbId) {
                     const sd = await fetchWithCache(
                       `tmdb_search_${movie.slug}`,
-                      () => fetch(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_KEY}&query=${encodeURIComponent(movie.name)}&language=vi-VN`).then(r => r.json()),
+                      () => fetch(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_KEY}&query=${encodeURIComponent(movie.name)}&language=en-US`).then(r => r.json()),
                       TTL.TMDB_STATIC,
                     );
                     if (sd.results?.length > 0) {
@@ -418,12 +418,12 @@ export default function Home() {
                   if (tmdbId) {
                     const imgData = await fetchWithCache(
                       `tmdb_images_${tmdbType}_${tmdbId}`,
-                      () => fetch(`https://api.themoviedb.org/3/${tmdbType}/${tmdbId}/images?api_key=${TMDB_KEY}`).then(r => r.json()),
+                      () => fetch(`https://api.themoviedb.org/3/${tmdbType}/${tmdbId}/images?api_key=${TMDB_KEY}&language=en-US&include_image_language=en,null`).then(r => r.json()),
                       TTL.TMDB_STATIC,
                     );
-                    if (imgData.backdrops?.length > 0) {
-                      const best = [...imgData.backdrops].sort((a: any, b: any) => b.width - a.width)[0];
-                      highQualityBanner = `https://image.tmdb.org/t/p/w1280${best.file_path}`;
+                    const bestBackdrop = extractBestBackdrop(imgData);
+                    if (bestBackdrop) {
+                      highQualityBanner = bestBackdrop;
                     }
                   }
                 } catch { /* TMDB fail silently */ }
