@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useLayoutEffect } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
-import { api, getImageUrl, getTmdbPosterUrl } from "@/lib/api";
+import { api, getImageUrl, getTmdbPosterUrl, searchTmdbWithCache } from "@/lib/api";
 import { getMoviePoster, getMoviePosterSync } from "@/utils/imageUtils";
 import { Play, Plus, Star, Clock, Calendar, Globe, Heart, X, ArrowLeft, Share2, Copy, Link as LinkIcon } from "lucide-react";
 import MovieCard from "@/components/MovieCard";
@@ -169,12 +169,10 @@ export default function Detail() {
         let tmdbType = movie.tmdb?.type || 'movie';
         
         if (!tmdbId) {
-          const yearQuery = movie.year ? `&year=${movie.year}` : '';
-          const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.origin_name || movie.name)}${yearQuery}&language=en-US`;
-          const searchData = await fetchWithCache(`tmdb_search_${movie.slug}`, () => fetch(searchUrl).then(r => r.json()), TTL.TMDB_STATIC);
-          if (searchData.results?.length > 0) {
-            tmdbId = searchData.results[0].id;
-            tmdbType = searchData.results[0].media_type || (searchData.results[0].first_air_date ? 'tv' : 'movie');
+          const searchResult = await searchTmdbWithCache(movie);
+          if (searchResult) {
+            tmdbId = searchResult.id;
+            tmdbType = searchResult.media_type || (searchResult.first_air_date ? 'tv' : 'movie');
           }
         }
 
@@ -635,12 +633,10 @@ export default function Detail() {
         let tmdbType = movie.tmdb?.type || 'movie';
         
         if (!tmdbId) {
-          const yearQuery = movie.year ? `&year=${movie.year}` : '';
-          const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.origin_name || movie.name)}${yearQuery}&language=en-US`;
-          const searchData = await fetchWithCache(`tmdb_search_${movie.slug}`, () => fetch(searchUrl).then(r => r.json()), TTL.TMDB_STATIC);
-          if (searchData.results?.length > 0) {
-            tmdbId = searchData.results[0].id;
-            tmdbType = searchData.results[0].media_type || (searchData.results[0].first_air_date ? 'tv' : 'movie');
+          const searchResult = await searchTmdbWithCache(movie);
+          if (searchResult) {
+            tmdbId = searchResult.id;
+            tmdbType = searchResult.media_type || (searchResult.first_air_date ? 'tv' : 'movie');
           }
         }
 

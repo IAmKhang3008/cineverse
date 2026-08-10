@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
-import { api, getImageUrl } from "@/lib/api";
+import { api, getImageUrl, searchTmdbWithCache } from "@/lib/api";
 import { getMoviePosterSync } from "@/utils/imageUtils";
 import { Play, Settings, SkipForward, Volume2, Maximize, AlertCircle, Film, Heart, ArrowLeft, ExternalLink, Tv, Sparkles } from "lucide-react";
 import { useHistory } from "@/hooks/useHistory";
@@ -52,8 +52,16 @@ export default function Watch() {
         
         let fetchedEpisodes = res.episodes || [];
         
-        // Inject VidSrc Server if TMDB ID is available
-        const tmdbId = res.movie?.tmdb?.id;
+        // Inject VidSrc Server if TMDB ID is available or resolved
+        let tmdbId = res.movie?.tmdb?.id;
+        if (!tmdbId && res.movie) {
+          const tmdbRes = await searchTmdbWithCache(res.movie);
+          if (tmdbRes?.id) {
+            tmdbId = String(tmdbRes.id);
+            res.movie.tmdb = { ...(res.movie.tmdb || {}), id: tmdbId, type: tmdbRes.media_type };
+          }
+        }
+
         if (tmdbId) {
           const isTv = res.movie?.type === 'series' || res.movie?.tmdb?.type === 'tv' || res.movie?.type === 'hoathinh' || res.movie?.type === 'tvshows';
           
@@ -211,10 +219,19 @@ export default function Watch() {
   const [autoRedirectTimer, setAutoRedirectTimer] = useState<number>(3);
   const hasTriggeredRef = useRef<boolean>(false);
 
-  const triggerVidsrcAuto = () => {
-    const vidsrcServerObj = episodes.find(s => s.server_name === 'Thử Vidsrc' || s.server_name?.toLowerCase().includes('vidsrc'));
-    const targetEp = vidsrcServerObj?.server_data?.[0];
-    const tmdbId = movie?.tmdb?.id;
+  const triggerVidsrcAuto = async () => {
+    let vidsrcServerObj = episodes.find(s => s.server_name === 'Thử Vidsrc' || s.server_name?.toLowerCase().includes('vidsrc'));
+    let targetEp = vidsrcServerObj?.server_data?.[0];
+    let tmdbId = movie?.tmdb?.id;
+
+    if (!tmdbId && movie) {
+      const tmdbRes = await searchTmdbWithCache(movie);
+      if (tmdbRes?.id) {
+        tmdbId = String(tmdbRes.id);
+        movie.tmdb = { ...(movie.tmdb || {}), id: tmdbId, type: tmdbRes.media_type };
+      }
+    }
+
     const isTv = movie?.type === 'series' || movie?.tmdb?.type === 'tv' || movie?.type === 'hoathinh' || movie?.type === 'tvshows';
     const fallbackUrl = tmdbId ? (isTv ? `https://vsembed.ru/embed/tv?tmdb=${tmdbId}&season=1&episode=1` : `https://vsembed.ru/embed/movie?tmdb=${tmdbId}`) : '';
     const urlToOpen = targetEp?.link_embed || fallbackUrl;

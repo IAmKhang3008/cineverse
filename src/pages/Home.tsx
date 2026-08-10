@@ -2,7 +2,7 @@ import React, {
   useEffect, useState, Suspense,
   useRef, useCallback, memo, useMemo,
 } from "react";
-import { api, getImageUrl, NormalizedMovie, extractBestBackdrop, extractBestPoster } from "@/lib/api";
+import { api, getImageUrl, NormalizedMovie, extractBestBackdrop, extractBestPoster, searchTmdbWithCache } from "@/lib/api";
 import { Play, Info, ChevronRight, Heart, X, Flame, TrendingUp, Star } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Swiper, SwiperSlide } from "swiper/react";
@@ -405,14 +405,10 @@ export default function Home() {
                   let tmdbId   = detail.movie?.tmdb?.id;
                   let tmdbType = detail.movie?.tmdb?.type || 'movie';
                   if (!tmdbId) {
-                    const sd = await fetchWithCache(
-                      `tmdb_search_${movie.slug}`,
-                      () => fetch(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_KEY}&query=${encodeURIComponent(movie.name)}&language=en-US`).then(r => r.json()),
-                      TTL.TMDB_STATIC,
-                    );
-                    if (sd.results?.length > 0) {
-                      tmdbId   = sd.results[0].id;
-                      tmdbType = sd.results[0].media_type || (sd.results[0].first_air_date ? 'tv' : 'movie');
+                    const searchResult = await searchTmdbWithCache(movie);
+                    if (searchResult) {
+                      tmdbId = searchResult.id;
+                      tmdbType = searchResult.media_type || (searchResult.first_air_date ? 'tv' : 'movie');
                     }
                   }
                   if (tmdbId) {

@@ -265,20 +265,148 @@ export function extractBestTrailer(videos: any) {
   return null;
 }
 
-export async function fetchTmdbSearch(title: string, year: string, type?: string) {
-  if (!TMDB_ENABLED) return null;
+export async function fetchTmdbByExternalId(externalId: string, source: string = 'imdb_id') {
+  if (!TMDB_ENABLED || !externalId) return null;
+  const cleanId = String(externalId).trim();
+  if (!cleanId) return null;
   try {
-    const res = await fetch(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_KEY}&query=${encodeURIComponent(title)}&language=en-US`);
+    const res = await fetch(`https://api.themoviedb.org/3/find/${encodeURIComponent(cleanId)}?api_key=${TMDB_KEY}&external_source=${source}`);
+    if (!res.ok) return null;
     const data = await res.json();
-    return data.results?.[0] || null;
-  } catch { return null; }
+    const movieRes = data.movie_results?.[0];
+    const tvRes = data.tv_results?.[0];
+    if (movieRes) return { ...movieRes, media_type: 'movie' };
+    if (tvRes) return { ...tvRes, media_type: 'tv' };
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchTmdbSearch(title: string, year?: string, type?: 'movie' | 'tv' | 'multi') {
+  if (!TMDB_ENABLED || !title) return null;
+  const cleanTitle = title.trim();
+  if (!cleanTitle) return null;
+  try {
+    let endpoint = '/3/search/multi';
+    let yearParam = '';
+    if (type === 'movie') {
+      endpoint = '/3/search/movie';
+      yearParam = year ? `&year=${year}&primary_release_year=${year}` : '';
+    } else if (type === 'tv') {
+      endpoint = '/3/search/tv';
+      yearParam = year ? `&first_air_date_year=${year}` : '';
+    } else if (year) {
+      yearParam = `&year=${year}`;
+    }
+
+    const res = await fetch(`https://api.themoviedb.org${endpoint}?api_key=${TMDB_KEY}&query=${encodeURIComponent(cleanTitle)}${yearParam}&language=en-US`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const results = data.results || [];
+    if (!results.length) return null;
+
+    const valid = results.filter((r: any) => r.media_type !== 'person');
+    if (!valid.length) return null;
+
+    const top = valid[0];
+    if (!top.media_type) {
+      top.media_type = type || (top.first_air_date ? 'tv' : 'movie');
+    }
+    return top;
+  } catch {
+    return null;
+  }
+}
+
+export function extractTmdbObj(m: any): TmdbMovieInfo | undefined {
+  if (!m) return undefined;
+  const rawM = m.movie || m;
+  
+  let id = rawM.tmdb?.id || rawM.tmdb_id;
+  if (!id && (typeof rawM.tmdb === 'number' || (typeof rawM.tmdb === 'string' && /^\d+$/.test(rawM.tmdb)))) {
+    id = rawM.tmdb;
+  }
+
+  let imdbId = rawM.imdb_id || rawM.imdb?.id;
+  if (!imdbId && typeof rawM.imdb === 'string' && rawM.imdb.startsWith('tt')) {
+    imdbId = rawM.imdb;
+  }
+
+  let type = rawM.tmdb?.type || (rawM.type === 'series' || rawM.type === 'hoathinh' || rawM.type === 'tvshows' ? 'tv' : 'movie');
+  let season = rawM.tmdb?.season || rawM.season || 1;
+
+  if (id || imdbId || (rawM.tmdb && typeof rawM.tmdb === 'object')) {
+    return {
+      ...(typeof rawM.tmdb === 'object' ? rawM.tmdb : {}),
+      id: id ? String(id) : (rawM.tmdb?.id ? String(rawM.tmdb.id) : undefined),
+      imdb_id: imdbId ? String(imdbId) : undefined,
+      type,
+      season,
+    };
+  }
+  return undefined;
+}
+
+export async function searchTmdbWithCache(movie: any) {
+  if (!TMDB_ENABLED || !movie) return null;
+
+  // 1. Direct TMDB ID if present
+  const tmdbObj = extractTmdbObj(movie);
+  if (tmdbObj?.id) {
+    return { id: Number(tmdbObj.id), media_type: tmdbObj.type || 'movie' };
+  }
+
+  // 2. Direct IMDb ID if present
+  if (tmdbObj?.imdb_id) {
+    const findResult = await fetchWithCache(`tmdb_find_${tmdbObj.imdb_id}`, () => fetchTmdbByExternalId(tmdbObj.imdb_id!, 'imdb_id'), TTL.TMDB_STATIC);
+    if (findResult?.id) {
+      return findResult;
+    }
+  }
+
+  // 3. Search by title
+  const searchYear = String(movie.year || '');
+  const searchName = movie.name || movie.title || '';
+  const searchOrigin = movie.origin_name || '';
+  const isTv = movie.type === 'series' || movie.type === 'hoathinh' || movie.type === 'tvshows';
+  const targetType = isTv ? 'tv' : 'movie';
+
+  const cacheKey = `tmdb_unified_search_${movie.slug || searchOrigin || searchName}_${searchYear}`;
+
+  return fetchWithCache(cacheKey, async () => {
+    const searchPromises: Promise<any>[] = [];
+
+    if (searchOrigin) {
+      searchPromises.push(fetchTmdbSearch(searchOrigin, searchYear, targetType));
+    }
+    if (searchName && searchName !== searchOrigin) {
+      searchPromises.push(fetchTmdbSearch(searchName, searchYear, targetType));
+    }
+    if (searchOrigin) {
+      searchPromises.push(fetchTmdbSearch(searchOrigin, searchYear, 'multi'));
+    }
+
+    if (searchPromises.length === 0) return null;
+
+    try {
+      const result = await Promise.race([
+        Promise.any(searchPromises.map(p => p.then(r => r ?? Promise.reject('null')))),
+        new Promise<null>(r => setTimeout(() => r(null), 3500)),
+      ]);
+      return result;
+    } catch {
+      return null;
+    }
+  }, TTL.TMDB_STATIC);
 }
 
 export async function fetchTmdbDetail(id: string | number, type?: string) {
   if (!TMDB_ENABLED) return null;
   const t = type || 'movie';
   try {
-    const res = await fetch(`https://api.themoviedb.org/3/${t}/${id}?api_key=${TMDB_KEY}&language=en-US&append_to_response=images,videos,credits&include_image_language=en,null`);
+    const res = await fetch(`https://api.themoviedb.org/3/${t}/${id}?api_key=${TMDB_KEY}&language=en-US&append_to_response=images,videos,credits,external_ids&include_image_language=en,null`);
+    if (!res.ok) return null;
     return await res.json();
   } catch { return null; }
 }
@@ -595,34 +723,27 @@ export const api = {
         console.warn('[API] phimapi fetch failed:', (phimapiResult as PromiseRejectedResult).reason);
       }
 
-      // ── STAGE 2: TMDB search (parallel với normalize) ──────
+      // ── STAGE 2: TMDB resolution ────────────────────────────
       const rawMovie   = primaryData?.movie || primaryData || {};
-      const searchName = rawMovie.name || rawMovie.origin_name || rawMovie.title || '';
-      const searchYear = String(rawMovie.year || '');
-
-      // Chạy song song: normalize phimapi data + search TMDB
-      // Nếu phimapi đã có tmdb.id → bỏ qua search, dùng trực tiếp
-      const existingTmdbId   = rawMovie.tmdb?.id;
-      const existingTmdbType = (rawMovie.tmdb?.type || 'movie') as 'movie' | 'tv';
+      const existingTmdb = extractTmdbObj(rawMovie);
 
       let tmdbSearch: TmdbMovieInfo | null = null;
 
       if (TMDB_ENABLED) {
-        if (existingTmdbId) {
-          // Phimapi đã cung cấp TMDB ID → bỏ qua search step
-          tmdbSearch = { id: Number(existingTmdbId), title: rawMovie.name || '', original_title: '', media_type: existingTmdbType };
-        } else if (searchName) {
-          // Timeout 4s (tăng từ 2s) — search với tên tiếng Anh nếu có
-          const searchPromises = [fetchTmdbSearch(searchName, searchYear)];
-          if (rawMovie.origin_name && rawMovie.origin_name !== searchName) {
-            searchPromises.push(fetchTmdbSearch(rawMovie.origin_name, searchYear));
+        if (existingTmdb?.id) {
+          // 1. Phimapi provided TMDB ID directly -> use it instantly
+          tmdbSearch = { id: Number(existingTmdb.id), title: rawMovie.name || '', original_title: rawMovie.origin_name || '', media_type: existingTmdb.type || 'movie' };
+        } else if (existingTmdb?.imdb_id) {
+          // 2. Phimapi provided IMDb ID -> lookup TMDb /find endpoint directly
+          const findRes = await fetchWithCache(`tmdb_find_${existingTmdb.imdb_id}`, () => fetchTmdbByExternalId(existingTmdb.imdb_id!, 'imdb_id'), TTL.TMDB_STATIC);
+          if (findRes?.id) {
+            tmdbSearch = findRes;
           }
+        }
 
-          const searchResults = await Promise.race([
-            Promise.any(searchPromises.map(p => p.then(r => r ?? Promise.reject('null')))),
-            new Promise<null>(r => setTimeout(() => r(null), 4_000)),
-          ]);
-          tmdbSearch = searchResults as TmdbMovieInfo | null;
+        // 3. Fallback to unified TMDB search
+        if (!tmdbSearch && (rawMovie.name || rawMovie.origin_name)) {
+          tmdbSearch = await searchTmdbWithCache(rawMovie) as TmdbMovieInfo | null;
         }
       }
 
@@ -630,7 +751,7 @@ export const api = {
       let tmdbDetail: TmdbFullDetail | null = null;
 
       if (tmdbSearch?.id && TMDB_ENABLED) {
-        const mediaType = (tmdbSearch.media_type === 'tv' || existingTmdbType === 'tv') ? 'tv' : 'movie';
+        const mediaType = (tmdbSearch.media_type === 'tv' || existingTmdb?.type === 'tv') ? 'tv' : 'movie';
         // [FIX 8] 1 request thay vì 3-4 request riêng lẻ
         tmdbDetail = await fetchTmdbDetail(tmdbSearch.id, mediaType);
       }

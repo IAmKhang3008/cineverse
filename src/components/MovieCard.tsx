@@ -4,7 +4,7 @@ import { Play, Star, Heart, Film } from "lucide-react";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
 import { decodeHtml } from "@/lib/utils";
-import { api, getImageUrl, extractBestPoster } from "@/lib/api";
+import { api, getImageUrl, extractBestPoster, searchTmdbWithCache } from "@/lib/api";
 import { getMoviePoster } from "@/utils/imageUtils";
 import { fetchWithCache, TTL } from "@/lib/cache";
 
@@ -44,18 +44,22 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating, pri
       try {
         const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
 
-        // First verify using unified getMoviePoster
+        // First verify using unified getMoviePoster if we have a TMDB candidate or existing TMDB url
         const tmdbCandidate = movie.poster_path || movie.tmdb?.poster_path;
-        const resolvedUrl = await getMoviePoster(
-          tmdbCandidate,
-          movie.name || movie.origin_name,
-          movie.poster_url || movie.thumb_url
-        );
+        const isAlreadyTmdbUrl = movie.poster_url && movie.poster_url.includes('image.tmdb.org');
+        
+        if (tmdbCandidate || isAlreadyTmdbUrl) {
+          const resolvedUrl = await getMoviePoster(
+            tmdbCandidate,
+            movie.name || movie.origin_name,
+            movie.poster_url || movie.thumb_url
+          );
 
-        if (resolvedUrl && !cancelled) {
-          setPosterUrl(resolvedUrl);
-          setPosterLoading(false);
-          return;
+          if (resolvedUrl && !cancelled) {
+            setPosterUrl(resolvedUrl);
+            setPosterLoading(false);
+            return;
+          }
         }
 
         // 2. PRIMARY: Tìm kiếm hoặc lấy chi tiết TMDB để extract best poster đồng bộ
@@ -63,12 +67,10 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating, pri
         let tmdbType = movie.tmdb?.type || 'movie';
 
         if (!tmdbId && (movie.origin_name || movie.name)) {
-          const yearQuery = movie.year ? `&year=${movie.year}` : '';
-          const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&query=${encodeURIComponent(movie.origin_name || movie.name)}${yearQuery}&language=en-US`;
-          const searchData = await fetchWithCache(`tmdb_search_${movie.slug}`, () => fetch(rewriteTMDBUrl(searchUrl)).then(r => r.json()), TTL.TMDB_STATIC);
-          if (searchData.results?.length > 0) {
-            tmdbId = searchData.results[0].id;
-            tmdbType = searchData.results[0].media_type || (searchData.results[0].first_air_date ? 'tv' : 'movie');
+          const searchResult = await searchTmdbWithCache(movie);
+          if (searchResult) {
+            tmdbId = searchResult.id;
+            tmdbType = searchResult.media_type || (searchResult.first_air_date ? 'tv' : 'movie');
           }
         }
 
