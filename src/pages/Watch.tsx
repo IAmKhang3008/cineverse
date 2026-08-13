@@ -62,46 +62,54 @@ export default function Watch() {
           }
         }
 
-        if (tmdbId) {
-          const isTv = res.movie?.type === 'series' || res.movie?.tmdb?.type === 'tv' || res.movie?.type === 'hoathinh' || res.movie?.type === 'tvshows';
-          
-          let vidsrcServerData: any[] = [];
-          if (fetchedEpisodes[0]?.server_data?.length) {
-            vidsrcServerData = fetchedEpisodes[0].server_data.map((ep: any) => {
-               const epMatch = ep.name.match(/\d+/);
-               const epNum = epMatch ? epMatch[0] : '1';
-               
-               let link_embed = '';
-               if (isTv) {
-                 const seasonNum = res.movie?.tmdb?.season || 1; 
-                 link_embed = `https://vidsrc.tw/embed/tv?tmdb=${tmdbId}&season=${seasonNum}&episode=${epNum}&ds_lang=vi,en&autoplay=1`;
-               } else {
-                 link_embed = `https://vidsrc.tw/embed/movie?tmdb=${tmdbId}&ds_lang=vi,en&autoplay=1`;
-               }
+        const tmdbType = res.movie?.tmdb?.type;
+        const localType = res.movie?.type;
+        const epsCount = fetchedEpisodes[0]?.server_data?.length || 1;
+        const totalEps = parseInt(res.movie?.episode_total || '1', 10);
+        
+        let isTv = false;
+        if (tmdbType) {
+          isTv = tmdbType === 'tv';
+        } else {
+          isTv = localType === 'series' || localType === 'tvshows' || epsCount > 1 || (localType === 'hoathinh' && totalEps > 1);
+        }
+        
+        let vidsrcServerData: any[] = [];
+        if (fetchedEpisodes[0]?.server_data?.length) {
+          vidsrcServerData = fetchedEpisodes[0].server_data.map((ep: any) => {
+             const epMatch = ep.name.match(/\d+/);
+             const epNum = epMatch ? epMatch[0] : '1';
+             
+             let link_embed = '';
+             if (isTv) {
+               const seasonNum = res.movie?.tmdb?.season || 1; 
+               link_embed = `https://vidsrc.tw/embed/tv?tmdb=${tmdbId || ''}&season=${seasonNum}&episode=${epNum}&ds_lang=vi,en&autoplay=1`;
+             } else {
+               link_embed = `https://vidsrc.tw/embed/movie?tmdb=${tmdbId || ''}&ds_lang=vi,en&autoplay=1`;
+             }
 
-               return {
-                 ...ep,
-                 link_embed
-               };
-            });
-          } else {
-            let link_embed = isTv
-              ? `https://vidsrc.tw/embed/tv?tmdb=${tmdbId}&season=1&episode=1&ds_lang=vi,en&autoplay=1`
-              : `https://vidsrc.tw/embed/movie?tmdb=${tmdbId}&ds_lang=vi,en&autoplay=1`;
-            vidsrcServerData = [{
-              name: 'Full',
-              slug: 'full',
-              filename: 'Full',
-              link_embed
-            }];
-          }
+             return {
+               ...ep,
+               link_embed
+             };
+          });
+        } else {
+          let link_embed = isTv
+            ? `https://vidsrc.tw/embed/tv?tmdb=${tmdbId || ''}&season=1&episode=1&ds_lang=vi,en&autoplay=1`
+            : `https://vidsrc.tw/embed/movie?tmdb=${tmdbId || ''}&ds_lang=vi,en&autoplay=1`;
+          vidsrcServerData = [{
+            name: 'Full',
+            slug: 'full',
+            filename: 'Full',
+            link_embed
+          }];
+        }
 
-          if (vidsrcServerData.length > 0) {
-             fetchedEpisodes.push({
-               server_name: "Thử Vidsrc",
-               server_data: vidsrcServerData
-             });
-          }
+        if (vidsrcServerData.length > 0) {
+           fetchedEpisodes.push({
+             server_name: "Thử Vidsrc",
+             server_data: vidsrcServerData
+           });
         }
 
         setEpisodes(fetchedEpisodes);
@@ -232,14 +240,24 @@ export default function Watch() {
       }
     }
 
-    const isTv = movie?.type === 'series' || movie?.tmdb?.type === 'tv' || movie?.type === 'hoathinh' || movie?.type === 'tvshows';
-    const fallbackUrl = tmdbId ? (isTv ? `https://vidsrc.tw/embed/tv?tmdb=${tmdbId}&season=1&episode=1&ds_lang=vi,en&autoplay=1` : `https://vidsrc.tw/embed/movie?tmdb=${tmdbId}&ds_lang=vi,en&autoplay=1`) : '';
+    const tmdbType = movie?.tmdb?.type;
+    const localType = movie?.type;
+    const epsCount = episodes[0]?.server_data?.length || 1;
+    const totalEps = parseInt(movie?.episode_total || '1', 10);
+    
+    let isTv = false;
+    if (tmdbType) {
+      isTv = tmdbType === 'tv';
+    } else {
+      isTv = localType === 'series' || localType === 'tvshows' || epsCount > 1 || (localType === 'hoathinh' && totalEps > 1);
+    }
+    const fallbackUrl = isTv ? `https://vidsrc.tw/embed/tv?tmdb=${tmdbId || ''}&season=1&episode=1&ds_lang=vi,en&autoplay=1` : `https://vidsrc.tw/embed/movie?tmdb=${tmdbId || ''}&ds_lang=vi,en&autoplay=1`;
     const urlToOpen = targetEp?.link_embed || fallbackUrl;
 
     if (vidsrcServerObj && targetEp) {
       setCurrentServer(vidsrcServerObj.server_name);
       setCurrentEpisode(targetEp);
-    } else if (fallbackUrl) {
+    } else {
       setCurrentServer('Thử Vidsrc');
       setCurrentEpisode({
         name: 'Tập 1 (VidSrc)',
@@ -248,8 +266,6 @@ export default function Watch() {
         link_embed: fallbackUrl,
         link_m3u8: '',
       });
-    } else {
-      setCurrentServer('Thử Vidsrc');
     }
 
     if (urlToOpen) {

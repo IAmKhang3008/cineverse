@@ -140,13 +140,13 @@ const apiState = {
   switchToFallback() {
     if (this.usingFallback) return;
     this.usingFallback = true;
-    console.warn('[API] phimapi.com không phản hồi → ophim1.com');
+    
     this.startHealthCheck();
   },
   switchToPrimary() {
     this.usingFallback = false;
     this.consecutiveFails = 0;
-    console.info('[API] phimapi.com sống lại ✅');
+    
     this.stopHealthCheck();
   },
   startHealthCheck() {
@@ -587,7 +587,7 @@ async function apiFetch(endpoint: string): Promise<{ data: any; source: 'primary
       if (apiState.consecutiveFails >= 2) {
         apiState.switchToFallback();
       }
-      console.warn(`[API] Primary failed for ${endpoint}, using fallback. Reason:`, err);
+      
       const res = await fetchWithTimeout(`${FALLBACK_URL}${endpoint}`, PRIMARY_TIMEOUT);
       if (!res.ok) throw new Error(`Fallback HTTP ${res.status}`);
       const data = await res.json();
