@@ -3,7 +3,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { X, Star, Calendar, Clock, Globe, Languages } from "lucide-react";
 import { fetchMovieDetails } from "../api";
 import { MovieDetail } from "../types";
-import { cleanLangString } from "../lib/utils";
+import { cleanLangString, isVietnameseMovie } from "../lib/utils";
 
 interface MovieModalProps {
   slug: string | null;
@@ -112,7 +112,7 @@ export function MovieModal({ slug, onClose, cdnDomain = "https://phimimg.com" }:
                     {detail.quality && detail.lang && (
                       <div className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-emerald-400">
                         <Languages className="h-4 w-4" />
-                        {detail.quality} - {cleanLangString(detail.lang)}
+                        {detail.quality} - {cleanLangString(detail.lang, false, isVietnameseMovie(detail))}
                       </div>
                     )}
                   </div>

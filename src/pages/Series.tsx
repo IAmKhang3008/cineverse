@@ -159,7 +159,7 @@ export default function Series() {
           <label className="text-[#A0A0A0] text-xs font-medium uppercase tracking-wider">Ngôn ngữ</label>
           <select className="bg-[#2A2A2A] border-none text-white text-sm rounded-lg px-3 py-2.5 outline-none appearance-none cursor-pointer hover:bg-[#333] transition-colors w-full">
             <option value="">Tất cả</option>
-            <option value="viet_sub">Vietsub</option>
+            <option value="viet_sub">🌐 Multi-sub</option>
             <option value="thuyet_minh">Thuyết minh</option>
             <option value="long_tieng">Lồng tiếng</option>
             <option value="song_ngu">Song ngữ</option>

@@ -6,7 +6,7 @@ import { Play, Plus, Star, Clock, Calendar, Globe, Heart, X, ArrowLeft, Share2, 
 import MovieCard from "@/components/MovieCard";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
-import { decodeHtml, DEFAULT_AVATAR, CAST_PLACEHOLDER, cleanLangString } from "@/lib/utils";
+import { decodeHtml, DEFAULT_AVATAR, CAST_PLACEHOLDER, cleanLangString, isVietnameseMovie } from "@/lib/utils";
 import { fetchWithCache, TTL } from "@/lib/cache";
 import { motion, AnimatePresence } from "motion/react";
 import { Suspense, lazy } from "react";
@@ -729,6 +729,7 @@ export default function Detail() {
   const getAudioIcon = (lang: string) => {
     if (!lang) return null;
     const l = lang.toLowerCase();
+    if (l.includes('multi-sub')) return ''; // Icon is already in the tag
     if (l.includes('vietsub')) return '🇻🇳';
     if (l.includes('thuyết minh') || l.includes('lồng tiếng')) return '🎙️';
     return '🔤';
@@ -917,7 +918,11 @@ export default function Detail() {
             <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2 mb-8">
               {movie.lang && (
                 <span className="bg-[#3B82F6]/10 text-[#3B82F6] text-sm font-bold px-3 py-1.5 rounded-md border border-[#3B82F6]/30 flex items-center gap-2">
-                  {getAudioIcon(movie.lang)} {cleanLangString(movie.lang)}
+                  {(() => {
+                  const displayLang = cleanLangString(movie.lang, false, isVietnameseMovie(movie));
+                  const icon = getAudioIcon(displayLang);
+                  return <>{icon ? `${icon} ` : ""}{displayLang}</>;
+                })()}
                 </span>
               )}
               {movie.quality && (
@@ -1372,7 +1377,7 @@ export default function Detail() {
                   </h3>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 md:gap-6">
                     {collection.parts.map((part: any, index: number) => (
-                      <div key={part.slug || index} className="group relative transition-transform duration-300 hover:scale-105 hover:z-10 cursor-pointer">
+                      <div key={`${part.slug || part.id || 'part'}-${index}`} className="group relative transition-transform duration-300 hover:scale-105 hover:z-10 cursor-pointer">
                         <div className="relative overflow-hidden rounded-lg shadow-lg aspect-[2/3] bg-[#2A2A2A]">
                           <img 
                             src={part.poster_path ? getTmdbPosterUrl(part.poster_path, 'w500', part.poster_url || part.thumb_url) : getImageUrl(part.poster_url || part.thumb_url, 'poster')} 

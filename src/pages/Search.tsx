@@ -249,7 +249,7 @@ export default function Search() {
                     className="bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-[#E50914]"
                   >
                     <option value="">Tất cả</option>
-                    <option value="vietsub">Vietsub</option>
+                    <option value="vietsub">🌐 Multi-sub</option>
                     <option value="thuyet-minh">Thuyết minh</option>
                     <option value="long-tieng">Lồng tiếng</option>
                   </select>

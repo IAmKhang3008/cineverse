@@ -107,7 +107,7 @@ export default function Watch() {
 
         if (vidsrcServerData.length > 0) {
            fetchedEpisodes.push({
-             server_name: "Thử Vidsrc",
+             server_name: "Multi-sub",
              server_data: vidsrcServerData
            });
         }
@@ -197,8 +197,8 @@ export default function Watch() {
     return clean;
   };
 
-  const isVidsrc = currentServer === 'Thử Vidsrc' || currentServer?.toLowerCase().includes('vidsrc');
-  const vietsubServer = episodes.find(s => s.server_name !== 'Thử Vidsrc' && !s.server_name?.toLowerCase().includes('vidsrc')) || episodes[0];
+  const isVidsrc = currentServer === 'Multi-sub' || currentServer?.toLowerCase().includes('vidsrc');
+  const vietsubServer = episodes.find(s => s.server_name !== 'Multi-sub' && !s.server_name?.toLowerCase().includes('vidsrc')) || episodes[0];
 
   const handleSwitchToVietsub = () => {
     if (vietsubServer && vietsubServer.server_data?.[0]) {
@@ -213,7 +213,7 @@ export default function Watch() {
   const isOnlyTrailer = Boolean(
     (currentEpisode?.name?.toLowerCase().trim() === 'trailer' || currentEpisode?.slug?.toLowerCase().trim() === 'trailer') &&
     !episodes.some(s => 
-      s.server_name !== 'Thử Vidsrc' && 
+      s.server_name !== 'Multi-sub' && 
       !s.server_name?.toLowerCase().includes('vidsrc') && 
       s.server_data?.some((ep: any) => 
         ep.slug?.toLowerCase().trim() !== 'trailer' && 
@@ -228,7 +228,7 @@ export default function Watch() {
   const hasTriggeredRef = useRef<boolean>(false);
 
   const triggerVidsrcAuto = async () => {
-    let vidsrcServerObj = episodes.find(s => s.server_name === 'Thử Vidsrc' || s.server_name?.toLowerCase().includes('vidsrc'));
+    let vidsrcServerObj = episodes.find(s => s.server_name === 'Multi-sub' || s.server_name?.toLowerCase().includes('vidsrc'));
     let targetEp = vidsrcServerObj?.server_data?.[0];
     let tmdbId = movie?.tmdb?.id;
 
@@ -258,11 +258,11 @@ export default function Watch() {
       setCurrentServer(vidsrcServerObj.server_name);
       setCurrentEpisode(targetEp);
     } else {
-      setCurrentServer('Thử Vidsrc');
+      setCurrentServer('Multi-sub');
       setCurrentEpisode({
-        name: 'Tập 1 (VidSrc)',
+        name: 'Tập 1 (Multi-sub)',
         slug: 'tap-1-vidsrc',
-        filename: 'VidSrc',
+        filename: 'Multi-sub',
         link_embed: fallbackUrl,
         link_m3u8: '',
       });
@@ -293,7 +293,7 @@ export default function Watch() {
         }
       }
     }
-    showToast("Đã tự động chuyển sang trình phát VidSrc", "info");
+    showToast("Đã tự động chuyển sang trình phát Multi-sub", "info");
   };
 
   useEffect(() => {
@@ -422,7 +422,7 @@ export default function Watch() {
                 {/* Glowing Badge */}
                 <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#E50914]/15 border border-[#E50914]/40 text-[#E50914] text-xs font-semibold tracking-wide mb-5 shadow-[0_0_15px_rgba(229,9,20,0.25)] animate-pulse">
                   <Sparkles className="w-4 h-4 text-[#E50914]" />
-                  <span>Nguồn: VidSrc Multi-Sub</span>
+                  <span>Nguồn: Multi-sub</span>
                 </div>
 
                 {/* Main Heading requested by user */}
@@ -487,7 +487,7 @@ export default function Watch() {
                   Không tìm thấy nguồn phát cho phim này.
                 </h3>
                 <p className="text-base sm:text-lg font-semibold text-[#E50914] mb-6 text-center">
-                  Bạn sẽ được chuyển sang trình VidSrc.
+                  Bạn sẽ được chuyển sang trình phát Multi-sub.
                 </p>
 
                 <button
@@ -495,7 +495,7 @@ export default function Watch() {
                   className="bg-[#E50914] hover:bg-red-700 text-white px-6 py-3 rounded-xl font-bold text-sm sm:text-base flex items-center gap-2.5 transition-all shadow-[0_4px_20px_rgba(229,9,20,0.4)] hover:scale-105 active:scale-95 cursor-pointer"
                 >
                   <ExternalLink className="w-5 h-5" />
-                  <span>Chuyển sang VidSrc ngay ({autoRedirectTimer}s)</span>
+                  <span>Chuyển sang Multi-sub ngay ({autoRedirectTimer}s)</span>
                 </button>
               </div>
             </div>
@@ -624,7 +624,7 @@ export default function Watch() {
                     <span>•</span>
                     <span className="text-white font-bold">{movie.quality || 'HD'}</span>
                     <span>•</span>
-                    <span>{cleanLangString(movie.lang) || 'Vietsub'}</span>
+                    <span>{cleanLangString(movie.lang, true) || 'Vietsub'}</span>
                   </p>
                 </div>
                 
@@ -652,7 +652,7 @@ export default function Watch() {
               
               <div className="max-h-[300px] md:max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                 {episodes.map((server: any, serverIdx: number) => {
-                  const isVidsrcServer = server.server_name === 'Thử Vidsrc' || server.server_name?.toLowerCase().includes('vidsrc');
+                  const isVidsrcServer = server.server_name === 'Multi-sub' || server.server_name?.toLowerCase().includes('vidsrc');
                   return (
                     <div key={serverIdx} className="mb-6 last:mb-0">
                       <div className="flex items-center justify-between mb-3 pl-1">

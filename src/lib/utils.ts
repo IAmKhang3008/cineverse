@@ -18,7 +18,7 @@ export const CAST_PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.
 
 export const DEFAULT_USER_AVATAR = "https://ui-avatars.com/api/?name=User&background=E50914&color=fff&size=256&rounded=true&bold=true";
 
-export function cleanLangString(lang: string | null | undefined): string {
+export function cleanLangString(lang: string | null | undefined, isWatchPage = false, isVietnamese = false): string {
   if (!lang) return '';
   const tokens = lang.trim().split(/\s+/);
   const seen = new Set<string>();
@@ -39,7 +39,20 @@ export function cleanLangString(lang: string | null | undefined): string {
   cleaned = cleaned.replace(/\s*([+,\-/])\s*\1+/g, ' $1');
   cleaned = cleaned.replace(/\s*([+,\-/])\s*$/g, '');
   cleaned = cleaned.replace(/^\s*([+,\-/])\s*/g, '');
-  return cleaned.trim();
+
+  cleaned = cleaned.trim();
+
+  // Always clean up any existing Multi-sub tags if they were cached
+  cleaned = cleaned.replace(/🌐 Multi-sub/gi, 'Vietsub');
+
+  if (!isWatchPage && !isVietnamese) {
+    cleaned = cleaned.replace(/vietsub/gi, '🌐 Multi-sub');
+  } else {
+    // Keep it as Vietsub on Watch page, or if it's a Vietnamese movie
+    cleaned = cleaned.replace(/vietsub/gi, 'Vietsub');
+  }
+
+  return cleaned;
 }
 
 /**
@@ -58,4 +71,16 @@ export function toMovieTitleCase(str: string): string {
       return word.charAt(0).toUpperCase() + word.slice(1);
     })
     .join(' ');
+}
+
+export function isVietnameseMovie(movie: any): boolean {
+  if (!movie) return false;
+  if (movie.country && Array.isArray(movie.country)) {
+    return movie.country.some((c: any) => 
+      c.slug?.toLowerCase() === 'viet-nam' || 
+      c.name?.toLowerCase() === 'việt nam' || 
+      c.name?.toLowerCase() === 'vietnam'
+    );
+  }
+  return false;
 }

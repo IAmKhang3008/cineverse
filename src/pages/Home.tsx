@@ -796,7 +796,7 @@ export default function Home() {
                           className="pb-2 !overflow-visible"
                         >
                           {trendingMovies.map((movie, i) => (
-                            <SwiperSlide key={`trending-${activeTab}-${movie.slug || i}`}>
+                            <SwiperSlide key={`trending-${activeTab}-${movie.slug || movie._id || 'item'}-${i}`}>
                               <MovieCard movie={movie} onHoldChange={setIsCardHolding} priority={i < 4} />
                             </SwiperSlide>
                           ))}
