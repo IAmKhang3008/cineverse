@@ -456,16 +456,7 @@ export default function Detail() {
                 return new Date(a.release_date).getTime() - new Date(b.release_date).getTime();
               });
               const allPartsPromises = sortedParts.map(async (part: any) => {
-
-                if (part.id === tmdbId) return movie;
-                try {
-                  const searchInDB = await api.search(part.title);
-                  if (searchInDB?.items && searchInDB.items.length > 0) return searchInDB.items[0];
-                  if (part.original_title && part.original_title !== part.title) {
-                    const searchInDBOriginal = await api.search(part.original_title);
-                    if (searchInDBOriginal?.items && searchInDBOriginal.items.length > 0) return searchInDBOriginal.items[0];
-                  }
-                  return {
+                const fallbackMovie = {
                     _id: part.id.toString(),
                     name: part.title,
                     origin_name: part.original_title,
@@ -474,17 +465,65 @@ export default function Detail() {
                     year: part.release_date ? parseInt(part.release_date.substring(0, 4)) : null,
                     slug: '', 
                     tmdb: { type: 'movie', id: part.id, vote_average: part.vote_average }
-                  };
-                } catch { return null; }
+                };
+
+                if (part.id === tmdbId) return { part, resolved: movie };
+
+                try {
+                  const partYear = part.release_date ? parseInt(part.release_date.substring(0, 4)) : null;
+                  let matched = null;
+
+                  const searchInDB = await api.search(part.title);
+                  if (searchInDB?.items?.length) {
+                    matched = searchInDB.items.find((item: any) => item.year === partYear || item.origin_name?.toLowerCase() === part.original_title?.toLowerCase()) || searchInDB.items[0];
+                  }
+
+                  if (!matched && part.original_title && part.original_title !== part.title) {
+                    const searchInDBOriginal = await api.search(part.original_title);
+                    if (searchInDBOriginal?.items?.length) {
+                      matched = searchInDBOriginal.items.find((item: any) => item.year === partYear) || searchInDBOriginal.items[0];
+                    }
+                  }
+
+                  return { part, resolved: matched || fallbackMovie };
+                } catch { return { part, resolved: fallbackMovie }; }
               });
-              const resolvedParts = await Promise.all(allPartsPromises);
-              if (isMounted) setCollection({ ...collectionData, parts: resolvedParts.filter(Boolean) });
+
+              const resolvedPairs = await Promise.all(allPartsPromises);
+              
+              const finalParts: any[] = [];
               const uniqueResults: any[] = [];
-              resolvedParts.forEach((m: any) => {
-                if (m && m.slug && m.slug !== slug && !uniqueResults.some(u => u.slug === m.slug)) {
-                  uniqueResults.push(m);
+              const seenSlugs = new Set();
+              
+              resolvedPairs.forEach(({ part, resolved }) => {
+                if (!resolved) return;
+                
+                if (resolved.slug) {
+                  if (!seenSlugs.has(resolved.slug)) {
+                    seenSlugs.add(resolved.slug);
+                    finalParts.push(resolved);
+                    if (resolved.slug !== slug) {
+                        uniqueResults.push(resolved);
+                    }
+                  } else {
+                    // Duplicated slug! Fallback to TMDB dummy item for this part so it renders correctly
+                    finalParts.push({
+                        _id: part.id.toString(),
+                        name: part.title,
+                        origin_name: part.original_title,
+                        thumb_url: getTmdbPosterUrl(part.poster_path, 'w500'),
+                        poster_url: getTmdbPosterUrl(part.poster_path, 'w500'),
+                        year: part.release_date ? parseInt(part.release_date.substring(0, 4)) : null,
+                        slug: '', 
+                        tmdb: { type: 'movie', id: part.id, vote_average: part.vote_average }
+                    });
+                  }
+                } else {
+                  finalParts.push(resolved);
                 }
               });
+
+              if (isMounted) setCollection({ ...collectionData, parts: finalParts });
               relatedFromDB = uniqueResults;
             }
 
@@ -1166,7 +1205,7 @@ export default function Detail() {
                     {/* Ngôn ngữ */}
                     <motion.div variants={itemVariants} className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg">
                       <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Ngôn ngữ</span>
-                      <span className="text-white font-medium">{movie.lang || 'N/A'}</span>
+                      <span className="text-white font-medium">{movie.lang ? cleanLangString(movie.lang, false, isVietnameseMovie(movie)) : "N/A"}</span>
                     </motion.div>
                     {/* Đạo diễn */}
                     <motion.div variants={itemVariants} className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-2 shadow-lg">
@@ -1395,12 +1434,12 @@ export default function Detail() {
                                 Chi tiết
                               </Link>
                             ) : (
-                              <span className="text-white/70 text-xs">Chưa có vietsub</span>
+                              <span className="text-white/70 text-xs">Chưa có nguồn phim</span>
                             )}
                           </div>
                         </div>
                         <div className="mt-3">
-                          <p className="text-xs text-[#E50914] font-bold mb-1">{part.year || new Date(part.release_date).getFullYear() || ''}</p>
+                          <p className="text-xs text-[#E50914] font-bold mb-1">{part.year || ''}</p>
                           <h3 className="text-white font-bold truncate leading-tight text-sm drop-shadow-sm">{part.name || part.title}</h3>
                           <h4 className="text-gray-400 text-xs truncate mt-0.5">{part.origin_name || part.original_title}</h4>
                         </div>

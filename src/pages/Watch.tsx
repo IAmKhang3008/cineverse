@@ -14,6 +14,19 @@ import { toMovieTitleCase } from "@/lib/utils";
 export default function Watch() {
   const { slug } = useParams<{ slug: string }>();
   const [movie, setMovie] = useState<any>(null);
+  const [bestPosterUrl, setBestPosterUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!movie) return;
+    import('@/utils/imageUtils').then(({ getMoviePoster }) => {
+      getMoviePoster(
+        movie.tmdb?.poster_path || movie.poster_path,
+        movie.name || movie.origin_name,
+        movie.poster_url || movie.thumb_url,
+        'w780'
+      ).then(url => setBestPosterUrl(url));
+    });
+  }, [movie]);
   const [episodes, setEpisodes] = useState<any[]>([]);
   const [currentEpisode, setCurrentEpisode] = useState<any>(null);
   
@@ -83,9 +96,9 @@ export default function Watch() {
              let link_embed = '';
              if (isTv) {
                const seasonNum = res.movie?.tmdb?.season || 1; 
-               link_embed = `https://vidsrc.tw/embed/tv?tmdb=${tmdbId || ''}&season=${seasonNum}&episode=${epNum}&ds_lang=vi,en&autoplay=1`;
+               link_embed = `https://vidsrc.tw/embed/tv?tmdb=${tmdbId || ''}&season=${seasonNum}&episode=${epNum}&ds_lang=en,vi&autoplay=1`;
              } else {
-               link_embed = `https://vidsrc.tw/embed/movie?tmdb=${tmdbId || ''}&ds_lang=vi,en&autoplay=1`;
+               link_embed = `https://vidsrc.tw/embed/movie?tmdb=${tmdbId || ''}&ds_lang=en,vi&autoplay=1`;
              }
 
              return {
@@ -95,8 +108,8 @@ export default function Watch() {
           });
         } else {
           let link_embed = isTv
-            ? `https://vidsrc.tw/embed/tv?tmdb=${tmdbId || ''}&season=1&episode=1&ds_lang=vi,en&autoplay=1`
-            : `https://vidsrc.tw/embed/movie?tmdb=${tmdbId || ''}&ds_lang=vi,en&autoplay=1`;
+            ? `https://vidsrc.tw/embed/tv?tmdb=${tmdbId || ''}&season=1&episode=1&ds_lang=en,vi&autoplay=1`
+            : `https://vidsrc.tw/embed/movie?tmdb=${tmdbId || ''}&ds_lang=en,vi&autoplay=1`;
           vidsrcServerData = [{
             name: 'Full',
             slug: 'full',
@@ -251,7 +264,7 @@ export default function Watch() {
     } else {
       isTv = localType === 'series' || localType === 'tvshows' || epsCount > 1 || (localType === 'hoathinh' && totalEps > 1);
     }
-    const fallbackUrl = isTv ? `https://vidsrc.tw/embed/tv?tmdb=${tmdbId || ''}&season=1&episode=1&ds_lang=vi,en&autoplay=1` : `https://vidsrc.tw/embed/movie?tmdb=${tmdbId || ''}&ds_lang=vi,en&autoplay=1`;
+    const fallbackUrl = isTv ? `https://vidsrc.tw/embed/tv?tmdb=${tmdbId || ''}&season=1&episode=1&ds_lang=en,vi&autoplay=1` : `https://vidsrc.tw/embed/movie?tmdb=${tmdbId || ''}&ds_lang=en,vi&autoplay=1`;
     const urlToOpen = targetEp?.link_embed || fallbackUrl;
 
     if (vidsrcServerObj && targetEp) {
@@ -413,7 +426,7 @@ export default function Watch() {
               {movie?.poster_url && (
                 <div 
                   className="absolute inset-0 bg-cover bg-center opacity-15 blur-2xl scale-125 pointer-events-none"
-                  style={{ backgroundImage: `url(${getImageUrl(movie.poster_url)})` }}
+                  style={{ backgroundImage: `url(${bestPosterUrl || getImageUrl(movie.poster_url)})` }}
                 />
               )}
               <div className="absolute inset-0 bg-gradient-to-t from-[#0d0d12] via-[#0d0d12]/85 to-[#0d0d12]/95 pointer-events-none" />
@@ -472,7 +485,7 @@ export default function Watch() {
               {movie?.poster_url && (
                 <div 
                   className="absolute inset-0 bg-cover bg-center opacity-15 blur-2xl scale-125 pointer-events-none"
-                  style={{ backgroundImage: `url(${getImageUrl(movie.poster_url)})` }}
+                  style={{ backgroundImage: `url(${bestPosterUrl || getImageUrl(movie.poster_url)})` }}
                 />
               )}
               <div className="absolute inset-0 bg-gradient-to-t from-[#0d0d12] via-[#0d0d12]/85 to-[#0d0d12]/95 pointer-events-none" />
@@ -719,12 +732,7 @@ export default function Watch() {
                     className="flex items-center gap-3 md:gap-4 p-2 rounded-lg hover:bg-[#2A2A2A] transition-colors group"
                   >
                     <div className="w-[50px] h-[75px] md:w-[60px] md:h-[90px] rounded-md overflow-hidden flex-shrink-0 bg-gray-800 border border-white/10">
-                      <img 
-                        src={getMoviePosterSync(m.poster_path, m.poster_url || m.thumb_url)} 
-                        alt={m.name}
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                        referrerPolicy="no-referrer"
-                      />
+                      <AsyncRelatedPoster movie={m} />
                     </div>
                     <div className="flex flex-col justify-center">
                       <h4 
@@ -745,5 +753,99 @@ export default function Watch() {
         </div>
       </div>
     </motion.div>
+  );
+}
+
+
+function AsyncRelatedPoster({ movie }: { movie: any }) {
+  const [posterUrl, setPosterUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchBestPoster = async () => {
+      try {
+        const { getMoviePoster } = await import('@/utils/imageUtils');
+        
+        let tmdbCandidate = movie.poster_path || movie.tmdb?.poster_path;
+        const isAlreadyTmdbUrl = movie.poster_url && movie.poster_url.includes('image.tmdb.org');
+        
+        if (tmdbCandidate || isAlreadyTmdbUrl) {
+          const resolvedUrl = await getMoviePoster(
+            tmdbCandidate,
+            movie.name || movie.origin_name,
+            movie.poster_url || movie.thumb_url,
+            'w185'
+          );
+          if (resolvedUrl && !cancelled) {
+            setPosterUrl(resolvedUrl);
+            return;
+          }
+        }
+
+        let tmdbId = movie.tmdb?.id;
+        let tmdbType = movie.tmdb?.type || 'movie';
+        
+        if (!tmdbId && (movie.origin_name || movie.name)) {
+          const { searchTmdbWithCache } = await import('@/lib/api');
+          const searchResult = await searchTmdbWithCache(movie);
+          if (searchResult?.id) {
+            tmdbId = searchResult.id;
+            tmdbType = searchResult.media_type || 'movie';
+          }
+        }
+
+        if (tmdbId) {
+          const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
+          const combinedUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=en-US&append_to_response=images&include_image_language=en,null`;
+          const { fetchWithCache, TTL } = await import('@/lib/cache');
+          const { extractBestPoster } = await import('@/lib/api');
+          const combinedData = await fetchWithCache(`tmdb_combined_${tmdbType}_${tmdbId}`, () => fetch(combinedUrl).then(r => r.json()), TTL.TMDB_STATIC);
+          const bestPoster = extractBestPoster(combinedData.images);
+          if (bestPoster && !cancelled) {
+            setPosterUrl(bestPoster);
+            return;
+          }
+          if (combinedData.poster_path && !cancelled) {
+            setPosterUrl(`https://image.tmdb.org/t/p/w185${combinedData.poster_path}`);
+            return;
+          }
+        }
+
+        const { api } = await import('@/lib/api');
+        const imagesData = await api.getMovieImages(movie.slug).catch(() => null);
+        if (imagesData?.images?.length > 0) {
+          const { getImageUrl } = await import('@/lib/api');
+          const basePosterUrl = imagesData.image_sizes?.poster?.w500 || "https://image.tmdb.org/t/p/w500";
+          const posterImg = imagesData.images.find((img: any) => img.aspect_ratio && img.aspect_ratio < 1.0);
+          if (posterImg && !cancelled) {
+            setPosterUrl(getImageUrl(`${basePosterUrl}${posterImg.file_path}`, 'poster'));
+            return;
+          }
+        }
+
+        if (!cancelled) {
+          const { getImageUrl } = await import('@/lib/api');
+          setPosterUrl(getImageUrl(movie.poster_url || movie.thumb_url, 'poster'));
+        }
+
+      } catch (err) {
+        if (!cancelled) {
+          const { getImageUrl } = await import('@/lib/api');
+          setPosterUrl(getImageUrl(movie.poster_url || movie.thumb_url, 'poster'));
+        }
+      }
+    };
+    fetchBestPoster();
+    return () => { cancelled = true; };
+  }, [movie]);
+
+  return (
+    <img 
+      src={posterUrl || ''} 
+      alt={movie.name}
+      className={`w-full h-full object-cover group-hover:scale-110 transition-transform duration-300 ${!posterUrl ? 'opacity-0' : 'opacity-100'}`}
+      referrerPolicy="no-referrer"
+      loading="lazy"
+    />
   );
 }
