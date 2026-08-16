@@ -75,7 +75,7 @@ export default function Watch() {
           const tmdbRes = await searchTmdbWithCache(res.movie);
           if (tmdbRes?.id) {
             tmdbId = String(tmdbRes.id);
-            res.movie.tmdb = { ...(res.movie.tmdb || {}), id: tmdbId, type: tmdbRes.media_type };
+            res.movie.tmdb = { ...(res.movie.tmdb || {}), id: tmdbId, type: tmdbRes.media_type, season: tmdbRes.season || 1 };
           }
         }
 
@@ -111,8 +111,9 @@ export default function Watch() {
              };
           });
         } else {
+          const fallbackSeason = res.movie?.tmdb?.season || 1;
           let link_embed = isTv
-            ? `https://vidsrc.tw/embed/tv?tmdb=${tmdbId || ''}&season=1&episode=1&ds_lang=en,vi&autoplay=1`
+            ? `https://vidsrc.tw/embed/tv?tmdb=${tmdbId || ''}&season=${fallbackSeason}&episode=1&ds_lang=en,vi&autoplay=1`
             : `https://vidsrc.tw/embed/movie?tmdb=${tmdbId || ''}&ds_lang=en,vi&autoplay=1`;
           vidsrcServerData = [{
             name: 'Full',
@@ -253,7 +254,7 @@ export default function Watch() {
       const tmdbRes = await searchTmdbWithCache(movie);
       if (tmdbRes?.id) {
         tmdbId = String(tmdbRes.id);
-        movie.tmdb = { ...(movie.tmdb || {}), id: tmdbId, type: tmdbRes.media_type };
+        movie.tmdb = { ...(movie.tmdb || {}), id: tmdbId, type: tmdbRes.media_type, season: tmdbRes.season || 1 };
       }
     }
 
@@ -268,7 +269,7 @@ export default function Watch() {
     } else {
       isTv = localType === 'series' || localType === 'tvshows' || epsCount > 1 || (localType === 'hoathinh' && totalEps > 1);
     }
-    const fallbackUrl = isTv ? `https://vidsrc.tw/embed/tv?tmdb=${tmdbId || ''}&season=1&episode=1&ds_lang=en,vi&autoplay=1` : `https://vidsrc.tw/embed/movie?tmdb=${tmdbId || ''}&ds_lang=en,vi&autoplay=1`;
+    const seasonNum = movie?.tmdb?.season || 1; const fallbackUrl = isTv ? `https://vidsrc.tw/embed/tv?tmdb=${tmdbId || ''}&season=${seasonNum}&episode=1&ds_lang=en,vi&autoplay=1` : `https://vidsrc.tw/embed/movie?tmdb=${tmdbId || ''}&ds_lang=en,vi&autoplay=1`;
     const urlToOpen = targetEp?.link_embed || fallbackUrl;
 
     if (vidsrcServerObj && targetEp) {

@@ -327,18 +327,22 @@ export async function fetchTmdbSearch(title: string, year?: string, type?: 'movi
         const itemYearStr = item.release_date ? item.release_date.substring(0, 4) : (item.first_air_date ? item.first_air_date.substring(0, 4) : null);
         const itemYear = itemYearStr ? parseInt(itemYearStr) : null;
         
-        // Exact year match is crucial
+        const nameMatch = item.title?.toLowerCase() === cleanTitle.toLowerCase() || item.name?.toLowerCase() === cleanTitle.toLowerCase();
+        const originNameMatch = item.original_title?.toLowerCase() === cleanTitle.toLowerCase() || item.original_name?.toLowerCase() === cleanTitle.toLowerCase();
+        
+        // Name match is the most important
+        if (nameMatch || originNameMatch) {
+            score += 20;
+        }
+
+        // Exact year match is crucial for separating reboots, but for later seasons of TV shows, the year might be the season's year, not the show's premiere year.
         if (itemYear === targetYear) {
             score += 10;
         } else if (itemYear && Math.abs(itemYear - targetYear) === 1) {
             score += 5; // Sometimes TMDB year and PhimAPI year differ by 1
-        }
-        
-        const nameMatch = item.title?.toLowerCase() === cleanTitle.toLowerCase() || item.name?.toLowerCase() === cleanTitle.toLowerCase();
-        const originNameMatch = item.original_title?.toLowerCase() === cleanTitle.toLowerCase() || item.original_name?.toLowerCase() === cleanTitle.toLowerCase();
-        
-        if (nameMatch || originNameMatch) {
-            score += 5;
+        } else if (type === 'tv' && itemYear && itemYear < targetYear) {
+            // For TV shows, if the show premiered before the target year, it's very likely valid (e.g. Season 2 in 2023, premiered in 2021)
+            score += 3;
         }
 
         if (score > bestScore) {
@@ -374,6 +378,23 @@ export function extractTmdbObj(m: any): TmdbMovieInfo | undefined {
   let type = rawM.tmdb?.type || (rawM.type === 'series' || rawM.type === 'hoathinh' || rawM.type === 'tvshows' ? 'tv' : 'movie');
   let season = rawM.tmdb?.season || rawM.season || 1;
 
+  // Try extracting season from title if it's still 1
+  if (type === 'tv' && season === 1) {
+      const searchName = rawM.name || rawM.title || '';
+      const searchOrigin = rawM.origin_name || '';
+      const seasonRegex = /(?:phần|mùa|season|ss)\s*(\d+)/i;
+      
+      const originMatch = searchOrigin.match(seasonRegex);
+      if (originMatch) {
+          season = parseInt(originMatch[1], 10);
+      } else {
+          const nameMatch = searchName.match(seasonRegex);
+          if (nameMatch) {
+              season = parseInt(nameMatch[1], 10);
+          }
+      }
+  }
+
   if (id || imdbId || (rawM.tmdb && typeof rawM.tmdb === 'object')) {
     return {
       ...(typeof rawM.tmdb === 'object' ? rawM.tmdb : {}),
@@ -389,42 +410,62 @@ export function extractTmdbObj(m: any): TmdbMovieInfo | undefined {
 export async function searchTmdbWithCache(movie: any) {
   if (!TMDB_ENABLED || !movie) return null;
 
+  let extractedSeason = 1;
+  const isTv = movie.type === 'series' || movie.type === 'hoathinh' || movie.type === 'tvshows';
+  const targetType = isTv ? 'tv' : 'movie';
+
+  let searchName = movie.name || movie.title || '';
+  let searchOrigin = movie.origin_name || '';
+
+  // Extract season for TV shows
+  if (isTv) {
+    const seasonRegex = /(?:phần|mùa|season|ss)\s*(\d+)/i;
+    const originMatch = searchOrigin.match(seasonRegex);
+    if (originMatch) {
+      extractedSeason = parseInt(originMatch[1], 10);
+      searchOrigin = searchOrigin.replace(seasonRegex, '').replace(/[\(\)-]+$/, '').trim();
+    }
+    const nameMatch = searchName.match(seasonRegex);
+    if (nameMatch) {
+      if (!originMatch) extractedSeason = parseInt(nameMatch[1], 10);
+      searchName = searchName.replace(seasonRegex, '').replace(/[\(\)-]+$/, '').trim();
+    }
+  }
+
   // 1. Direct TMDB ID if present
   const tmdbObj = extractTmdbObj(movie);
   if (tmdbObj?.id) {
-    return { id: Number(tmdbObj.id), media_type: tmdbObj.type || 'movie' };
+    return { id: Number(tmdbObj.id), media_type: tmdbObj.type || 'movie', season: tmdbObj.season || extractedSeason };
   }
 
   // 2. Direct IMDb ID if present
   if (tmdbObj?.imdb_id) {
     const findResult = await fetchWithCache(`tmdb_find_${tmdbObj.imdb_id}`, () => fetchTmdbByExternalId(tmdbObj.imdb_id!, 'imdb_id'), TTL.TMDB_STATIC);
     if (findResult?.id) {
-      return findResult;
+      return { ...findResult, season: extractedSeason };
     }
   }
 
   // 3. Search by title
   const searchYear = String(movie.year || '');
-  const searchName = movie.name || movie.title || '';
-  const searchOrigin = movie.origin_name || '';
-  const isTv = movie.type === 'series' || movie.type === 'hoathinh' || movie.type === 'tvshows';
-  const targetType = isTv ? 'tv' : 'movie';
 
-  const cacheKey = `tmdb_unified_search_v2_${movie.slug || searchOrigin || searchName}_${searchYear}`;
+  const cacheKey = `tmdb_unified_search_v3_${movie.slug || searchOrigin || searchName}_${searchYear}`;
 
   return fetchWithCache(cacheKey, async () => {
+    let finalResult = null;
     // Await sequentially to prioritize original name over localized name
     if (searchOrigin) {
-      const res1 = await fetchTmdbSearch(searchOrigin, searchYear, targetType);
-      if (res1) return res1;
+      finalResult = await fetchTmdbSearch(searchOrigin, searchYear, targetType);
     }
-    if (searchName && searchName !== searchOrigin) {
-      const res2 = await fetchTmdbSearch(searchName, searchYear, targetType);
-      if (res2) return res2;
+    if (!finalResult && searchName && searchName !== searchOrigin) {
+      finalResult = await fetchTmdbSearch(searchName, searchYear, targetType);
     }
-    if (searchOrigin) {
-      const res3 = await fetchTmdbSearch(searchOrigin, searchYear, 'multi');
-      if (res3) return res3;
+    if (!finalResult && searchOrigin) {
+      finalResult = await fetchTmdbSearch(searchOrigin, searchYear, 'multi');
+    }
+    
+    if (finalResult) {
+      return { ...finalResult, season: extractedSeason };
     }
     return null;
   }, TTL.TMDB_STATIC);
@@ -761,12 +802,12 @@ export const api = {
       if (TMDB_ENABLED) {
         if (existingTmdb?.id) {
           // 1. Phimapi provided TMDB ID directly -> use it instantly
-          tmdbSearch = { id: Number(existingTmdb.id), title: rawMovie.name || '', original_title: rawMovie.origin_name || '', media_type: existingTmdb.type || 'movie' };
+          tmdbSearch = { id: Number(existingTmdb.id), title: rawMovie.name || '', original_title: rawMovie.origin_name || '', media_type: existingTmdb.type || 'movie', season: existingTmdb.season || 1 };
         } else if (existingTmdb?.imdb_id) {
           // 2. Phimapi provided IMDb ID -> lookup TMDb /find endpoint directly
           const findRes = await fetchWithCache(`tmdb_find_${existingTmdb.imdb_id}`, () => fetchTmdbByExternalId(existingTmdb.imdb_id!, 'imdb_id'), TTL.TMDB_STATIC);
           if (findRes?.id) {
-            tmdbSearch = findRes;
+            tmdbSearch = { ...findRes, season: existingTmdb.season || 1 };
           }
         }
 
