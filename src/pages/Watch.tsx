@@ -63,7 +63,11 @@ export default function Watch() {
         const res = await api.getMovieDetail(slug);
         setMovie(res.movie);
         
-        let fetchedEpisodes = res.episodes || [];
+        // 1. Shallow copy to avoid mutating the cached res.episodes array
+        // 2. Filter out any existing Multi-sub/vidsrc to prevent duplicate injections on re-renders/cache hits
+        let fetchedEpisodes = [...(res.episodes || [])].filter(s => 
+          s.server_name !== 'Multi-sub' && !s.server_name?.toLowerCase().includes('vidsrc')
+        );
         
         // Inject VidSrc Server if TMDB ID is available or resolved
         let tmdbId = res.movie?.tmdb?.id;
@@ -481,7 +485,7 @@ export default function Watch() {
               </div>
             </div>
           ) : isStreamBrokenOrTrailer ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0d0d12] p-6 text-center z-20 overflow-hidden">
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0d0d12] p-4 sm:p-6 text-center z-20 overflow-hidden">
               {movie?.poster_url && (
                 <div 
                   className="absolute inset-0 bg-cover bg-center opacity-15 blur-2xl scale-125 pointer-events-none"
@@ -490,25 +494,25 @@ export default function Watch() {
               )}
               <div className="absolute inset-0 bg-gradient-to-t from-[#0d0d12] via-[#0d0d12]/85 to-[#0d0d12]/95 pointer-events-none" />
 
-              <div className="relative z-10 max-w-xl mx-auto flex flex-col items-center px-4">
-                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-400 text-xs font-semibold tracking-wide mb-5 shadow-[0_0_15px_rgba(245,158,11,0.25)] animate-pulse">
-                  <AlertCircle className="w-4 h-4 text-amber-400" />
-                  <span>Tự động chuyển nguồn phát ({autoRedirectTimer}s)</span>
+              <div className="relative z-10 w-full max-w-lg mx-auto flex flex-col items-center px-4 sm:px-6">
+                <div className="inline-flex items-center gap-1.5 sm:gap-2 px-3 py-1 sm:px-4 sm:py-1.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-400 text-[10px] sm:text-xs font-semibold tracking-wide mb-4 sm:mb-6 shadow-[0_0_15px_rgba(245,158,11,0.25)] animate-pulse">
+                  <AlertCircle className="w-3 h-3 sm:w-4 sm:h-4 text-amber-400" />
+                  <span>Đang tự động chuyển nguồn ({autoRedirectTimer}s)</span>
                 </div>
 
-                <h3 className="text-xl sm:text-2xl md:text-3xl font-heading font-extrabold text-white leading-snug mb-2 tracking-wide drop-shadow-md text-center">
-                  Không tìm thấy nguồn phát cho phim này.
+                <h3 className="text-base sm:text-xl md:text-2xl font-heading font-bold text-white leading-tight mb-2 sm:mb-3 tracking-wide drop-shadow-md text-center">
+                  Máy chủ hiện tại không khả dụng
                 </h3>
-                <p className="text-base sm:text-lg font-semibold text-[#E50914] mb-6 text-center">
-                  Bạn sẽ được chuyển sang trình phát Multi-sub.
+                <p className="text-[#A0A0A0] text-[11px] sm:text-sm mb-6 max-w-[90%] sm:max-w-md text-center">
+                  Hệ thống đang điều hướng sang trình phát <span className="text-[#E50914] font-semibold">Multi-sub</span>.
                 </p>
 
                 <button
                   onClick={triggerVidsrcAuto}
-                  className="bg-[#E50914] hover:bg-red-700 text-white px-6 py-3 rounded-xl font-bold text-sm sm:text-base flex items-center gap-2.5 transition-all shadow-[0_4px_20px_rgba(229,9,20,0.4)] hover:scale-105 active:scale-95 cursor-pointer"
+                  className="w-full sm:w-auto bg-[#E50914] hover:bg-red-700 text-white px-5 py-3 sm:px-6 sm:py-3 rounded-[10px] font-semibold text-[13px] sm:text-sm flex items-center justify-center gap-2 transition-all shadow-[0_4px_20px_rgba(229,9,20,0.4)] hover:scale-105 active:scale-95 cursor-pointer"
                 >
-                  <ExternalLink className="w-5 h-5" />
-                  <span>Chuyển sang Multi-sub ngay ({autoRedirectTimer}s)</span>
+                  <ExternalLink className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
+                  <span>Chuyển ngay ({autoRedirectTimer}s)</span>
                 </button>
               </div>
             </div>
@@ -673,8 +677,8 @@ export default function Watch() {
                           <span>{formatServerDisplayName(server.server_name)}</span>
                         </h4>
                         {isVidsrcServer && (
-                          <span className="text-[10px] bg-[#E50914]/20 text-[#E50914] border border-[#E50914]/40 px-2 py-0.5 rounded-full font-semibold">
-                            Mở Tab Mới
+                          <span className="text-[8px] sm:text-[10px] bg-yellow-500/20 text-yellow-500 border border-yellow-500/40 px-2 py-0.5 rounded-full font-medium sm:font-semibold whitespace-nowrap" title="Nguồn phụ này không phải lúc nào cũng có sẵn phim">
+                            Có thể không có sẵn
                           </span>
                         )}
                       </div>
@@ -841,7 +845,7 @@ function AsyncRelatedPoster({ movie }: { movie: any }) {
 
   return (
     <img 
-      src={posterUrl || ''} 
+      src={posterUrl || undefined} 
       alt={movie.name}
       className={`w-full h-full object-cover group-hover:scale-110 transition-transform duration-300 ${!posterUrl ? 'opacity-0' : 'opacity-100'}`}
       referrerPolicy="no-referrer"

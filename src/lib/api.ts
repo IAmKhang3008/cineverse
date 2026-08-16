@@ -292,28 +292,66 @@ export async function fetchTmdbSearch(title: string, year?: string, type?: 'movi
     let yearParam = '';
     if (type === 'movie') {
       endpoint = '/3/search/movie';
+      // Do not strictly enforce year in query yet, we will filter manually to be safe
       yearParam = year ? `&year=${year}&primary_release_year=${year}` : '';
     } else if (type === 'tv') {
       endpoint = '/3/search/tv';
       yearParam = year ? `&first_air_date_year=${year}` : '';
-    } else if (year) {
-      yearParam = `&year=${year}`;
     }
 
-    const res = await fetch(`https://api.themoviedb.org${endpoint}?api_key=${TMDB_KEY}&query=${encodeURIComponent(cleanTitle)}${yearParam}&language=en-US`);
-    if (!res.ok) return null;
-    const data = await res.json();
-    const results = data.results || [];
+    // Try with year param first
+    let res = await fetch(`https://api.themoviedb.org${endpoint}?api_key=${TMDB_KEY}&query=${encodeURIComponent(cleanTitle)}${yearParam}&language=en-US`);
+    let data = await res.json();
+    let results = data.results || [];
+
+    // If no results, fallback to search without year param
+    if (!results.length && year) {
+        res = await fetch(`https://api.themoviedb.org${endpoint}?api_key=${TMDB_KEY}&query=${encodeURIComponent(cleanTitle)}&language=en-US`);
+        data = await res.json();
+        results = data.results || [];
+    }
+
     if (!results.length) return null;
 
     const valid = results.filter((r: any) => r.media_type !== 'person');
     if (!valid.length) return null;
 
-    const top = valid[0];
-    if (!top.media_type) {
-      top.media_type = type || (top.first_air_date ? 'tv' : 'movie');
+    let bestMatch = valid[0];
+    const targetYear = year ? parseInt(year) : null;
+
+    if (targetYear) {
+      // Score results
+      let bestScore = -1;
+      for (const item of valid) {
+        let score = 0;
+        const itemYearStr = item.release_date ? item.release_date.substring(0, 4) : (item.first_air_date ? item.first_air_date.substring(0, 4) : null);
+        const itemYear = itemYearStr ? parseInt(itemYearStr) : null;
+        
+        // Exact year match is crucial
+        if (itemYear === targetYear) {
+            score += 10;
+        } else if (itemYear && Math.abs(itemYear - targetYear) === 1) {
+            score += 5; // Sometimes TMDB year and PhimAPI year differ by 1
+        }
+        
+        const nameMatch = item.title?.toLowerCase() === cleanTitle.toLowerCase() || item.name?.toLowerCase() === cleanTitle.toLowerCase();
+        const originNameMatch = item.original_title?.toLowerCase() === cleanTitle.toLowerCase() || item.original_name?.toLowerCase() === cleanTitle.toLowerCase();
+        
+        if (nameMatch || originNameMatch) {
+            score += 5;
+        }
+
+        if (score > bestScore) {
+            bestScore = score;
+            bestMatch = item;
+        }
+      }
     }
-    return top;
+
+    if (!bestMatch.media_type) {
+      bestMatch.media_type = type || (bestMatch.first_air_date ? 'tv' : 'movie');
+    }
+    return bestMatch;
   } catch {
     return null;
   }
@@ -372,32 +410,23 @@ export async function searchTmdbWithCache(movie: any) {
   const isTv = movie.type === 'series' || movie.type === 'hoathinh' || movie.type === 'tvshows';
   const targetType = isTv ? 'tv' : 'movie';
 
-  const cacheKey = `tmdb_unified_search_${movie.slug || searchOrigin || searchName}_${searchYear}`;
+  const cacheKey = `tmdb_unified_search_v2_${movie.slug || searchOrigin || searchName}_${searchYear}`;
 
   return fetchWithCache(cacheKey, async () => {
-    const searchPromises: Promise<any>[] = [];
-
+    // Await sequentially to prioritize original name over localized name
     if (searchOrigin) {
-      searchPromises.push(fetchTmdbSearch(searchOrigin, searchYear, targetType));
+      const res1 = await fetchTmdbSearch(searchOrigin, searchYear, targetType);
+      if (res1) return res1;
     }
     if (searchName && searchName !== searchOrigin) {
-      searchPromises.push(fetchTmdbSearch(searchName, searchYear, targetType));
+      const res2 = await fetchTmdbSearch(searchName, searchYear, targetType);
+      if (res2) return res2;
     }
     if (searchOrigin) {
-      searchPromises.push(fetchTmdbSearch(searchOrigin, searchYear, 'multi'));
+      const res3 = await fetchTmdbSearch(searchOrigin, searchYear, 'multi');
+      if (res3) return res3;
     }
-
-    if (searchPromises.length === 0) return null;
-
-    try {
-      const result = await Promise.race([
-        Promise.any(searchPromises.map(p => p.then(r => r ?? Promise.reject('null')))),
-        new Promise<null>(r => setTimeout(() => r(null), 3500)),
-      ]);
-      return result;
-    } catch {
-      return null;
-    }
+    return null;
   }, TTL.TMDB_STATIC);
 }
 
