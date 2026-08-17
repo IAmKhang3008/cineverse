@@ -100,7 +100,7 @@ export default function Watch() {
              let link_embed = '';
              if (isTv) {
                const seasonNum = res.movie?.tmdb?.season || 1; 
-               link_embed = `https://vidsrc.tw/embed/tv?tmdb=${tmdbId || ''}&season=${seasonNum}&episode=${epNum}&ds_lang=en,vi&autoplay=1`;
+               link_embed = `https://vidsrc.tw/embed/tv?tmdb=${tmdbId || ''}&episode=${epNum}&ds_lang=en,vi&autoplay=1`; // Omit season for VidSrc native picker, keep exact episode
              } else {
                link_embed = `https://vidsrc.tw/embed/movie?tmdb=${tmdbId || ''}&ds_lang=en,vi&autoplay=1`;
              }
@@ -113,7 +113,7 @@ export default function Watch() {
         } else {
           const fallbackSeason = res.movie?.tmdb?.season || 1;
           let link_embed = isTv
-            ? `https://vidsrc.tw/embed/tv?tmdb=${tmdbId || ''}&season=${fallbackSeason}&episode=1&ds_lang=en,vi&autoplay=1`
+            ? `https://vidsrc.tw/embed/tv?tmdb=${tmdbId || ''}&ds_lang=en,vi&autoplay=1`
             : `https://vidsrc.tw/embed/movie?tmdb=${tmdbId || ''}&ds_lang=en,vi&autoplay=1`;
           vidsrcServerData = [{
             name: 'Full',
@@ -269,7 +269,7 @@ export default function Watch() {
     } else {
       isTv = localType === 'series' || localType === 'tvshows' || epsCount > 1 || (localType === 'hoathinh' && totalEps > 1);
     }
-    const seasonNum = movie?.tmdb?.season || 1; const fallbackUrl = isTv ? `https://vidsrc.tw/embed/tv?tmdb=${tmdbId || ''}&season=${seasonNum}&episode=1&ds_lang=en,vi&autoplay=1` : `https://vidsrc.tw/embed/movie?tmdb=${tmdbId || ''}&ds_lang=en,vi&autoplay=1`;
+    const fallbackUrl = isTv ? `https://vidsrc.tw/embed/tv?tmdb=${tmdbId || ''}&ds_lang=en,vi&autoplay=1` : `https://vidsrc.tw/embed/movie?tmdb=${tmdbId || ''}&ds_lang=en,vi&autoplay=1`;
     const urlToOpen = targetEp?.link_embed || fallbackUrl;
 
     if (vidsrcServerObj && targetEp) {
