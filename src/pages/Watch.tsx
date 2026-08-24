@@ -66,7 +66,7 @@ export default function Watch() {
         // 1. Shallow copy to avoid mutating the cached res.episodes array
         // 2. Filter out any existing Multi-sub/vidsrc to prevent duplicate injections on re-renders/cache hits
         let fetchedEpisodes = [...(res.episodes || [])].filter(s => 
-          s.server_name !== 'Multi-sub' && !s.server_name?.toLowerCase().includes('vidsrc')
+          s.server_name !== 'Multi-sub' && !s.server_name?.toLowerCase().includes('peachify')
         );
         
         // Inject VidSrc Server if TMDB ID is available or resolved
@@ -91,18 +91,18 @@ export default function Watch() {
           isTv = localType === 'series' || localType === 'tvshows' || epsCount > 1 || (localType === 'hoathinh' && totalEps > 1);
         }
         
-        let vidsrcServerData: any[] = [];
+        let multiSubServerData: any[] = [];
         if (fetchedEpisodes[0]?.server_data?.length) {
-          vidsrcServerData = fetchedEpisodes[0].server_data.map((ep: any) => {
+          multiSubServerData = fetchedEpisodes[0].server_data.map((ep: any) => {
              const epMatch = ep.name.match(/\d+/);
              const epNum = epMatch ? epMatch[0] : '1';
              
              let link_embed = '';
              if (isTv) {
                const seasonNum = res.movie?.tmdb?.season || 1; 
-               link_embed = `https://vidsrc.tw/embed/tv?tmdb=${tmdbId || ''}&episode=${epNum}&ds_lang=en,vi&autoplay=1`; // Omit season for VidSrc native picker, keep exact episode
+               link_embed = `https://peachify.pro/embed/tv/${tmdbId || ''}/${seasonNum}/${epNum}`; // Use Peachify for TV shows
              } else {
-               link_embed = `https://vidsrc.tw/embed/movie?tmdb=${tmdbId || ''}&ds_lang=en,vi&autoplay=1`;
+               link_embed = `https://peachify.pro/embed/movie/${tmdbId || ''}`; // Use Peachify for Movies
              }
 
              return {
@@ -113,9 +113,9 @@ export default function Watch() {
         } else {
           const fallbackSeason = res.movie?.tmdb?.season || 1;
           let link_embed = isTv
-            ? `https://vidsrc.tw/embed/tv?tmdb=${tmdbId || ''}&ds_lang=en,vi&autoplay=1`
-            : `https://vidsrc.tw/embed/movie?tmdb=${tmdbId || ''}&ds_lang=en,vi&autoplay=1`;
-          vidsrcServerData = [{
+            ? `https://peachify.pro/embed/tv/${tmdbId || ''}/${fallbackSeason}/1`
+            : `https://peachify.pro/embed/movie/${tmdbId || ''}`;
+          multiSubServerData = [{
             name: 'Full',
             slug: 'full',
             filename: 'Full',
@@ -123,10 +123,10 @@ export default function Watch() {
           }];
         }
 
-        if (vidsrcServerData.length > 0) {
+        if (multiSubServerData.length > 0) {
            fetchedEpisodes.push({
              server_name: "Multi-sub",
-             server_data: vidsrcServerData
+             server_data: multiSubServerData
            });
         }
 
@@ -215,8 +215,8 @@ export default function Watch() {
     return clean;
   };
 
-  const isVidsrc = currentServer === 'Multi-sub' || currentServer?.toLowerCase().includes('vidsrc');
-  const vietsubServer = episodes.find(s => s.server_name !== 'Multi-sub' && !s.server_name?.toLowerCase().includes('vidsrc')) || episodes[0];
+  const isMultiSub = currentServer === 'Multi-sub' || currentServer?.toLowerCase().includes('peachify');
+  const vietsubServer = episodes.find(s => s.server_name !== 'Multi-sub' && !s.server_name?.toLowerCase().includes('peachify')) || episodes[0];
 
   const handleSwitchToVietsub = () => {
     if (vietsubServer && vietsubServer.server_data?.[0]) {
@@ -232,7 +232,7 @@ export default function Watch() {
     (currentEpisode?.name?.toLowerCase().trim() === 'trailer' || currentEpisode?.slug?.toLowerCase().trim() === 'trailer') &&
     !episodes.some(s => 
       s.server_name !== 'Multi-sub' && 
-      !s.server_name?.toLowerCase().includes('vidsrc') && 
+      !s.server_name?.toLowerCase().includes('peachify') && 
       s.server_data?.some((ep: any) => 
         ep.slug?.toLowerCase().trim() !== 'trailer' && 
         ep.name?.toLowerCase().trim() !== 'trailer'
@@ -240,14 +240,14 @@ export default function Watch() {
     )
   );
 
-  const isStreamBrokenOrTrailer = Boolean(!loading && movie && currentEpisode && !isVidsrc && (isLinkBroken || isOnlyTrailer));
+  const isStreamBrokenOrTrailer = Boolean(!loading && movie && currentEpisode && !isMultiSub && (isLinkBroken || isOnlyTrailer));
 
   const [autoRedirectTimer, setAutoRedirectTimer] = useState<number>(3);
   const hasTriggeredRef = useRef<boolean>(false);
 
-  const triggerVidsrcAuto = async () => {
-    let vidsrcServerObj = episodes.find(s => s.server_name === 'Multi-sub' || s.server_name?.toLowerCase().includes('vidsrc'));
-    let targetEp = vidsrcServerObj?.server_data?.[0];
+  const triggerMultiSubAuto = async () => {
+    let multiSubServerObj = episodes.find(s => s.server_name === 'Multi-sub' || s.server_name?.toLowerCase().includes('peachify'));
+    let targetEp = multiSubServerObj?.server_data?.[0];
     let tmdbId = movie?.tmdb?.id;
 
     if (!tmdbId && movie) {
@@ -269,17 +269,17 @@ export default function Watch() {
     } else {
       isTv = localType === 'series' || localType === 'tvshows' || epsCount > 1 || (localType === 'hoathinh' && totalEps > 1);
     }
-    const fallbackUrl = isTv ? `https://vidsrc.tw/embed/tv?tmdb=${tmdbId || ''}&ds_lang=en,vi&autoplay=1` : `https://vidsrc.tw/embed/movie?tmdb=${tmdbId || ''}&ds_lang=en,vi&autoplay=1`;
+    const seasonNum = movie?.tmdb?.season || 1; const fallbackUrl = isTv ? `https://peachify.pro/embed/tv/${tmdbId || ''}/${seasonNum}/1` : `https://peachify.pro/embed/movie/${tmdbId || ''}`;
     const urlToOpen = targetEp?.link_embed || fallbackUrl;
 
-    if (vidsrcServerObj && targetEp) {
-      setCurrentServer(vidsrcServerObj.server_name);
+    if (multiSubServerObj && targetEp) {
+      setCurrentServer(multiSubServerObj.server_name);
       setCurrentEpisode(targetEp);
     } else {
       setCurrentServer('Multi-sub');
       setCurrentEpisode({
         name: 'Tập 1 (Multi-sub)',
-        slug: 'tap-1-vidsrc',
+        slug: 'tap-1-multisub',
         filename: 'Multi-sub',
         link_embed: fallbackUrl,
         link_m3u8: '',
@@ -326,7 +326,7 @@ export default function Watch() {
           setAutoRedirectTimer(0);
           if (!hasTriggeredRef.current) {
             hasTriggeredRef.current = true;
-            triggerVidsrcAuto();
+            triggerMultiSubAuto();
           }
         } else {
           setAutoRedirectTimer(count);
@@ -376,9 +376,40 @@ export default function Watch() {
     if (!url) return "";
     try {
       const newUrl = new URL(url);
-      // Một số API lồng quảng cáo qua tham số ads=, chúng ta lọc bỏ
       newUrl.searchParams.delete('ads');
       newUrl.searchParams.delete('adt');
+      
+      // Auto-resume injection for Peachify
+      if (newUrl.hostname === 'peachify.pro') {
+        try {
+          const savedProgress = JSON.parse(localStorage.getItem('peachifyProgress') || '{}');
+          const tmdbId = movie?.tmdb?.id;
+          const isTv = movie?.tmdb?.type === 'tv' || movie?.type === 'series' || movie?.type === 'hoathinh';
+          
+          if (tmdbId && savedProgress[tmdbId]) {
+            const mediaData = savedProgress[tmdbId];
+            let watched = 0;
+            
+            if (isTv) {
+              const season = movie?.tmdb?.season || 1;
+              const epMatch = currentEpisode?.name?.match(/\d+/);
+              const episode = epMatch ? epMatch[0] : '1';
+              const epKey = `s${season}e${episode}`;
+              watched = mediaData.show_progress?.[epKey]?.progress?.watched || 0;
+            } else {
+              watched = mediaData.progress?.watched || 0;
+            }
+            
+            if (watched > 0) {
+              // Usually resume slightly before (e.g. 3 seconds) for context, but Peachify handles exact seconds
+              newUrl.searchParams.set('startAt', Math.floor(watched).toString());
+            }
+          }
+        } catch (e) {
+          console.error("Error reading peachify progress", e);
+        }
+      }
+      
       return newUrl.toString();
     } catch (e) {
       return url;
@@ -425,7 +456,7 @@ export default function Watch() {
             cinemaMode ? "z-50" : ""
           )}
         >
-          {isVidsrc ? (
+          {isMultiSub ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0d0d12] p-6 text-center z-20 overflow-hidden">
               {/* Subtle blurred poster backdrop */}
               {movie?.poster_url && (
@@ -502,7 +533,7 @@ export default function Watch() {
                 </p>
 
                 <button
-                  onClick={triggerVidsrcAuto}
+                  onClick={triggerMultiSubAuto}
                   className="bg-[#E50914] hover:bg-red-700 text-white w-full sm:w-auto px-4 py-2 sm:px-5 sm:py-2.5 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-[0_4px_20px_rgba(229,9,20,0.4)] hover:scale-105 active:scale-95 cursor-pointer"
                 >
                   <ExternalLink className="w-4 h-4" />
@@ -663,14 +694,14 @@ export default function Watch() {
               
               <div className="max-h-[300px] md:max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                 {episodes.map((server: any, serverIdx: number) => {
-                  const isVidsrcServer = server.server_name === 'Multi-sub' || server.server_name?.toLowerCase().includes('vidsrc');
+                  const isMultiSubServer = server.server_name === 'Multi-sub' || server.server_name?.toLowerCase().includes('peachify');
                   return (
                     <div key={serverIdx} className="mb-6 last:mb-0">
                       <div className="flex items-center justify-between mb-3 pl-1">
                         <h4 className="text-[#A0A0A0] text-[10px] md:text-xs font-bold uppercase tracking-wider flex items-center gap-2">
                           <span>{formatServerDisplayName(server.server_name)}</span>
                         </h4>
-                        {isVidsrcServer && (
+                        {isMultiSubServer && (
                           <span className="text-[8px] sm:text-[10px] bg-yellow-500/20 text-yellow-500 border border-yellow-500/40 px-2 py-0.5 rounded-full font-medium sm:font-semibold whitespace-nowrap" title="Nguồn phụ này không phải lúc nào cũng có sẵn phim">
                             Có thể không có sẵn
                           </span>
@@ -687,7 +718,7 @@ export default function Watch() {
                               onClick={() => {
                                 setCurrentEpisode(ep);
                                 setCurrentServer(server.server_name);
-                                if (isVidsrcServer && ep.link_embed) {
+                                if (isMultiSubServer && ep.link_embed) {
                                   window.open(ep.link_embed, '_blank', 'noopener,noreferrer');
                                 }
                               }}
@@ -695,7 +726,7 @@ export default function Watch() {
                                 h-[36px] md:h-[40px] rounded-[8px] text-xs md:text-sm font-medium transition-all flex items-center justify-center cursor-pointer
                                 ${isCurrent 
                                   ? 'bg-[#E50914] text-white shadow-[0_4px_12px_rgba(229,9,20,0.4)] ring-2 ring-[#E50914]/50 font-bold' 
-                                  : isVidsrcServer
+                                  : isMultiSubServer
                                   ? 'bg-[#E50914]/15 text-[#E50914] border border-[#E50914]/30 hover:bg-[#E50914] hover:text-white font-semibold'
                                   : watched
                                   ? 'bg-[#4A4A4A] text-[#E0E0E0]'
