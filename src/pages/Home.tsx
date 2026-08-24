@@ -165,22 +165,18 @@ const SwiperSection = memo(({
           <span className="w-1.5 h-6 md:h-8 rounded-full inline-block flex-shrink-0" style={{ background: color }} />
           {title}
         </h2>
-        {/* Link + Arrows nhóm cùng nhau bên phải */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Link bên phải */}
+        <div className="flex items-center flex-shrink-0">
           <Link
             to={link}
-            className="text-xs md:text-sm text-[#3B82F6] hover:text-white transition-colors flex items-center gap-1 mr-1"
+            className="text-xs md:text-sm text-[#3B82F6] hover:text-white transition-colors flex items-center gap-1"
           >
             Xem tất cả <ChevronRight className="w-3 h-3 md:w-4 md:h-4" />
           </Link>
-          {/* [ARROW FIX] Chỉ hiện trên md+ — mobile dùng swipe */}
-          <div className="hidden md:flex items-center gap-1.5">
-            <NavArrow direction="prev" onClick={() => swiperRef.current?.slidePrev()} />
-            <NavArrow direction="next" onClick={() => swiperRef.current?.slideNext()} />
-          </div>
         </div>
       </div>
 
+      <div className="relative group/slider">
       <Swiper
         modules={[Autoplay]}
         onSwiper={s => { swiperRef.current = s; }}
@@ -199,6 +195,19 @@ const SwiperSection = memo(({
           </SwiperSlide>
         ))}
       </Swiper>
+      
+      {/* Nav arrows overlay */}
+      <NavArrow 
+        direction="prev" 
+        onClick={() => swiperRef.current?.slidePrev()} 
+        className="absolute -left-4 md:-left-5 top-1/2 -translate-y-1/2 z-20 hidden md:flex opacity-0 group-hover/slider:opacity-100 transition-opacity shadow-[0_0_15px_rgba(0,0,0,0.5)]" 
+      />
+      <NavArrow 
+        direction="next" 
+        onClick={() => swiperRef.current?.slideNext()} 
+        className="absolute -right-4 md:-right-5 top-1/2 -translate-y-1/2 z-20 hidden md:flex opacity-0 group-hover/slider:opacity-100 transition-opacity shadow-[0_0_15px_rgba(0,0,0,0.5)]" 
+      />
+      </div>
     </section>
   );
 });
@@ -783,7 +792,7 @@ export default function Home() {
                   {(() => {
                     const trendingSwiperRef = { current: null as SwiperType | null };
                     return (
-                      <div className="relative">
+                      <div className="relative group/trending">
                         <Swiper
                           modules={[Autoplay]}
                           onSwiper={s => { trendingSwiperRef.current = s; }}
@@ -801,11 +810,17 @@ export default function Home() {
                             </SwiperSlide>
                           ))}
                         </Swiper>
-                        {/* [ARROW FIX] Arrows bên ngoài Swiper — chỉ md+ */}
-                        <div className="hidden md:flex items-center justify-end gap-2 mt-3">
-                          <NavArrow direction="prev" onClick={() => trendingSwiperRef.current?.slidePrev()} />
-                          <NavArrow direction="next" onClick={() => trendingSwiperRef.current?.slideNext()} />
-                        </div>
+                        {/* Overlay Arrows - Similar to Hero Banner */}
+                        <NavArrow 
+                          direction="prev" 
+                          onClick={() => trendingSwiperRef.current?.slidePrev()} 
+                          className="absolute -left-4 md:-left-5 top-1/2 -translate-y-[60%] z-20 hidden md:flex opacity-0 group-hover/trending:opacity-100 transition-opacity shadow-[0_0_15px_rgba(0,0,0,0.5)]" 
+                        />
+                        <NavArrow 
+                          direction="next" 
+                          onClick={() => trendingSwiperRef.current?.slideNext()} 
+                          className="absolute -right-4 md:-right-5 top-1/2 -translate-y-[60%] z-20 hidden md:flex opacity-0 group-hover/trending:opacity-100 transition-opacity shadow-[0_0_15px_rgba(0,0,0,0.5)]" 
+                        />
                       </div>
                     );
                   })()}
