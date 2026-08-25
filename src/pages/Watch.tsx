@@ -29,12 +29,6 @@ export default function Watch() {
   }, [movie]);
 
   useEffect(() => {
-    const vidfastOrigins = [
-        'https://vidfast.pro', 'https://vidfast.in', 'https://vidfast.io',
-        'https://vidfast.me', 'https://vidfast.net', 'https://vidfast.pm',
-        'https://vidfast.xyz', 'https://vidfast.vc', 'https://vidfast.bz'
-    ];
-    
     const handlePlayerMessage = (event: MessageEvent) => {
       // Peachify
       if (event.origin === 'https://peachify.pro') {
@@ -43,10 +37,27 @@ export default function Watch() {
         }
       }
       
-      // VidFast
-      if (vidfastOrigins.includes(event.origin)) {
-        if (event.data?.type === 'MEDIA_DATA') {
-          localStorage.setItem('vidFastProgress', JSON.stringify(event.data.data));
+      // VidAPI
+      if (event.origin === 'https://vaplayer.ru' || event.origin === 'https://vidapi.ru') {
+        if (event.data?.type === 'PLAYER_EVENT') {
+          const { player_info, player_status, player_progress } = event.data.data;
+          if (player_status === 'playing') {
+            const id = player_info.imdb || player_info.tmdb;
+            if (id) {
+               const key = player_info.mediaType === 'tv' 
+                 ? `vidapi_progress_${id}_${player_info.season}_${player_info.episode}`
+                 : `vidapi_progress_${id}`;
+               localStorage.setItem(key, player_progress.toString());
+            }
+          }
+        }
+      }
+      
+      // EmbedMaster
+      if (event.data && event.data.source === 'embedmaster_player') {
+        if (event.data.event === 'time' && event.data.info) {
+          // It doesn't send media details easily, so we just save with generic prefix based on URL or assume no auto-resume for now
+          // We can optionally store it if we match with current TMDB id
         }
       }
     };
@@ -128,6 +139,7 @@ export default function Watch() {
         if (isSeries) {
           let multiSub1Data = [];
           let multiSub2Data = [];
+          let multiSub3Data = [];
           
           if (fetchedEpisodes[0]?.server_data?.length) {
             fetchedEpisodes[0].server_data.forEach((ep) => {
@@ -138,7 +150,7 @@ export default function Watch() {
                multiSub1Data.push({
                  ...ep,
                  link_embed: isMobileDevice 
-                   ? `https://vidfast.vc/tv/${tmdbId || ''}/${seasonNum}/${epNum}?autoPlay=true` 
+                   ? `https://vaplayer.ru/embed/tv/${tmdbId || ''}/${seasonNum}/${epNum}?autoplay=1` 
                    : `https://peachify.pro/embed/tv/${tmdbId || ''}/${seasonNum}/${epNum}`
                });
                
@@ -146,6 +158,12 @@ export default function Watch() {
                  ...ep,
                  slug: ep.slug + '-vidsrc',
                  link_embed: `https://vidsrc.to/embed/tv/${tmdbId || ''}/${seasonNum}/${epNum}`
+               });
+
+               multiSub3Data.push({
+                 ...ep,
+                 slug: ep.slug + '-embedmaster',
+                 link_embed: `https://embedmaster.link/tv/${tmdbId || ''}/${seasonNum}/${epNum}`
                });
             });
           } else {
@@ -156,7 +174,7 @@ export default function Watch() {
               slug: 'tap-1',
               filename: 'Tập 1',
               link_embed: isMobileDevice 
-                 ? `https://vidfast.vc/tv/${tmdbId || ''}/${seasonNum}/1?autoPlay=true` 
+                 ? `https://vaplayer.ru/embed/tv/${tmdbId || ''}/${seasonNum}/1?autoplay=1` 
                  : `https://peachify.pro/embed/tv/${tmdbId || ''}/${seasonNum}/1`
             });
             multiSub2Data.push({
@@ -165,11 +183,18 @@ export default function Watch() {
               filename: 'Tập 1',
               link_embed: `https://vidsrc.to/embed/tv/${tmdbId || ''}/${seasonNum}/1`
             });
+            multiSub3Data.push({
+              name: 'Tập 1',
+              slug: 'tap-1-embedmaster',
+              filename: 'Tập 1',
+              link_embed: `https://embedmaster.link/tv/${tmdbId || ''}/${seasonNum}/1`
+            });
           }
 
           if (multiSub1Data.length > 0) {
             fetchedEpisodes.push({ server_name: "Multi-sub #1", server_data: multiSub1Data });
             fetchedEpisodes.push({ server_name: "Multi-sub #2", server_data: multiSub2Data });
+            fetchedEpisodes.push({ server_name: "Multi-sub #3", server_data: multiSub3Data });
           }
         } else {
           // Movie (Single episode)
@@ -180,7 +205,7 @@ export default function Watch() {
             slug: 'full-1',
             filename: 'Full',
             link_embed: isMobileDevice 
-              ? `https://vidfast.vc/movie/${tmdbId || ''}?autoPlay=true` 
+              ? `https://vaplayer.ru/embed/movie/${tmdbId || ''}?autoplay=1` 
               : `https://peachify.pro/embed/movie/${tmdbId || ''}`
           });
           
@@ -189,6 +214,13 @@ export default function Watch() {
             slug: 'full-2',
             filename: 'Full',
             link_embed: `https://vidsrc.to/embed/movie/${tmdbId || ''}`
+          });
+          
+          multiSubServerData.push({
+            name: '#3 Full',
+            slug: 'full-3',
+            filename: 'Full',
+            link_embed: `https://embedmaster.link/movie/${tmdbId || ''}`
           });
 
           fetchedEpisodes.push({ server_name: "Multi-sub", server_data: multiSubServerData });
@@ -280,7 +312,7 @@ export default function Watch() {
     return clean;
   };
 
-  const isMultiSub = currentServer === 'Multi-sub' || currentServer === 'Multi-sub #1' || currentServer === 'Multi-sub #2' || currentServer?.toLowerCase().includes('peachify');
+  const isMultiSub = currentServer?.includes('Multi-sub') || currentServer?.toLowerCase().includes('peachify');
   const vietsubServer = episodes.find(s => !s.server_name?.includes('Multi-sub') && !s.server_name?.toLowerCase().includes('peachify')) || episodes[0];
 
   const handleSwitchToVietsub = () => {
@@ -336,8 +368,8 @@ export default function Watch() {
     }
     const seasonNum = movie?.tmdb?.season || 1; 
     const fallbackUrl = isTv 
-      ? (isMobileDevice ? `https://vidfast.vc/tv/${tmdbId || ''}/${seasonNum}/1?autoPlay=true` : `https://peachify.pro/embed/tv/${tmdbId || ''}/${seasonNum}/1`) 
-      : (isMobileDevice ? `https://vidfast.vc/movie/${tmdbId || ''}?autoPlay=true` : `https://peachify.pro/embed/movie/${tmdbId || ''}`);
+      ? (isMobileDevice ? `https://vaplayer.ru/embed/tv/${tmdbId || ''}/${seasonNum}/1?autoplay=1` : `https://peachify.pro/embed/tv/${tmdbId || ''}/${seasonNum}/1`) 
+      : (isMobileDevice ? `https://vaplayer.ru/embed/movie/${tmdbId || ''}?autoplay=1` : `https://peachify.pro/embed/movie/${tmdbId || ''}`);
     const urlToOpen = targetEp?.link_embed || fallbackUrl;
 
     if (multiSubServerObj && targetEp) {
@@ -477,31 +509,26 @@ export default function Watch() {
         }
       }
       
-      // VidFast Auto-resume
-      const vidfastOrigins = ['vidfast.pro', 'vidfast.in', 'vidfast.io', 'vidfast.me', 'vidfast.net', 'vidfast.pm', 'vidfast.xyz', 'vidfast.vc', 'vidfast.bz'];
-      if (vidfastOrigins.includes(newUrl.hostname)) {
+      // VidAPI Auto-resume
+      if (newUrl.hostname === 'vaplayer.ru' || newUrl.hostname === 'vidapi.ru') {
         try {
-          const savedProgress = JSON.parse(localStorage.getItem('vidFastProgress') || '{}');
-          const key = isTv ? `t${tmdbId}` : `m${tmdbId}`;
-          
-          if (savedProgress[key]) {
-            const mediaData = savedProgress[key];
-            let watched = 0;
-            if (isTv) {
-              const season = movie?.tmdb?.season || 1;
-              const epMatch = currentEpisode?.name?.match(/\d+/);
-              const episode = epMatch ? epMatch[0] : '1';
-              const epKey = `s${season}e${episode}`;
-              watched = mediaData.show_progress?.[epKey]?.progress?.watched || 0;
-            } else {
-              watched = mediaData.progress?.watched || 0;
-            }
-            if (watched > 5) {
-              newUrl.searchParams.set('startAt', Math.floor(watched).toString());
-            }
+          const idMatch = newUrl.pathname.match(/\/embed\/(?:movie|tv)\/([^/]+)/);
+          if (idMatch && idMatch[1]) {
+             const id = idMatch[1];
+             let key = `vidapi_progress_${id}`;
+             if (isTv) {
+               const season = movie?.tmdb?.season || 1;
+               const epMatch = currentEpisode?.name?.match(/\d+/);
+               const episode = epMatch ? epMatch[0] : '1';
+               key = `vidapi_progress_${id}_${season}_${episode}`;
+             }
+             const savedProgress = localStorage.getItem(key);
+             if (savedProgress && parseFloat(savedProgress) > 5) {
+               newUrl.searchParams.set('resumeAt', Math.floor(parseFloat(savedProgress)).toString());
+             }
           }
         } catch (e) {
-          console.error("Error reading vidfast progress", e);
+          console.error("Error reading vidapi progress", e);
         }
       }
       
@@ -642,8 +669,8 @@ export default function Watch() {
               title={currentEpisode.name || "Video player"}
               className="w-full h-full"
               allowFullScreen
-              sandbox="allow-scripts allow-same-origin allow-fullscreen"
-              allow="autoplay; fullscreen; picture-in-picture"
+              sandbox={currentEpisode.link_embed?.includes('embedmaster') ? undefined : "allow-scripts allow-same-origin allow-fullscreen"}
+              allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
               frameBorder="0"
             ></iframe>
           ) : (
