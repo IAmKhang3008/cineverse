@@ -144,7 +144,8 @@ export default function Watch() {
           if (fetchedEpisodes[0]?.server_data?.length) {
             fetchedEpisodes[0].server_data.forEach((ep) => {
                const epMatch = ep.name.match(/\d+/);
-               const epNum = epMatch ? epMatch[0] : '1';
+               // Parse to integer to remove leading zeros for EmbedMaster
+               const epNum = epMatch ? parseInt(epMatch[0], 10).toString() : '1';
                const seasonNum = res.movie?.tmdb?.season || 1;
                
                multiSub1Data.push({
@@ -153,18 +154,20 @@ export default function Watch() {
                    ? `https://vaplayer.ru/embed/tv/${tmdbId || ''}/${seasonNum}/${epNum}?autoplay=1` 
                    : `https://peachify.pro/embed/tv/${tmdbId || ''}/${seasonNum}/${epNum}`
                });
-               
-               multiSub2Data.push({
-                 ...ep,
-                 slug: ep.slug + '-vidsrc',
-                 link_embed: `https://vidsrc.to/embed/tv/${tmdbId || ''}/${seasonNum}/${epNum}`
-               });
 
                multiSub3Data.push({
                  ...ep,
                  slug: ep.slug + '-embedmaster',
                  link_embed: `https://embedmaster.link/tv/${tmdbId || ''}/${seasonNum}/${epNum}`
                });
+            });
+            
+            // VidSrc Picker (single button for series)
+            multiSub2Data.push({
+              name: 'Trình chọn tập (Picker)',
+              slug: 'vidsrc-picker',
+              filename: 'Picker',
+              link_embed: `https://vidsrc.tw/embed/tv/${tmdbId || ''}`
             });
           } else {
             // Fallback for TV series with no fetched episodes
@@ -178,10 +181,10 @@ export default function Watch() {
                  : `https://peachify.pro/embed/tv/${tmdbId || ''}/${seasonNum}/1`
             });
             multiSub2Data.push({
-              name: 'Tập 1',
-              slug: 'tap-1-vidsrc',
-              filename: 'Tập 1',
-              link_embed: `https://vidsrc.to/embed/tv/${tmdbId || ''}/${seasonNum}/1`
+              name: 'Trình chọn tập (Picker)',
+              slug: 'vidsrc-picker',
+              filename: 'Picker',
+              link_embed: `https://vidsrc.tw/embed/tv/${tmdbId || ''}`
             });
             multiSub3Data.push({
               name: 'Tập 1',
@@ -213,7 +216,7 @@ export default function Watch() {
             name: '#2 Full',
             slug: 'full-2',
             filename: 'Full',
-            link_embed: `https://vidsrc.to/embed/movie/${tmdbId || ''}`
+            link_embed: `https://vidsrc.tw/embed/movie/${tmdbId || ''}`
           });
           
           multiSubServerData.push({
@@ -338,6 +341,18 @@ export default function Watch() {
   );
 
   const isStreamBrokenOrTrailer = Boolean(!loading && movie && currentEpisode && !isMultiSub && (isLinkBroken || isOnlyTrailer));
+
+  const hasAutoOpenedRef = useRef<boolean>(false);
+  useEffect(() => {
+    if (!loading && isMultiSub && currentEpisode?.link_embed && !hasAutoOpenedRef.current) {
+      hasAutoOpenedRef.current = true;
+      let urlToOpen = currentEpisode.link_embed;
+      if (urlToOpen.includes('vaplayer.ru') || urlToOpen.includes('vidapi.ru')) {
+        urlToOpen += (urlToOpen.includes('?') ? '&' : '?') + 'autoplay=1';
+      }
+      window.open(urlToOpen, '_blank', 'noopener,noreferrer');
+    }
+  }, [loading, isMultiSub, currentEpisode]);
 
   const [autoRedirectTimer, setAutoRedirectTimer] = useState<number>(3);
   const hasTriggeredRef = useRef<boolean>(false);
@@ -670,7 +685,7 @@ export default function Watch() {
               className="w-full h-full"
               allowFullScreen
               sandbox={currentEpisode.link_embed?.includes('embedmaster') ? undefined : "allow-scripts allow-same-origin allow-fullscreen"}
-              allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+              allow="autoplay *; fullscreen *; picture-in-picture *; encrypted-media *"
               frameBorder="0"
             ></iframe>
           ) : (
@@ -816,7 +831,7 @@ export default function Watch() {
               
               <div className="max-h-[300px] md:max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                 {episodes.map((server: any, serverIdx: number) => {
-                  const isMultiSubServer = server.server_name === 'Multi-sub' || server.server_name?.toLowerCase().includes('peachify');
+                  const isMultiSubServer = server.server_name?.includes('Multi-sub') || server.server_name?.toLowerCase().includes('peachify');
                   return (
                     <div key={serverIdx} className="mb-6 last:mb-0">
                       <div className="flex items-center justify-between mb-3 pl-1">
