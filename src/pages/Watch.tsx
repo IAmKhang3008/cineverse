@@ -134,6 +134,7 @@ export default function Watch() {
         }
         
         
+        const fastSeason = res.movie?.season;
         const isSeries = isTv || epsCount > 1;
 
         if (isSeries) {
@@ -146,13 +147,19 @@ export default function Watch() {
                const epMatch = ep.name.match(/\d+/);
                // Parse to integer to remove leading zeros for EmbedMaster
                const epNum = epMatch ? parseInt(epMatch[0], 10).toString() : '1';
-               const seasonNum = res.movie?.tmdb?.season || 1;
+               const seasonNum = fastSeason || res.movie?.tmdb?.season || 1;
                
                multiSub1Data.push({
                  ...ep,
                  link_embed: isMobileDevice 
                    ? `https://vaplayer.ru/embed/tv/${tmdbId || ''}/${seasonNum}/${epNum}?autoplay=1` 
                    : `https://peachify.pro/embed/tv/${tmdbId || ''}/${seasonNum}/${epNum}`
+               });
+
+               multiSub2Data.push({
+                 ...ep,
+                 slug: ep.slug + '-vidsrc',
+                 link_embed: `https://vidsrc.tw/embed/tv/${tmdbId || ''}/${seasonNum}/${epNum}`
                });
 
                multiSub3Data.push({
@@ -162,16 +169,10 @@ export default function Watch() {
                });
             });
             
-            // VidSrc Picker (single button for series)
-            multiSub2Data.push({
-              name: 'Trình chọn tập (Picker)',
-              slug: 'vidsrc-picker',
-              filename: 'Picker',
-              link_embed: `https://vidsrc.tw/embed/tv/${tmdbId || ''}`
-            });
+
           } else {
             // Fallback for TV series with no fetched episodes
-            const seasonNum = res.movie?.tmdb?.season || 1;
+            const seasonNum = fastSeason || res.movie?.tmdb?.season || 1;
             multiSub1Data.push({
               name: 'Tập 1',
               slug: 'tap-1',
@@ -181,10 +182,10 @@ export default function Watch() {
                  : `https://peachify.pro/embed/tv/${tmdbId || ''}/${seasonNum}/1`
             });
             multiSub2Data.push({
-              name: 'Trình chọn tập (Picker)',
-              slug: 'vidsrc-picker',
-              filename: 'Picker',
-              link_embed: `https://vidsrc.tw/embed/tv/${tmdbId || ''}`
+              name: 'Tập 1',
+              slug: 'tap-1-vidsrc',
+              filename: 'Tập 1',
+              link_embed: `https://vidsrc.tw/embed/tv/${tmdbId || ''}/${seasonNum}/1`
             });
             multiSub3Data.push({
               name: 'Tập 1',
@@ -381,7 +382,9 @@ export default function Watch() {
     } else {
       isTv = localType === 'series' || localType === 'tvshows' || epsCount > 1 || (localType === 'hoathinh' && totalEps > 1);
     }
-    const seasonNum = movie?.tmdb?.season || 1; 
+    
+    const fastSeasonFb = movie?.season;
+    const seasonNum = fastSeasonFb || movie?.tmdb?.season || 1; 
     const fallbackUrl = isTv 
       ? (isMobileDevice ? `https://vaplayer.ru/embed/tv/${tmdbId || ''}/${seasonNum}/1?autoplay=1` : `https://peachify.pro/embed/tv/${tmdbId || ''}/${seasonNum}/1`) 
       : (isMobileDevice ? `https://vaplayer.ru/embed/movie/${tmdbId || ''}?autoplay=1` : `https://peachify.pro/embed/movie/${tmdbId || ''}`);

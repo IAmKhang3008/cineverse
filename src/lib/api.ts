@@ -184,7 +184,8 @@ export type TmdbFullDetail = {
   [key: string]: any;
 };
 
-export type NormalizedMovie = {
+export interface NormalizedMovie {
+  season?: number;
   _id: string;
   slug: string;
   name: string;
@@ -410,7 +411,7 @@ export function extractTmdbObj(m: any): TmdbMovieInfo | undefined {
 export async function searchTmdbWithCache(movie: any) {
   if (!TMDB_ENABLED || !movie) return null;
 
-  let extractedSeason = 1;
+  let extractedSeason: number | null = null;
   const isTv = movie.type === 'series' || movie.type === 'hoathinh' || movie.type === 'tvshows';
   const targetType = isTv ? 'tv' : 'movie';
 
@@ -420,37 +421,74 @@ export async function searchTmdbWithCache(movie: any) {
   // Extract season for TV shows
   if (isTv) {
     const seasonRegex = /(?:phần|mùa|season|ss)\s*(\d+)/i;
-    const originMatch = searchOrigin.match(seasonRegex);
+    const trailingNumberRegex = /\s+(\d+)\s*$/;
+    
+    let originMatch = searchOrigin.match(seasonRegex);
+    if (!originMatch) originMatch = searchOrigin.match(trailingNumberRegex);
+    
     if (originMatch) {
       extractedSeason = parseInt(originMatch[1], 10);
-      searchOrigin = searchOrigin.replace(seasonRegex, '').replace(/[\(\)-]+$/, '').trim();
+      searchOrigin = searchOrigin.replace(seasonRegex, '').replace(trailingNumberRegex, '').replace(/[\(\)-]+$/, '').trim();
     }
-    const nameMatch = searchName.match(seasonRegex);
+    
+    let nameMatch = searchName.match(seasonRegex);
+    if (!nameMatch) nameMatch = searchName.match(trailingNumberRegex);
+    
     if (nameMatch) {
-      if (!originMatch) extractedSeason = parseInt(nameMatch[1], 10);
-      searchName = searchName.replace(seasonRegex, '').replace(/[\(\)-]+$/, '').trim();
+      if (!extractedSeason) extractedSeason = parseInt(nameMatch[1], 10);
+      searchName = searchName.replace(seasonRegex, '').replace(trailingNumberRegex, '').replace(/[\(\)-]+$/, '').trim();
     }
   }
+
+  const resolveSeasonFromTmdb = async (tmdbId: number, mediaType: string) => {
+    if (mediaType === 'tv' && !extractedSeason) {
+      // If regex failed, let's fetch TV details and see if any season name matches the movie name
+      try {
+        const detail = await fetchTmdbDetail(tmdbId, 'tv');
+        if (detail && detail.seasons) {
+          const lowerName = (movie.name || '').toLowerCase();
+          const lowerOrigin = (movie.origin_name || '').toLowerCase();
+          for (const s of detail.seasons) {
+            if (s.season_number === 0) continue;
+            const sName = (s.name || '').toLowerCase();
+            // Match custom season names like "Asylum"
+            if (sName && (lowerName.includes(sName) || lowerOrigin.includes(sName) || sName.includes(lowerOrigin) || sName.includes(lowerName))) {
+              if (sName.replace(/season \d+/i, '').trim().length > 3) {
+                  return s.season_number;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // Ignore errors
+      }
+    }
+    return extractedSeason || 1;
+  };
 
   // 1. Direct TMDB ID if present
   const tmdbObj = extractTmdbObj(movie);
   if (tmdbObj?.id) {
-    return { id: Number(tmdbObj.id), media_type: tmdbObj.type || 'movie', season: tmdbObj.season || extractedSeason };
+    if (tmdbObj.season) {
+      return { id: Number(tmdbObj.id), media_type: tmdbObj.type || 'movie', season: tmdbObj.season };
+    }
+    const cacheKeyId = `tmdb_season_resolve_${tmdbObj.id}`;
+    const resolvedSeason = await fetchWithCache(cacheKeyId, () => resolveSeasonFromTmdb(Number(tmdbObj.id), tmdbObj.type || 'movie'), TTL.TMDB_STATIC);
+    return { id: Number(tmdbObj.id), media_type: tmdbObj.type || 'movie', season: resolvedSeason };
   }
 
   // 2. Direct IMDb ID if present
   if (tmdbObj?.imdb_id) {
     const findResult = await fetchWithCache(`tmdb_find_${tmdbObj.imdb_id}`, () => fetchTmdbByExternalId(tmdbObj.imdb_id!, 'imdb_id'), TTL.TMDB_STATIC);
     if (findResult?.id) {
-      return { ...findResult, season: extractedSeason };
+      const s = await resolveSeasonFromTmdb(findResult.id, findResult.media_type);
+      return { ...findResult, season: s };
     }
   }
 
   // 3. Search by title
   const searchYear = String(movie.year || '');
-
-  const cacheKey = `tmdb_unified_search_v3_${movie.slug || searchOrigin || searchName}_${searchYear}`;
-
+  const cacheKey = `tmdb_unified_search_v5_${movie.slug || searchOrigin || searchName}_${searchYear}`;
   return fetchWithCache(cacheKey, async () => {
     let finalResult = null;
     // Await sequentially to prioritize original name over localized name
@@ -465,7 +503,8 @@ export async function searchTmdbWithCache(movie: any) {
     }
     
     if (finalResult) {
-      return { ...finalResult, season: extractedSeason };
+      const s = await resolveSeasonFromTmdb(finalResult.id, finalResult.media_type);
+      return { ...finalResult, season: s };
     }
     return null;
   }, TTL.TMDB_STATIC);
@@ -793,35 +832,18 @@ export const api = {
         console.warn('[API] phimapi fetch failed:', (phimapiResult as PromiseRejectedResult).reason);
       }
 
-      // ── STAGE 2: TMDB resolution ────────────────────────────
-      const rawMovie   = primaryData?.movie || primaryData || {};
-      const existingTmdb = extractTmdbObj(rawMovie);
-
+      // ── STAGE 2: Get TMDB ID & Extract Exact Season ────────
       let tmdbSearch: TmdbMovieInfo | null = null;
-
       if (TMDB_ENABLED) {
-        if (existingTmdb?.id) {
-          // 1. Phimapi provided TMDB ID directly -> use it instantly
-          tmdbSearch = { id: Number(existingTmdb.id), title: rawMovie.name || '', original_title: rawMovie.origin_name || '', media_type: existingTmdb.type || 'movie', season: existingTmdb.season || 1 };
-        } else if (existingTmdb?.imdb_id) {
-          // 2. Phimapi provided IMDb ID -> lookup TMDb /find endpoint directly
-          const findRes = await fetchWithCache(`tmdb_find_${existingTmdb.imdb_id}`, () => fetchTmdbByExternalId(existingTmdb.imdb_id!, 'imdb_id'), TTL.TMDB_STATIC);
-          if (findRes?.id) {
-            tmdbSearch = { ...findRes, season: existingTmdb.season || 1 };
-          }
-        }
-
-        // 3. Fallback to unified TMDB search
-        if (!tmdbSearch && (rawMovie.name || rawMovie.origin_name)) {
-          tmdbSearch = await searchTmdbWithCache(rawMovie) as TmdbMovieInfo | null;
-        }
+        const rawMovie = primaryData?.movie || primaryData || {};
+        tmdbSearch = await searchTmdbWithCache(rawMovie) as TmdbMovieInfo | null;
       }
 
       // ── STAGE 3: Fetch TMDB full detail (append_to_response) ──
       let tmdbDetail: TmdbFullDetail | null = null;
 
       if (tmdbSearch?.id && TMDB_ENABLED) {
-        const mediaType = (tmdbSearch.media_type === 'tv' || existingTmdb?.type === 'tv') ? 'tv' : 'movie';
+        const mediaType = tmdbSearch.media_type === 'tv' ? 'tv' : 'movie';
         // [FIX 8] 1 request thay vì 3-4 request riêng lẻ
         tmdbDetail = await fetchTmdbDetail(tmdbSearch.id, mediaType);
       }
@@ -833,6 +855,14 @@ export const api = {
       }
 
       const normalized = normalizeBySource(primaryData, primarySource);
+
+      // Extract season from pure source titles BEFORE TMDB overwrites them
+      const seasonRegex = /(?:phần|mùa|season|ss)\s*(\d+)/i;
+      const trailingNumberRegex = /\s+(\d+)\s*$/;
+      let sMatch = normalized.origin_name?.match(seasonRegex) || normalized.origin_name?.match(trailingNumberRegex) || normalized.name?.match(seasonRegex) || normalized.name?.match(trailingNumberRegex);
+      if (sMatch) {
+         normalized.season = parseInt(sMatch[1], 10);
+      }
 
       // ── STAGE 5: Merge TMDB data vào normalized ──────────────
       if (tmdbDetail) {
@@ -886,6 +916,7 @@ export const api = {
         normalized.tmdb = {
           id:            String(tmdbInfo.id),
           type:          tmdbSearch!.media_type || (primarySource === 'primary' ? normalized.type : 'movie'),
+          season:        tmdbInfo.season,
           vote_average:  tmdbDetail.vote_average,
           vote_count:    tmdbDetail.vote_count,
           title:         tmdbDetail.title || tmdbDetail.name,
@@ -916,6 +947,7 @@ export const api = {
         normalized.tmdb = {
           id:           String(tmdbSearch.id),
           type:         tmdbSearch.media_type || normalized.type,
+          season:       tmdbSearch.season,
           vote_average: tmdbSearch.vote_average,
           vote_count:   tmdbSearch.vote_count,
         };

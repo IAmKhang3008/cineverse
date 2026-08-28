@@ -1,8 +1,8 @@
 const fs = require('fs');
-let code = fs.readFileSync('src/lib/api.ts', 'utf8');
+const path = './src/lib/api.ts';
+let code = fs.readFileSync(path, 'utf8');
 
-code = code.replace(/export async function fetchTmdbSearch\(title: string, year: string, type: string\)/, 'export async function fetchTmdbSearch(title: string, year: string, type?: string)');
-code = code.replace(/export async function fetchTmdbDetail\(type: string, id: string \| number\)/, 'export async function fetchTmdbDetail(id: string | number, type?: string)');
-code = code.replace(/type\?: 'movie' \| 'tv';/, 'type?: string;');
+code = code.replace("  episode_total: string;\n  type: string;", "  episode_total: string;\n  type: string;\n  season?: number;");
+code = code.replace("export type NormalizedMovie = {", "export interface NormalizedMovie {\n  season?: number;");
 
-fs.writeFileSync('src/lib/api.ts', code);
+fs.writeFileSync(path, code);
