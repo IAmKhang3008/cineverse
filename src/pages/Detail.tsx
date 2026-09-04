@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useLayoutEffect } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { api, getImageUrl, getTmdbPosterUrl, searchTmdbWithCache } from "@/lib/api";
 import { getMoviePoster, getMoviePosterSync } from "@/utils/imageUtils";
-import { Play, Plus, Star, Clock, Calendar, Globe, Heart, X, ArrowLeft, Share2, Copy, Link as LinkIcon } from "lucide-react";
+import { Play, Plus, Star, Clock, Calendar, Globe, Heart, X, ArrowLeft, Share2, Copy, Link as LinkIcon, RefreshCcw } from "lucide-react";
 import MovieCard from "@/components/MovieCard";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
@@ -177,7 +177,7 @@ export default function Detail() {
         }
 
         if (tmdbId) {
-          const combinedUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=vi-VN&append_to_response=credits`;
+          const combinedUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=vi&append_to_response=credits`;
           const combinedData = await fetchWithCache(`tmdb_combined_credits_${tmdbType}_${tmdbId}`, () => fetch(combinedUrl).then(r => r.json()), TTL.TMDB_STATIC);
           if (combinedData.credits?.cast) {
             tmdbCast = combinedData.credits.cast;
@@ -218,7 +218,7 @@ export default function Detail() {
         for (const name of remainingActors) {
           if (!isMounted) break;
           try {
-            const searchPersonUrl = `https://api.themoviedb.org/3/search/person?api_key=${apiKey}&query=${encodeURIComponent(name)}&language=vi-VN`;
+            const searchPersonUrl = `https://api.themoviedb.org/3/search/person?api_key=${apiKey}&query=${encodeURIComponent(name)}&language=vi`;
             const searchData = await fetchWithCache(`tmdb_person_search_${name}`, () => fetch(searchPersonUrl).then(r => r.json()), TTL.TMDB_STATIC);
             
             if (searchData.results?.length > 0) {
@@ -290,7 +290,7 @@ export default function Detail() {
       let actorId = typeof actor === 'object' ? actor.id : null;
 
       if (!actorId && actorName) {
-        const searchUrl = `https://api.themoviedb.org/3/search/person?api_key=${apiKey}&query=${encodeURIComponent(actorName)}&language=vi-VN`;
+        const searchUrl = `https://api.themoviedb.org/3/search/person?api_key=${apiKey}&query=${encodeURIComponent(actorName)}&language=vi`;
         const searchData = await fetchWithCache(`tmdb_actor_search_${actorName}`, () => fetch(searchUrl).then(r => r.json()), TTL.TMDB_STATIC);
         if (searchData?.results && searchData.results.length > 0) {
           actorId = searchData.results[0].id;
@@ -298,11 +298,11 @@ export default function Detail() {
       }
 
       if (actorId) {
-        const detailsUrl = `https://api.themoviedb.org/3/person/${actorId}?api_key=${apiKey}&language=vi-VN&append_to_response=combined_credits`;
+        const detailsUrl = `https://api.themoviedb.org/3/person/${actorId}?api_key=${apiKey}&language=vi&append_to_response=combined_credits`;
         const detailsData = await fetchWithCache(`tmdb_actor_details_vi_${actorId}`, () => fetch(detailsUrl).then(r => r.json()), TTL.TMDB_STATIC);
         
         if (detailsData && !detailsData.biography) {
-          const enUrl = `https://api.themoviedb.org/3/person/${actorId}?api_key=${apiKey}&language=en-US`;
+          const enUrl = `https://api.themoviedb.org/3/person/${actorId}?api_key=${apiKey}&language=vi`;
           const enData = await fetchWithCache(`tmdb_actor_details_en_${actorId}`, () => fetch(enUrl).then(r => r.json()), TTL.TMDB_STATIC);
           if (enData?.biography) {
             detailsData.biography = enData.biography;
@@ -423,7 +423,7 @@ export default function Detail() {
         if (!tmdbId) {
           // Tìm kiếm trên TMDb nếu chưa có
           const yearQuery = movie.year ? `&year=${movie.year}` : '';
-          const searchUrl = `https://api.themoviedb.org/3/search/movie?api_key=${apiKey}&query=${encodeURIComponent(movie.origin_name || movie.name)}${yearQuery}&language=vi-VN`;
+          const searchUrl = `https://api.themoviedb.org/3/search/movie?api_key=${apiKey}&query=${encodeURIComponent(movie.origin_name || movie.name)}${yearQuery}&language=vi`;
           const searchData = await fetchWithCache(`tmdb_search_${movie.slug}`, () => fetch(searchUrl).then(r => r.json()), TTL.TMDB_STATIC);
           if (searchData.results && searchData.results.length > 0) {
             tmdbId = searchData.results[0].id;
@@ -432,14 +432,14 @@ export default function Detail() {
 
         if (tmdbId && tmdbType === 'movie') {
           // 1.2. Lấy collection_id từ chi tiết phim TMDb
-          const detailsUrl = `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${apiKey}&language=vi-VN`;
+          const detailsUrl = `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${apiKey}&language=vi`;
           const detailsData = await fetchWithCache(`tmdb_details_${tmdbId}`, () => fetch(detailsUrl).then(r => r.json()), TTL.TMDB_STATIC);
           
           const collectionId = detailsData?.belongs_to_collection?.id;
 
           if (collectionId) {
             // 1.3. Lấy danh sách phim trong collection
-            const collectionUrl = `https://api.themoviedb.org/3/collection/${collectionId}?api_key=${apiKey}&language=vi-VN&append_to_response=translations`;
+            const collectionUrl = `https://api.themoviedb.org/3/collection/${collectionId}?api_key=${apiKey}&language=vi&append_to_response=translations`;
             const collectionData = await fetchWithCache(`tmdb_collection_${collectionId}`, () => fetch(collectionUrl).then(r => r.json()), TTL.TMDB_STATIC);
             
             // Fallback overview sang tiếng Anh nếu tiếng Việt trống
@@ -705,7 +705,7 @@ export default function Detail() {
 
         if (tmdbId) {
           // Lấy credits từ TMDb như yêu cầu
-          const creditsUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}/credits?api_key=${apiKey}&language=vi-VN`;
+          const creditsUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}/credits?api_key=${apiKey}&language=vi`;
           const creditsData = await fetchWithCache(`tmdb_credits_${tmdbType}_${tmdbId}`, () => fetch(creditsUrl).then(r => r.json()), TTL.TMDB_STATIC);
           
           if (creditsData.cast) {
@@ -714,7 +714,7 @@ export default function Detail() {
           }
           
           if (!rating || !gotImages) {
-             const detailUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=en-US&append_to_response=images&include_image_language=en,null`;
+             const detailUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=vi&append_to_response=images&include_image_language=vi,en,null`;
              const detailData = await fetchWithCache(`tmdb_detail_${tmdbType}_${tmdbId}`, () => fetch(detailUrl).then(r => r.json()), TTL.TMDB_STATIC);
 
              if (!rating && detailData.vote_average) {
@@ -768,8 +768,24 @@ export default function Detail() {
 
   if (!movie) {
     return (
-      <div className="flex items-center justify-center h-[80vh] text-white">
-        <h1 className="text-2xl font-heading">Không tìm thấy phim</h1>
+      <div className="flex flex-col items-center justify-center h-[80vh] text-white space-y-6">
+        <h1 className="text-2xl md:text-3xl font-heading font-bold">Không tìm thấy phim</h1>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => navigate(-1)}
+            className="inline-flex items-center gap-2 text-white/80 hover:text-white bg-black/40 hover:bg-black/60 px-4 py-2 md:px-5 md:py-2.5 rounded-full backdrop-blur-md border border-white/10 transition-all font-medium cursor-pointer text-sm md:text-base"
+          >
+            <ArrowLeft className="w-4 h-4 md:w-5 md:h-5" />
+            Quay lại
+          </button>
+          <button
+            onClick={() => window.location.reload()}
+            className="inline-flex items-center gap-2 bg-[#E50914] hover:bg-[#b80710] text-white px-4 py-2 md:px-5 md:py-2.5 rounded-full backdrop-blur-md transition-all font-medium cursor-pointer text-sm md:text-base shadow-[0_4px_14px_rgba(229,9,20,0.4)] hover:shadow-[0_6px_20px_rgba(229,9,20,0.6)] hover:-translate-y-0.5"
+          >
+            <RefreshCcw className="w-4 h-4 md:w-5 md:h-5" />
+            Làm mới
+          </button>
+        </div>
       </div>
     );
   }

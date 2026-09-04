@@ -263,7 +263,7 @@ function useTrendingMovies() {
       if (!TMDB_ENABLED) throw new Error('TMDB disabled');
       const tmdbData = await fetchWithCache(
         `tmdb_trending_${tab}`,
-        () => fetch(`https://api.themoviedb.org/3/trending/movie/${tab}?api_key=${TMDB_KEY}&language=vi-VN`)
+        () => fetch(`https://api.themoviedb.org/3/trending/movie/${tab}?api_key=${TMDB_KEY}&language=vi`)
               .then(r => { if (!r.ok) throw new Error(`TMDB ${r.status}`); return r.json(); }),
         TTL.TMDB_STATIC,
       );
@@ -306,7 +306,7 @@ async function fetchChieuRap(): Promise<{ items: any[] }> {
     try {
       const tmdbData = await fetchWithCache(
         'tmdb_now_playing',
-        () => fetch(`https://api.themoviedb.org/3/movie/now_playing?api_key=${TMDB_KEY}&language=vi-VN&page=1`)
+        () => fetch(`https://api.themoviedb.org/3/movie/now_playing?api_key=${TMDB_KEY}&language=vi&page=1`)
               .then(r => { if (!r.ok) throw new Error(`TMDB ${r.status}`); return r.json(); }),
         TTL.TMDB_STATIC,
       );
@@ -315,7 +315,7 @@ async function fetchChieuRap(): Promise<{ items: any[] }> {
       if (results.length === 0) {
         const discoverData = await fetchWithCache(
           'tmdb_discover_theatrical',
-          () => fetch(`https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_KEY}&with_release_type=2|3&language=vi-VN&sort_by=popularity.desc`)
+          () => fetch(`https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_KEY}&with_release_type=2|3&language=vi&sort_by=popularity.desc`)
                 .then(r => { if (!r.ok) throw new Error(`TMDB ${r.status}`); return r.json(); }),
           TTL.TMDB_STATIC,
         );
@@ -424,7 +424,7 @@ export default function Home() {
                   if (tmdbId) {
                     const imgData = await fetchWithCache(
                       `tmdb_images_${tmdbType}_${tmdbId}`,
-                      () => fetch(`https://api.themoviedb.org/3/${tmdbType}/${tmdbId}/images?api_key=${TMDB_KEY}&language=en-US&include_image_language=en,null`).then(r => r.json()),
+                      () => fetch(`https://api.themoviedb.org/3/${tmdbType}/${tmdbId}/images?api_key=${TMDB_KEY}&language=vi&include_image_language=vi,en,null`).then(r => r.json()),
                       TTL.TMDB_STATIC,
                     );
                     const bestBackdrop = extractBestBackdrop(imgData);
@@ -451,6 +451,8 @@ export default function Home() {
 
               return {
                 ...movie,
+                name:             detail.movie?.name               || movie.name,
+                origin_name:      detail.movie?.origin_name        || movie.origin_name,
                 content:          detail.movie?.content            || movie.content,
                 vote_average:     detail.movie?.tmdb?.vote_average ?? null,
                 highQualityBanner,
@@ -702,13 +704,13 @@ export default function Home() {
           />
 
           {/* [MOBILE FIX] Thumbnails — ẩn trên mobile nhỏ, hiện từ sm+ */}
-          <div className="absolute bottom-4 sm:bottom-6 md:bottom-8 right-3 sm:right-5 md:right-8 z-20 hidden sm:flex gap-1.5 sm:gap-2 md:gap-3 items-end overflow-x-auto no-scrollbar py-1 max-w-[calc(100vw-6rem)]">
+          <div className="absolute bottom-4 sm:bottom-6 md:bottom-8 right-3 sm:right-5 md:right-8 z-20 hidden sm:flex gap-1.5 sm:gap-2 md:gap-3 items-end overflow-x-auto no-scrollbar py-4 px-2 -my-3 -mx-2 max-w-[calc(100vw-6rem)]">
             {heroMovies.map((movie, index) => (
               <button
                 key={`thumb-${index}`}
                 onClick={() => heroSwiper?.slideToLoop(index)}
                 className={`relative overflow-hidden flex-shrink-0 rounded transition-all duration-300
-                  w-[52px] h-[30px] sm:w-[64px] sm:h-[36px] md:w-[80px] md:h-[46px] ${
+                  w-[44px] h-[26px] sm:w-[56px] sm:h-[32px] md:w-[72px] md:h-[40px] ${
                   activeHeroIndex === index
                     ? 'ring-2 ring-white scale-110 shadow-[0_0_16px_rgba(255,255,255,0.4)] z-10 opacity-100'
                     : 'ring-1 ring-white/20 opacity-40 hover:opacity-80 hover:scale-105'
@@ -721,9 +723,7 @@ export default function Home() {
                   loading="lazy"
                   referrerPolicy="no-referrer"
                 />
-                {activeHeroIndex === index && (
-                  <span className="absolute bottom-0 inset-x-0 h-[2px] bg-[#E50914]" />
-                )}
+                
               </button>
             ))}
           </div>
@@ -759,14 +759,14 @@ export default function Home() {
                 <span className="w-1.5 h-6 md:h-8 bg-[#F5C518] rounded-full inline-block" />
                 Phim Thịnh Hành
               </h2>
-              <div className="flex items-center bg-white/5 border border-white/10 rounded-full p-1 gap-0.5 flex-shrink-0">
+              <div className="grid grid-cols-2 w-full sm:w-auto bg-white/5 border border-white/10 rounded-full p-1 gap-1 flex-shrink-0">
                 {TRENDING_TABS.map((tab) => {
                   const isActive = activeTab === tab.id;
                   return (
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
-                      className={`flex items-center justify-center gap-1.5 min-h-[40px] sm:min-h-[36px] px-3 sm:px-5 rounded-full text-xs font-bold whitespace-nowrap transition-all duration-200 ${
+                      className={`flex items-center justify-center gap-1.5 min-h-[40px] sm:min-h-[36px] px-1 sm:px-6 rounded-full text-[11px] sm:text-xs md:text-sm font-bold whitespace-nowrap transition-all duration-200 ${
                         isActive
                           ? 'bg-[#F5C518] text-black shadow-[0_0_14px_rgba(245,197,24,0.5)] scale-[1.03]'
                           : 'text-white/50 hover:text-white hover:bg-white/10 active:scale-95'

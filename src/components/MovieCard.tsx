@@ -31,6 +31,14 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating, pri
   const [posterUrl, setPosterUrl] = useState<string | null>(null);
   const [posterLoading, setPosterLoading] = useState(true); // cho skeleton
 
+  const [tmdbTitle, setTmdbTitle] = useState(movie?.name);
+  const [tmdbOriginName, setTmdbOriginName] = useState(movie?.origin_name);
+
+  useEffect(() => {
+    setTmdbTitle(movie?.name);
+    setTmdbOriginName(movie?.origin_name);
+  }, [movie?.name, movie?.origin_name]);
+
   // 🚀 TỐI ƯU: Primary: TMDB (w500) → Secondary (Fallback): phimapi.com
   useEffect(() => {
     if (!movie) return;
@@ -75,9 +83,23 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating, pri
         }
 
         if (tmdbId) {
-          const combinedUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=en-US&append_to_response=images&include_image_language=en,null`;
+          const combinedUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=vi&append_to_response=images&include_image_language=vi,en,null`;
           const combinedData = await fetchWithCache(`tmdb_combined_${tmdbType}_${tmdbId}`, () => fetch(rewriteTMDBUrl(combinedUrl)).then(r => r.json()), TTL.TMDB_STATIC);
 
+          if (combinedData && !cancelled) {
+            const tmdbName = combinedData.title || combinedData.name;
+            if (tmdbName) {
+              // Ignore foreign TMDB titles (Chinese, Thai, Korean, Japanese, etc.) and fallback to phimapi
+              const hasForeignChars = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\uFAFF\uac00-\ud7af\u1100-\u11ff\u3130-\u318f\u0e00-\u0e7f]/.test(tmdbName);
+              if (!hasForeignChars) {
+                setTmdbTitle(tmdbName);
+              }
+            }
+            if (combinedData.original_title || combinedData.original_name) {
+              setTmdbOriginName(combinedData.original_title || combinedData.original_name);
+            }
+          }
+          
           const bestPoster = extractBestPoster(combinedData.images);
           if (bestPoster && !cancelled) {
             setPosterUrl(bestPoster);
@@ -176,7 +198,7 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating, pri
 
   const imgProps: any = {
     src: finalPosterUrl || undefined,
-    alt: movie.name || '',
+    alt: tmdbTitle || movie.name || '',
     className: "w-full h-full object-cover transition-opacity duration-300 group-hover:opacity-40 movie-poster",
     style: mobileActive ? { opacity: 0.4 } : {},
     decoding: "async",
@@ -233,7 +255,7 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating, pri
           <div className={`w-full h-full bg-[#1A1A1A] flex flex-col items-center justify-center gap-2 select-none ${showSkeleton ? 'animate-pulse' : ''}`}>
             <Film className="w-12 h-12 text-gray-600 opacity-40" />
             <span className="text-[10px] text-gray-500 font-medium px-2 text-center uppercase tracking-wider line-clamp-1">
-              {movie.name || ''}
+              {tmdbTitle || movie.name || ''}
             </span>
           </div>
         )}
@@ -290,11 +312,11 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating, pri
         <h3
           className="text-white font-heading font-semibold text-sm line-clamp-1 group-hover:text-[#E50914] transition-colors"
           style={mobileActive ? { color: '#E50914' } : {}}
-          title={decodeHtml(movie.name || '')}
-          dangerouslySetInnerHTML={{ __html: movie.name || '' }}
+          title={decodeHtml(tmdbTitle || movie.name || '')}
+          dangerouslySetInnerHTML={{ __html: tmdbTitle || movie.name || '' }}
         />
         <p className="text-[#A0A0A0] text-xs mt-1 line-clamp-1 hidden md:block">
-          {movie.year || 'N/A'} • {decodeHtml(movie.origin_name || '')}
+          {movie.year || 'N/A'} • {decodeHtml(tmdbOriginName || movie.origin_name || '')}
         </p>
         <p className="text-[#A0A0A0] text-xs mt-0.5 md:hidden">
           {movie.year || 'N/A'}

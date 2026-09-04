@@ -301,13 +301,13 @@ export async function fetchTmdbSearch(title: string, year?: string, type?: 'movi
     }
 
     // Try with year param first
-    let res = await fetch(`https://api.themoviedb.org${endpoint}?api_key=${TMDB_KEY}&query=${encodeURIComponent(cleanTitle)}${yearParam}&language=en-US`);
+    let res = await fetch(`https://api.themoviedb.org${endpoint}?api_key=${TMDB_KEY}&query=${encodeURIComponent(cleanTitle)}${yearParam}&language=vi`);
     let data = await res.json();
     let results = data.results || [];
 
     // If no results, fallback to search without year param
     if (!results.length && year) {
-        res = await fetch(`https://api.themoviedb.org${endpoint}?api_key=${TMDB_KEY}&query=${encodeURIComponent(cleanTitle)}&language=en-US`);
+        res = await fetch(`https://api.themoviedb.org${endpoint}?api_key=${TMDB_KEY}&query=${encodeURIComponent(cleanTitle)}&language=vi`);
         data = await res.json();
         results = data.results || [];
     }
@@ -514,7 +514,7 @@ export async function fetchTmdbDetail(id: string | number, type?: string) {
   if (!TMDB_ENABLED) return null;
   const t = type || 'movie';
   try {
-    const res = await fetch(`https://api.themoviedb.org/3/${t}/${id}?api_key=${TMDB_KEY}&language=en-US&append_to_response=images,videos,credits,external_ids&include_image_language=en,null`);
+    const res = await fetch(`https://api.themoviedb.org/3/${t}/${id}?api_key=${TMDB_KEY}&language=vi&append_to_response=images,videos,credits,external_ids&include_image_language=vi,en,null`);
     if (!res.ok) return null;
     return await res.json();
   } catch { return null; }
@@ -868,10 +868,15 @@ export const api = {
       if (tmdbDetail) {
         const tmdbInfo = tmdbSearch!;
 
-        // Tên — ưu tiên giữ tên tiếng Việt từ phimapi nếu đã có
-        if (!normalized.name && (tmdbDetail.name || tmdbDetail.title)) {
-          normalized.name = tmdbDetail.name || tmdbDetail.title || normalized.name;
+        // Tên — Luôn ghi đè title đã được dịch sang tiếng Việt từ TMDB (do language=vi)
+        const tmdbName = tmdbDetail.title || tmdbDetail.name;
+        if (tmdbName) {
+          const hasForeignChars = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\uFAFF\uac00-\ud7af\u1100-\u11ff\u3130-\u318f\u0e00-\u0e7f]/.test(tmdbName);
+          if (!hasForeignChars) {
+            normalized.name = tmdbName;
+          }
         }
+        // Giữ original title gốc chuẩn xác
         if (tmdbDetail.original_title || tmdbDetail.original_name) {
           normalized.origin_name = tmdbDetail.original_title || tmdbDetail.original_name || normalized.origin_name;
         }
@@ -937,6 +942,16 @@ export const api = {
 
       } else if (tmdbSearch) {
         // Có search result nhưng detail fetch fail — dùng search data tối thiểu
+        const tmdbSearchName = tmdbSearch.title || tmdbSearch.name;
+        if (tmdbSearchName) {
+          const hasForeignChars = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\uFAFF\uac00-\ud7af\u1100-\u11ff\u3130-\u318f\u0e00-\u0e7f]/.test(tmdbSearchName);
+          if (!hasForeignChars) {
+            normalized.name = tmdbSearchName;
+          }
+        }
+        if (tmdbSearch.original_title || tmdbSearch.original_name) {
+          normalized.origin_name = tmdbSearch.original_title || tmdbSearch.original_name || normalized.origin_name;
+        }
         if (!normalized.year && tmdbSearch.release_date) {
           normalized.year = tmdbSearch.release_date.slice(0, 4);
         }
@@ -1023,7 +1038,7 @@ export const api = {
     await tmdbRateLimiter.acquire();
     try {
       const res  = await fetchWithRetry(
-        `https://api.themoviedb.org/3/trending/movie/day?api_key=${TMDB_KEY}&language=vi-VN`,
+        `https://api.themoviedb.org/3/trending/movie/day?api_key=${TMDB_KEY}&language=vi`,
         {}, 2, 6_000,
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

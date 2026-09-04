@@ -1,27 +1,27 @@
 const fs = require('fs');
 
-const file = 'src/pages/Detail.tsx';
+const file = 'src/pages/Watch.tsx';
 let content = fs.readFileSync(file, 'utf8');
 
 // add RefreshCcw to imports
 content = content.replace(
-  'import { Play, Plus, Star, Clock, Calendar, Globe, Heart, X, ArrowLeft, Share2, Copy, Link as LinkIcon } from "lucide-react";',
-  'import { Play, Plus, Star, Clock, Calendar, Globe, Heart, X, ArrowLeft, Share2, Copy, Link as LinkIcon, RefreshCcw } from "lucide-react";'
+  'import { Play, Settings, SkipForward, Volume2, Maximize, AlertCircle, Film, Heart, ArrowLeft, ExternalLink, Tv, Sparkles } from "lucide-react";',
+  'import { Play, Settings, SkipForward, Volume2, Maximize, AlertCircle, Film, Heart, ArrowLeft, ExternalLink, Tv, Sparkles, RefreshCcw } from "lucide-react";'
 );
 
 // replace not found layout
-const oldContent = `  if (!movie) {
+const oldContent = `  if (!movie || !currentEpisode) {
     return (
       <div className="flex items-center justify-center h-[80vh] text-white">
-        <h1 className="text-2xl font-heading">Không tìm thấy phim</h1>
+        <h1 className="text-2xl font-heading">Không tìm thấy tập phim</h1>
       </div>
     );
   }`;
 
-const newContent = `  if (!movie) {
+const newContent = `  if (!movie || !currentEpisode) {
     return (
       <div className="flex flex-col items-center justify-center h-[80vh] text-white space-y-6">
-        <h1 className="text-2xl md:text-3xl font-heading font-bold">Không tìm thấy phim</h1>
+        <h1 className="text-2xl md:text-3xl font-heading font-bold">Không tìm thấy tập phim</h1>
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate(-1)}
@@ -45,7 +45,7 @@ const newContent = `  if (!movie) {
 if(content.includes(oldContent)) {
   content = content.replace(oldContent, newContent);
   fs.writeFileSync(file, content, 'utf8');
-  console.log("Detail.tsx patched successfully.");
+  console.log("Watch.tsx patched successfully.");
 } else {
-  console.log("oldContent not found in Detail.tsx");
+  console.log("oldContent not found in Watch.tsx");
 }
