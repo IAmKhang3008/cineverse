@@ -168,12 +168,11 @@ export async function extractDominantColor(movie: any): Promise<string> {
     candidates.push(getImageUrl(movie.thumb_url, 'banner'));
   }
 
-  // Tier 1: Fetch via CORS blob (immune to tainted canvas & Chrome image cache collision)
+  // Tier 1: Fetch via CORS blob for TMDB images (which support CORS headers)
   for (const url of candidates) {
+    if (!url.includes('image.tmdb.org')) continue;
     try {
-      const corsUrl = url.includes('image.tmdb.org')
-        ? (url.includes('?') ? `${url}&cors=1` : `${url}?cors=1`)
-        : url;
+      const corsUrl = url.includes('?') ? `${url}&cors=1` : `${url}?cors=1`;
 
       const res = await fetch(corsUrl, { mode: 'cors' });
       if (res.ok) {
@@ -201,8 +200,9 @@ export async function extractDominantColor(movie: any): Promise<string> {
     }
   }
 
-  // Tier 2: Direct Image object with cache-busting timestamp
+  // Tier 2: Direct Image object for TMDB
   for (const url of candidates) {
+    if (!url.includes('image.tmdb.org')) continue;
     try {
       const cacheBustUrl = url.includes('?') ? `${url}&t=${Date.now()}` : `${url}?t=${Date.now()}`;
       const img = new Image();

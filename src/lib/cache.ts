@@ -180,8 +180,10 @@ export class LRUCache<T = any> {
 export const cache = new LRUCache(400);
 
 // ============================================================
-// HELPER: fetchWithCache có TTL linh hoạt
+// HELPER: fetchWithCache có TTL linh hoạt & deduplication cho concurrent requests
 // ============================================================
+const inFlightRequests = new Map<string, Promise<any>>();
+
 export async function fetchWithCache<T>(
   key:     string,
   fetcher: () => Promise<T>,
@@ -190,9 +192,23 @@ export async function fetchWithCache<T>(
   const cached = cache.get(key) as T | null;
   if (cached !== null) return cached;
 
-  const data = await fetcher();
-  cache.set(key, data, ttl);
-  return data;
+  if (inFlightRequests.has(key)) {
+    return inFlightRequests.get(key) as Promise<T>;
+  }
+
+  const promise = fetcher()
+    .then((data) => {
+      cache.set(key, data, ttl);
+      inFlightRequests.delete(key);
+      return data;
+    })
+    .catch((err) => {
+      inFlightRequests.delete(key);
+      throw err;
+    });
+
+  inFlightRequests.set(key, promise);
+  return promise;
 }
 
 // ============================================================

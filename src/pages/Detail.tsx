@@ -866,11 +866,16 @@ export default function Detail() {
                 src={getImageUrl(movie.thumb_url || movie.poster_url, 'banner')}
                 alt={movie.name}
                 className="w-full h-full object-cover object-top"
-                crossOrigin="anonymous"
                 referrerPolicy="no-referrer"
                 fetchPriority="high"
                 loading="eager"
                 decoding="async"
+                onError={(e) => {
+                  const fallback = getImageUrl(movie.poster_url || movie.thumb_url, 'poster');
+                  if ((e.target as HTMLImageElement).src !== fallback) {
+                    (e.target as HTMLImageElement).src = fallback;
+                  }
+                }}
               />
 
             </motion.div>
@@ -915,11 +920,16 @@ export default function Detail() {
                 src={getMoviePosterSync(movie.poster_path, movie.poster_url || movie.thumb_url)}
                 alt={movie.name}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                crossOrigin="anonymous"
                 referrerPolicy="no-referrer"
                 fetchPriority="high"
                 loading="eager"
                 decoding="async"
+                onError={(e) => {
+                  const fallback = getImageUrl(movie.poster_url || movie.thumb_url, 'poster');
+                  if ((e.target as HTMLImageElement).src !== fallback) {
+                    (e.target as HTMLImageElement).src = fallback;
+                  }
+                }}
               />
             </div>
           </motion.div>

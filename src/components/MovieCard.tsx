@@ -241,7 +241,14 @@ export function MovieCard({ movie, fromSearch, onHoldChange, rating, priority }:
     decoding: "async",
     draggable: false,
     referrerPolicy: "no-referrer",
-    onError: () => setImgError(true)
+    onError: () => {
+      const fallback = getImageUrl(movie.poster_url || movie.thumb_url, 'poster');
+      if (fallback && posterUrl !== fallback) {
+        setPosterUrl(fallback);
+      } else {
+        setImgError(true);
+      }
+    }
   };
 
   if (priority) {

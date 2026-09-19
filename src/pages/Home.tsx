@@ -250,27 +250,49 @@ SwiperSection.displayName = 'SwiperSection';
 function useTrendingMovies() {
   const [activeTab, setActiveTab] = useState<TrendingWindow>('day');
   const [movies, setMovies]       = useState<any[]>([]);
-  const [loading, setLoading]     = useState(false);
+  const [loading, setLoading]     = useState(true);
   const resultCache = useRef<Partial<Record<TrendingWindow, any[]>>>({});
 
   const fetchTrending = useCallback(async (tab: TrendingWindow) => {
-    if (resultCache.current[tab]) { setMovies(resultCache.current[tab]!); return; }
+    if (resultCache.current[tab] && resultCache.current[tab]!.length > 0) {
+      setMovies(resultCache.current[tab]!);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    setMovies([]);
     try {
-      const res = tab === 'day' 
-        ? await api.getNewUpdated(1) 
-        : await api.getByCategory('phim-chieu-rap', 1);
-      const list = (res.items || []).slice(0, 15);
-      resultCache.current[tab] = list;
-      setMovies(list);
+      let list: any[] = [];
+      if (tab === 'day') {
+        const res = await api.getNewUpdated(1).catch(() => null);
+        list = res?.items || [];
+        if (!list.length) {
+          const fallback = await api.getByCategory('phim-le', 1).catch(() => null);
+          list = fallback?.items || [];
+        }
+      } else {
+        const res = await api.getByCategory('phim-chieu-rap', 1).catch(() => null);
+        list = res?.items || [];
+        if (!list.length) {
+          const fallback = await api.getByCategory('phim-bo', 1).catch(() => null);
+          list = fallback?.items || [];
+        }
+      }
+      const trimmed = list.slice(0, 15);
+      if (trimmed.length > 0) {
+        resultCache.current[tab] = trimmed;
+        setMovies(trimmed);
+      }
     } catch (err) {
       console.warn('[Trending] Failed to load trending:', err);
-      setMovies([]);
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  useEffect(() => { fetchTrending(activeTab); }, [activeTab, fetchTrending]);
+  useEffect(() => {
+    fetchTrending(activeTab);
+  }, [activeTab, fetchTrending]);
+
   return { activeTab, setActiveTab, movies, loading };
 }
 
@@ -809,6 +831,8 @@ export default function Home() {
                       slidesPerView={2}
                       allowTouchMove={true}
                       grabCursor={true}
+                      watchSlidesProgress={true}
+                      touchEventsTarget="wrapper"
                       autoplay={{ delay: 4500, disableOnInteraction: false, pauseOnMouseEnter: true }}
                       breakpoints={SWIPER_BREAKPOINTS}
                       className="pb-2 md:pb-4 !overflow-visible"

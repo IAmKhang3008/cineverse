@@ -4,7 +4,7 @@ const posterCache = new Map<string, string>();
 const verifiedTmdbUrls = new Set<string>();
 const failedTmdbUrls = new Set<string>();
 
-const LOCAL_PLACEHOLDER = '/images/no-poster.svg';
+const LOCAL_PLACEHOLDER = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="500" height="750" viewBox="0 0 500 750"><rect fill="%231a1a1a" width="500" height="750"/><text fill="%23666" font-family="sans-serif" font-size="28" dy="10.5" font-weight="bold" x="50%25" y="50%25" text-anchor="middle">No Poster</text></svg>';
 
 /**
  * Checks if an image URL is reachable within timeout (default 3000ms)
@@ -88,12 +88,21 @@ export async function getMoviePoster(
     }
   }
 
-  // Fallback URL handling (e.g. from phimapi.com)
+  // Fallback URL handling (e.g. from phimapi.com / phimimg.com)
   let validFallback = fallbackUrl || null;
-  if (validFallback && validFallback.includes('phimapi.com/image.php')) {
-    // Already formatted
-  } else if (validFallback && !validFallback.startsWith('http')) {
-    validFallback = `https://phimapi.com/image.php?url=${encodeURIComponent(validFallback)}`;
+  if (validFallback) {
+    if (validFallback.includes('phimapi.com/image.php')) {
+      try {
+        const urlObj = new URL(validFallback);
+        const actualUrl = urlObj.searchParams.get('url');
+        if (actualUrl) {
+          validFallback = actualUrl.startsWith('http') ? actualUrl : `https://phimimg.com/${actualUrl.startsWith('/') ? actualUrl.slice(1) : actualUrl}`;
+        }
+      } catch {}
+    } else if (!validFallback.startsWith('http')) {
+      const cleanPath = validFallback.startsWith('/') ? validFallback.slice(1) : validFallback;
+      validFallback = `https://phimimg.com/${cleanPath}`;
+    }
   }
 
   const result = validFallback || LOCAL_PLACEHOLDER;
@@ -128,8 +137,20 @@ export function getMoviePosterSync(
   }
 
   if (fallbackUrl) {
-    if (fallbackUrl.startsWith('http')) return fallbackUrl;
-    return `https://phimapi.com/image.php?url=${encodeURIComponent(fallbackUrl)}`;
+    if (fallbackUrl.startsWith('http')) {
+      if (fallbackUrl.includes('phimapi.com/image.php')) {
+        try {
+          const urlObj = new URL(fallbackUrl);
+          const actualUrl = urlObj.searchParams.get('url');
+          if (actualUrl) {
+            return actualUrl.startsWith('http') ? actualUrl : `https://phimimg.com/${actualUrl.startsWith('/') ? actualUrl.slice(1) : actualUrl}`;
+          }
+        } catch {}
+      }
+      return fallbackUrl;
+    }
+    const cleanPath = fallbackUrl.startsWith('/') ? fallbackUrl.slice(1) : fallbackUrl;
+    return `https://phimimg.com/${cleanPath}`;
   }
 
   return LOCAL_PLACEHOLDER;
