@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 import { Play, Star, Heart, Film } from "lucide-react";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
 import { decodeHtml } from "@/lib/utils";
 import { api, getImageUrl, extractBestPoster, searchTmdbWithCache } from "@/lib/api";
-import { getMoviePoster } from "@/utils/imageUtils";
+import { getMoviePoster, getMoviePosterSync } from "@/utils/imageUtils";
 import { fetchWithCache, TTL } from "@/lib/cache";
 
 const rewriteTMDBUrl = (url: string) => url;
@@ -19,7 +19,7 @@ interface MovieCardProps {
   priority?: boolean;
 }
 
-export default function MovieCard({ movie, fromSearch, onHoldChange, rating, priority }: MovieCardProps) {
+export function MovieCard({ movie, fromSearch, onHoldChange, rating, priority }: MovieCardProps) {
   const { isFavorite, toggleFavorite } = useFavorites();
   const favorite = movie ? isFavorite(movie.slug) : false;
   const { showToast } = useToast();
@@ -27,9 +27,17 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating, pri
   const [imgError, setImgError] = useState(false);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 📌 STATE cho poster tối ưu
-  const [posterUrl, setPosterUrl] = useState<string | null>(null);
-  const [posterLoading, setPosterLoading] = useState(true); // cho skeleton
+  // 📌 TỐI ƯU: Khởi tạo posterUrl đồng bộ ngay từ đầu, 0ms, không nháy skeleton
+  const initialPoster = useMemo(() => {
+    if (!movie) return null;
+    return getMoviePosterSync(
+      movie.poster_path || movie.tmdb?.poster_path,
+      movie.poster_url || movie.thumb_url
+    );
+  }, [movie?.poster_path, movie?.tmdb?.poster_path, movie?.poster_url, movie?.thumb_url]);
+
+  const [posterUrl, setPosterUrl] = useState<string | null>(initialPoster);
+  const [posterLoading, setPosterLoading] = useState(!initialPoster);
 
   const [tmdbTitle, setTmdbTitle] = useState(movie?.name);
   const [tmdbOriginName, setTmdbOriginName] = useState(movie?.origin_name);
@@ -37,22 +45,30 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating, pri
   useEffect(() => {
     setTmdbTitle(movie?.name);
     setTmdbOriginName(movie?.origin_name);
-  }, [movie?.name, movie?.origin_name]);
+    if (initialPoster) {
+      setPosterUrl(initialPoster);
+      setPosterLoading(false);
+    }
+  }, [movie?.name, movie?.origin_name, initialPoster]);
 
-  // 🚀 TỐI ƯU: Primary: TMDB (w500) → Secondary (Fallback): phimapi.com
+  // 🚀 TỐI ƯU CHO THIẾT BỊ YẾU:
+  // - Nếu đã có poster TMDB chuẩn hoặc poster hợp lệ, không spam TMDB search đồng loạt
+  // - Ưu tiên các thẻ visible/priority; các thẻ khác dùng requestIdleCallback
   useEffect(() => {
     if (!movie) return;
 
+    // Nếu đã có poster TMDB sắc nét sẵn, không cần tìm kiếm TMDB trên thẻ thông thường
+    const hasValidTmdbPoster = posterUrl && posterUrl.includes('image.tmdb.org/t/p/');
+    if (hasValidTmdbPoster && !priority) return;
+
     let cancelled = false;
+    let idleTimer: any = null;
 
     const fetchBestPoster = async () => {
-      setPosterLoading(true);
-      setImgError(false);
-
       try {
         const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
 
-        // First verify using unified getMoviePoster if we have a TMDB candidate or existing TMDB url
+        // 1. Kiểm tra TMDB candidate hoặc poster_url có sẵn
         const tmdbCandidate = movie.poster_path || movie.tmdb?.poster_path;
         const isAlreadyTmdbUrl = movie.poster_url && movie.poster_url.includes('image.tmdb.org');
         
@@ -89,7 +105,6 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating, pri
           if (combinedData && !cancelled) {
             const tmdbName = combinedData.title || combinedData.name;
             if (tmdbName) {
-              // Ignore foreign TMDB titles (Chinese, Thai, Korean, Japanese, etc.) and fallback to phimapi
               const hasForeignChars = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\uFAFF\uac00-\ud7af\u1100-\u11ff\u3130-\u318f\u0e00-\u0e7f]/.test(tmdbName);
               if (!hasForeignChars) {
                 setTmdbTitle(tmdbName);
@@ -98,22 +113,22 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating, pri
             if (combinedData.original_title || combinedData.original_name) {
               setTmdbOriginName(combinedData.original_title || combinedData.original_name);
             }
-          }
-          
-          const bestPoster = extractBestPoster(combinedData.images);
-          if (bestPoster && !cancelled) {
-            setPosterUrl(bestPoster);
-            setPosterLoading(false);
-            return;
-          }
-          if (combinedData.poster_path && !cancelled) {
-            setPosterUrl(`https://image.tmdb.org/t/p/w500${combinedData.poster_path}`);
-            setPosterLoading(false);
-            return;
+            
+            const bestPoster = extractBestPoster(combinedData.images);
+            if (bestPoster && !cancelled) {
+              setPosterUrl(bestPoster);
+              setPosterLoading(false);
+              return;
+            }
+            if (combinedData.poster_path && !cancelled) {
+              setPosterUrl(`https://image.tmdb.org/t/p/w500${combinedData.poster_path}`);
+              setPosterLoading(false);
+              return;
+            }
           }
         }
 
-        // 3. SECONDARY (FALLBACK): phimapi.com images
+        // 3. Fallback: phimapi.com images
         const imagesData = await api.getMovieImages(movie.slug).catch(() => null);
         if (imagesData?.images?.length > 0) {
           const basePosterUrl = imagesData.image_sizes?.poster?.w500 || "https://image.tmdb.org/t/p/w500";
@@ -125,23 +140,45 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating, pri
           }
         }
 
-        // 4. FINAL FALLBACK: phimapi.com poster_url / thumb_url
-        if (!cancelled) {
+        // 4. Final fallback
+        if (!cancelled && !posterUrl) {
           setPosterUrl(getImageUrl(movie.poster_url || movie.thumb_url, 'poster'));
         }
-
       } catch (err) {
-        console.warn("MovieCard: TMDB poster fetch failed, using phimapi fallback", err);
-        if (!cancelled) setPosterUrl(getImageUrl(movie.poster_url || movie.thumb_url, 'poster'));
+        if (!cancelled && !posterUrl) {
+          setPosterUrl(getImageUrl(movie.poster_url || movie.thumb_url, 'poster'));
+        }
       } finally {
         if (!cancelled) setPosterLoading(false);
       }
     };
 
-    fetchBestPoster();
+    // Điều phối luồng xử lý: các thẻ ưu tiên chạy ngay; các thẻ khác chờ trình duyệt rảnh rỗi (idle)
+    if (!priority) {
+      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+        idleTimer = (window as any).requestIdleCallback(() => {
+          if (!cancelled) fetchBestPoster();
+        }, { timeout: 2500 });
+      } else {
+        idleTimer = setTimeout(() => {
+          if (!cancelled) fetchBestPoster();
+        }, 150);
+      }
+    } else {
+      fetchBestPoster();
+    }
 
-    return () => { cancelled = true; };
-  }, [movie?.slug, movie?.poster_url, movie?.thumb_url, movie?.poster_path]); // fetch khi slug hoặc poster gốc thay đổi
+    return () => {
+      cancelled = true;
+      if (idleTimer) {
+        if (typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+          (window as any).cancelIdleCallback(idleTimer);
+        } else {
+          clearTimeout(idleTimer);
+        }
+      }
+    };
+  }, [movie?.slug, movie?.poster_url, movie?.thumb_url, movie?.poster_path, priority]);
 
   // Hiệu ứng touch giữ nguyên
   const setActive = useCallback((val: boolean) => {
@@ -246,82 +283,99 @@ export default function MovieCard({ movie, fromSearch, onHoldChange, rating, pri
         to={`/movie/${movie.slug}`}
         state={fromSearch ? { fromSearch: true } : undefined}
         onClick={e => { if (mobileActive) e.preventDefault(); }}
-        className="block w-full rounded-[12px] overflow-hidden aspect-[2/3] bg-[#121212] transition-transform duration-300 group-hover:scale-[1.05] shadow-[0_10px_20px_rgba(0,0,0,0.5)] relative border border-transparent"
-        style={mobileActive ? { transform: 'scale(1.05)', boxShadow: '0 15px 30px rgba(229,9,20,0.3)' } : {}}
+        className="block w-full rounded-2xl overflow-hidden aspect-[2/3] bg-[#141414] transition-all duration-300 group-hover:scale-[1.04] shadow-[0_8px_24px_rgba(0,0,0,0.6)] group-hover:shadow-[0_16px_36px_rgba(0,0,0,0.85)] relative border border-white/[0.07] group-hover:border-white/20"
+        style={mobileActive ? { transform: 'scale(1.04)', boxShadow: '0 16px 36px rgba(229,9,20,0.35)', borderColor: 'rgba(229,9,20,0.5)' } : {}}
       >
         {finalPosterUrl ? (
           <img {...imgProps} />
         ) : (
-          <div className={`w-full h-full bg-[#1A1A1A] flex flex-col items-center justify-center gap-2 select-none ${showSkeleton ? 'animate-pulse' : ''}`}>
-            <Film className="w-12 h-12 text-gray-600 opacity-40" />
-            <span className="text-[10px] text-gray-500 font-medium px-2 text-center uppercase tracking-wider line-clamp-1">
+          <div className={`w-full h-full bg-[#161616] flex flex-col items-center justify-center gap-2 select-none ${showSkeleton ? 'animate-pulse' : ''}`}>
+            <Film className="w-10 h-10 text-white/20" />
+            <span className="text-[10px] text-white/40 font-medium px-2 text-center uppercase tracking-wider line-clamp-1">
               {tmdbTitle || movie.name || ''}
             </span>
           </div>
         )}
 
+        {/* Poster Bottom Subtle Gradient for depth */}
+        <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/80 via-black/30 to-transparent pointer-events-none opacity-80 group-hover:opacity-95 transition-opacity" />
+
+        {/* Quality Badge */}
         {movie.quality && (
-          <div className="absolute top-2 left-2 z-10">
-            <span className="bg-black/60 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider border border-white/10">
+          <div className="absolute top-2.5 left-2.5 z-10">
+            <span className="bg-black/70 backdrop-blur-md text-white text-[9px] sm:text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider border border-white/15 shadow-md">
               {movie.quality}
             </span>
           </div>
         )}
 
+        {/* Play Icon in Center */}
         <div className="absolute inset-0 flex flex-col items-center justify-center z-20 pointer-events-none">
           <div className={`
-            w-10 h-10 md:w-14 md:h-14 rounded-full bg-[#E50914]
+            w-11 h-11 md:w-13 md:h-13 rounded-full bg-[#E50914]
             flex items-center justify-center
-            shadow-[0_0_20px_rgba(229,9,20,0.5)]
+            shadow-[0_0_24px_rgba(229,9,20,0.65)]
             transition-all duration-300
+            border border-white/20
             ${mobileActive ? 'opacity-100 scale-100' : 'opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-100'}
           `}>
-            <Play className="w-4 h-4 md:w-6 md:h-6 text-white ml-1" fill="currentColor" />
+            <Play className="w-4 h-4 md:w-5 md:h-5 text-white ml-0.5" fill="currentColor" />
           </div>
         </div>
 
-        <div className={`
-          absolute bottom-3 left-3 z-20
-          flex items-center gap-1
-          bg-black/60 backdrop-blur-sm px-2 py-1 rounded
-          border border-[#F5C518]/30
-          transition-opacity duration-300
-          ${mobileActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}
-        `}>
-          <Star className="w-3.5 h-3.5 text-[#F5C518]" fill="currentColor" />
-          <span className="text-[#F5C518] font-bold text-xs">{ratingValue}</span>
-        </div>
+        {/* Rating Badge */}
+        {ratingValue !== 'N/A' && (
+          <div className={`
+            absolute bottom-2.5 left-2.5 z-20
+            flex items-center gap-1
+            bg-black/70 backdrop-blur-md px-2 py-0.5 rounded-md
+            border border-[#F5C518]/30 shadow-md
+            transition-opacity duration-300
+            ${mobileActive ? 'opacity-100' : 'opacity-90 group-hover:opacity-100'}
+          `}>
+            <Star className="w-3 h-3 text-[#F5C518]" fill="currentColor" />
+            <span className="text-[#F5C518] font-extrabold text-[11px]">{ratingValue}</span>
+          </div>
+        )}
 
+        {/* Favorite Button */}
         <button
           onTouchEnd={e => { e.stopPropagation(); handleFavoriteClick(e); }}
           onClick={handleFavoriteClick}
+          aria-label={favorite ? 'Bỏ yêu thích' : 'Thêm vào yêu thích'}
           className={`
-            absolute top-2 right-2 z-30
+            absolute top-2.5 right-2.5 z-30
             p-2 rounded-full
-            bg-black/60 backdrop-blur-sm border border-white/10
-            hover:bg-[#E50914] hover:border-transparent
-            transition-all duration-300
+            bg-black/70 backdrop-blur-md border border-white/15
+            hover:bg-[#E50914] hover:border-[#E50914]
+            transition-all duration-300 shadow-md active:scale-90
             ${mobileActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}
           `}
         >
-          <Heart className={`w-4 h-4 ${favorite ? 'fill-white text-white' : 'text-white'}`} />
+          <Heart className={`w-3.5 h-3.5 ${favorite ? 'fill-white text-white' : 'text-white'}`} />
         </button>
       </Link>
 
-      <div className="mt-3 px-1 text-center md:text-left w-full">
+      {/* Movie Meta Information */}
+      <div className="mt-2.5 px-0.5 text-center md:text-left w-full">
         <h3
-          className="text-white font-heading font-semibold text-sm line-clamp-1 group-hover:text-[#E50914] transition-colors"
+          className="text-white/95 font-heading font-semibold text-xs sm:text-sm line-clamp-1 group-hover:text-[#E50914] transition-colors"
           style={mobileActive ? { color: '#E50914' } : {}}
           title={decodeHtml(tmdbTitle || movie.name || '')}
           dangerouslySetInnerHTML={{ __html: tmdbTitle || movie.name || '' }}
         />
-        <p className="text-[#A0A0A0] text-xs mt-1 line-clamp-1 hidden md:block">
-          {movie.year || 'N/A'} • {decodeHtml(tmdbOriginName || movie.origin_name || '')}
-        </p>
-        <p className="text-[#A0A0A0] text-xs mt-0.5 md:hidden">
-          {movie.year || 'N/A'}
-        </p>
+        <div className="flex items-center justify-center md:justify-start gap-1.5 text-white/45 text-[11px] sm:text-xs mt-1 line-clamp-1">
+          <span className="font-medium text-white/60">{movie.year || 'N/A'}</span>
+          {(tmdbOriginName || movie.origin_name) && (
+            <>
+              <span>•</span>
+              <span className="truncate italic">{decodeHtml(tmdbOriginName || movie.origin_name || '')}</span>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
 }
+
+export default React.memo(MovieCard);

@@ -23,11 +23,10 @@ import { cleanLangString } from './utils';
 // ─────────────────────────────────────────────────────────────
 // CẤU HÌNH
 // ─────────────────────────────────────────────────────────────
+const PROXY_URL             = '/api/phim';
 const PRIMARY_URL           = 'https://phimapi.com';
-const FALLBACK_URL          = 'https://ophim1.com';
-const MAX_RETRIES           = 1;
 const PRIMARY_TIMEOUT       = 8_000;
-const PARALLEL_THRESHOLD    = 1_000;
+const MAX_RETRIES           = 1;
 const HEALTH_CHECK_INTERVAL = 30_000;
 
 // [FIX 5] Không hard-code key — chỉ lấy từ .env
@@ -658,22 +657,23 @@ function isEndpointSupportedOnFallback(endpoint: string): boolean {
 
 
 async function apiFetch(endpoint: string): Promise<{ data: any; source: 'primary' | 'fallback' }> {
-  const canFallback = isEndpointSupportedOnFallback(endpoint);
-
-  // If we are currently in fallback mode and fallback is supported for this endpoint
-  if (apiState.usingFallback && canFallback) {
-    try {
-      const res = await fetchWithTimeout(`${FALLBACK_URL}${endpoint}`, PRIMARY_TIMEOUT);
-      if (!res.ok) throw new Error(`Fallback HTTP ${res.status}`);
-      const data = await res.json();
-      if (data && data.status === false) throw new Error(`Fallback API returned status: false (${data.msg || ''})`);
-      return { data, source: 'fallback' };
-    } catch (e) {
-      console.warn('[API] Fallback failed:', e);
+  // 1. Try local reverse proxy first (same-origin, 100% immune to browser CORS policies & client adblockers)
+  try {
+    const res = await fetchWithTimeout(`${PROXY_URL}${endpoint}`, PRIMARY_TIMEOUT);
+    if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await res.json();
+        if (data && data.status !== false) {
+          return { data, source: 'primary' };
+        }
+      }
     }
+  } catch {
+    // If reverse proxy is unreachable (e.g., pure static production host), fall through to direct fetch
   }
 
-  // Otherwise, try primary
+  // 2. Direct fetch to PRIMARY_URL
   try {
     const res = await fetchWithTimeout(`${PRIMARY_URL}${endpoint}`, PRIMARY_TIMEOUT);
     if (!res.ok) throw new Error(`Primary HTTP ${res.status}`);
@@ -683,26 +683,8 @@ async function apiFetch(endpoint: string): Promise<{ data: any; source: 'primary
       throw new Error(`Primary API returned status: false (${data.msg || ''})`);
     }
 
-    // Success, reset consecutive fails
-    apiState.consecutiveFails = 0;
-    if (apiState.usingFallback) {
-      apiState.switchToPrimary();
-    }
-    
     return { data, source: 'primary' };
   } catch (err) {
-    if (canFallback) {
-      apiState.consecutiveFails++;
-      if (apiState.consecutiveFails >= 2) {
-        apiState.switchToFallback();
-      }
-      
-      const res = await fetchWithTimeout(`${FALLBACK_URL}${endpoint}`, PRIMARY_TIMEOUT);
-      if (!res.ok) throw new Error(`Fallback HTTP ${res.status}`);
-      const data = await res.json();
-      if (data && data.status === false) throw new Error(`Fallback API returned status: false (${data.msg || ''})`);
-      return { data, source: 'fallback' };
-    }
     throw err;
   }
 }
@@ -1010,24 +992,34 @@ export const api = {
       };
     }, TTL.MOVIE_DETAIL),
 
-  search: async (keyword: string, page = 1, limit = 64, filters: { category?: string; country?: string; year?: string; sort_field?: string; sort_type?: string; sort_lang?: string } = {}) =>
-    fetchWithCache(`search:${keyword}:${page}:${limit}:${JSON.stringify(filters)}`, async () => {
-      const params = new URLSearchParams();
-      params.append('keyword', keyword);
-      params.append('page', page.toString());
-      params.append('limit', limit.toString());
-      if (filters.category) params.append('category', filters.category);
-      if (filters.country) params.append('country', filters.country);
-      if (filters.year) params.append('year', filters.year);
-      if (filters.sort_field) params.append('sort_field', filters.sort_field);
-      if (filters.sort_type) params.append('sort_type', filters.sort_type);
-      if (filters.sort_lang) params.append('sort_lang', filters.sort_lang);
+  search: async (keyword: string, page = 1, limit = 24, filters: { category?: string; country?: string; year?: string; sort_field?: string; sort_type?: string; sort_lang?: string } = {}) => {
+    const cleanKeyword = (keyword || '').trim();
+    if (!cleanKeyword) {
+      return { items: [], pagination: null };
+    }
+    return fetchWithCache(`search:${cleanKeyword}:${page}:${limit}:${JSON.stringify(filters)}`, async () => {
+      try {
+        const params = new URLSearchParams();
+        params.append('keyword', cleanKeyword);
+        params.append('page', page.toString());
+        params.append('limit', limit.toString());
+        if (filters.category) params.append('category', filters.category);
+        if (filters.country) params.append('country', filters.country);
+        if (filters.year) params.append('year', filters.year);
+        if (filters.sort_field) params.append('sort_field', filters.sort_field);
+        if (filters.sort_type) params.append('sort_type', filters.sort_type);
+        if (filters.sort_lang) params.append('sort_lang', filters.sort_lang);
 
-      const { data, source } = await apiFetch(`/v1/api/tim-kiem?${params.toString()}`);
-      const items      = data.data?.items || data.items || [];
-      const pagination = data.data?.params?.pagination || data.pagination || null;
-      return { items: items.map((i: any) => normalizeBySource(i, source)), pagination };
-    }, TTL.SEARCH),
+        const { data, source } = await apiFetch(`/v1/api/tim-kiem?${params.toString()}`);
+        const items      = data.data?.items || data.items || [];
+        const pagination = data.data?.params?.pagination || data.pagination || null;
+        return { items: items.map((i: any) => normalizeBySource(i, source)), pagination };
+      } catch (err) {
+        console.warn('[API Search] Search failed for:', cleanKeyword, err);
+        return { items: [], pagination: null };
+      }
+    }, TTL.SEARCH);
+  },
 
   getApiStatus: () => ({
     usingFallback: false,

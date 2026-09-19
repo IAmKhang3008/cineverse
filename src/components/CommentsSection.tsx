@@ -78,11 +78,10 @@ export default function CommentsSection({ movieId }: { movieId: string }) {
   useEffect(() => {
     if (!movieId) return;
 
-    // Truy vấn: Lấy bình luận của phim này, sắp xếp mới nhất lên đầu
+    // Truy vấn: Lấy bình luận của phim này
     const q = query(
       collection(db, "comments"),
-      where("movieId", "==", movieId),
-      orderBy("createdAt", "desc")
+      where("movieId", "==", movieId)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -90,6 +89,19 @@ export default function CommentsSection({ movieId }: { movieId: string }) {
         id: doc.id,
         ...doc.data()
       })) as Comment[];
+
+      // Sắp xếp mới nhất lên đầu (tránh lỗi thiếu composite index)
+      commentsData.sort((a, b) => {
+        const getTime = (val: any) => {
+          if (!val) return 0;
+          if (typeof val.toMillis === "function") return val.toMillis();
+          if (val.seconds) return val.seconds * 1000;
+          if (val instanceof Date) return val.getTime();
+          return new Date(val).getTime() || 0;
+        };
+        return getTime(b.createdAt) - getTime(a.createdAt);
+      });
+
       setComments(commentsData);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, "comments");

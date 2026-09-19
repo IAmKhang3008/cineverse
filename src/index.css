@@ -108,6 +108,29 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Swiper Custom Styles */
+@keyframes kenBurnsStatic {
+  0% { transform: scale(1.06) translateZ(0); }
+  100% { transform: scale(1.0) translateZ(0); }
+}
+
+.kenburns-active {
+  animation: kenBurnsStatic 8s ease-out forwards;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kenburns-active {
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
+.movie-poster {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: translateZ(0);
+}
+
 .hero-thumb-bullet {
   width: 60px;
   height: 40px;
@@ -118,6 +141,15 @@ h1, h2, h3, h4, h5, h6 {
   cursor: pointer;
   transition: all 0.3s ease;
   border: 2px solid transparent;
+}
+
+@keyframes thumbProgress {
+  0% { width: 0%; }
+  100% { width: 100%; }
+}
+
+.thumb-progress-active {
+  animation: thumbProgress 7s linear forwards;
 }
 
 .hero-thumb-bullet.swiper-pagination-bullet-active {

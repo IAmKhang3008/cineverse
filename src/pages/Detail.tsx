@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useLayoutEffect } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { api, getImageUrl, getTmdbPosterUrl, searchTmdbWithCache } from "@/lib/api";
+import { extractDominantColor } from "@/lib/colorExtractor";
 import { getMoviePoster, getMoviePosterSync } from "@/utils/imageUtils";
 import { Play, Plus, Star, Clock, Calendar, Globe, Heart, X, ArrowLeft, Share2, Copy, Link as LinkIcon, RefreshCcw } from "lucide-react";
 import MovieCard from "@/components/MovieCard";
@@ -360,44 +361,16 @@ export default function Detail() {
   }, [slug, showToast]);
 
   useEffect(() => {
-    if (!movie?.thumb_url && !movie?.poster_url) return;
+    if (!movie) return;
 
     let isMounted = true;
-    const imageUrl = getImageUrl(movie.thumb_url || movie.poster_url, "banner");
-
-    const img = new Image();
-    img.crossOrigin = "Anonymous";
-    img.onload = () => {
-      if (!isMounted) return;
-      try {
-        const canvas = document.createElement("canvas");
-        canvas.width = 1;
-        canvas.height = 1;
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, 1, 1);
-          const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
-          
-          const toHex = (c: number) => {
-            const hex = c.toString(16);
-            return hex.length === 1 ? "0" + hex : hex;
-          };
-          const color = `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-          setAccentColor(color);
-        } else {
-          setAccentColor("#E50914");
-        }
-      } catch (err) {
-        console.warn("Canvas color extraction failed (probably CORS restrictions), using default:", err);
-        setAccentColor("#E50914");
+    extractDominantColor(movie).then((color) => {
+      if (isMounted && color) {
+        setAccentColor(color);
       }
-    };
-    img.onerror = () => {
-      if (isMounted) {
-        setAccentColor("#E50914");
-      }
-    };
-    img.src = imageUrl;
+    }).catch((err) => {
+      console.warn("Dynamic color extraction error:", err);
+    });
 
     return () => {
       isMounted = false;
@@ -893,6 +866,7 @@ export default function Detail() {
                 src={getImageUrl(movie.thumb_url || movie.poster_url, 'banner')}
                 alt={movie.name}
                 className="w-full h-full object-cover object-top"
+                crossOrigin="anonymous"
                 referrerPolicy="no-referrer"
                 fetchPriority="high"
                 loading="eager"
@@ -941,6 +915,7 @@ export default function Detail() {
                 src={getMoviePosterSync(movie.poster_path, movie.poster_url || movie.thumb_url)}
                 alt={movie.name}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                crossOrigin="anonymous"
                 referrerPolicy="no-referrer"
                 fetchPriority="high"
                 loading="eager"
@@ -1154,19 +1129,19 @@ export default function Detail() {
         {/* Detailed Info Tabs – GLASSMORPHISM PANEL */}
         <motion.div 
           layout
-          className="relative mt-8 md:mt-12 backdrop-blur-3xl rounded-3xl overflow-hidden"
+          className="relative mt-8 md:mt-12 backdrop-blur-3xl rounded-3xl overflow-hidden transition-all duration-700"
           style={{
-            background: `linear-gradient(135deg, ${accentColor}22, rgba(15,15,15,0.92))`,
+            background: `linear-gradient(135deg, ${accentColor}28, rgba(15,15,15,0.94))`,
             borderColor: `${accentColor}55`,
             borderWidth: 1,
             borderStyle: 'solid',
-            boxShadow: `0 20px 80px rgba(0,0,0,0.55), 0 0 40px ${accentColor}22`
+            boxShadow: `0 20px 80px rgba(0,0,0,0.55), 0 0 45px ${accentColor}28`
           }}
         >
           {/* Subtle glow inside */}
           <div 
-            className="absolute inset-0 pointer-events-none rounded-3xl"
-            style={{ background: `linear-gradient(to bottom right, ${accentColor}10, transparent)` }}
+            className="absolute inset-0 pointer-events-none rounded-3xl transition-opacity duration-700"
+            style={{ background: `linear-gradient(to bottom right, ${accentColor}18, transparent)` }}
           />
 
           {/* Tab header */}
@@ -1218,53 +1193,143 @@ export default function Detail() {
                     className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 md:gap-4 text-sm md:text-base"
                   >
                     {/* Tình trạng */}
-                    <motion.div variants={itemVariants} className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg">
-                      <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Tình trạng</span>
+                    <motion.div 
+                      variants={itemVariants} 
+                      className="backdrop-blur-md rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg transition-colors duration-500"
+                      style={{
+                        background: `linear-gradient(135deg, ${accentColor}14, rgba(255,255,255,0.03))`,
+                        borderColor: `${accentColor}33`,
+                        borderWidth: 1,
+                        borderStyle: 'solid',
+                      }}
+                    >
+                      <span className="text-gray-400 text-xs mb-1 uppercase tracking-wider font-semibold">Tình trạng</span>
                       <span className="text-white font-medium">{movie.episode_current || 'N/A'}</span>
                     </motion.div>
                     {/* Số tập */}
-                    <motion.div variants={itemVariants} className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg">
-                      <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Số tập</span>
+                    <motion.div 
+                      variants={itemVariants} 
+                      className="backdrop-blur-md rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg transition-colors duration-500"
+                      style={{
+                        background: `linear-gradient(135deg, ${accentColor}14, rgba(255,255,255,0.03))`,
+                        borderColor: `${accentColor}33`,
+                        borderWidth: 1,
+                        borderStyle: 'solid',
+                      }}
+                    >
+                      <span className="text-gray-400 text-xs mb-1 uppercase tracking-wider font-semibold">Số tập</span>
                       <span className="text-white font-medium">{movie.episode_total || 'N/A'}</span>
                     </motion.div>
                     {/* Thời lượng */}
-                    <motion.div variants={itemVariants} className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg">
-                      <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Thời lượng</span>
+                    <motion.div 
+                      variants={itemVariants} 
+                      className="backdrop-blur-md rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg transition-colors duration-500"
+                      style={{
+                        background: `linear-gradient(135deg, ${accentColor}14, rgba(255,255,255,0.03))`,
+                        borderColor: `${accentColor}33`,
+                        borderWidth: 1,
+                        borderStyle: 'solid',
+                      }}
+                    >
+                      <span className="text-gray-400 text-xs mb-1 uppercase tracking-wider font-semibold">Thời lượng</span>
                       <span className="text-white font-medium">{movie.time || 'N/A'}</span>
                     </motion.div>
                     {/* Năm */}
-                    <motion.div variants={itemVariants} className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg">
-                      <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Năm</span>
+                    <motion.div 
+                      variants={itemVariants} 
+                      className="backdrop-blur-md rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg transition-colors duration-500"
+                      style={{
+                        background: `linear-gradient(135deg, ${accentColor}14, rgba(255,255,255,0.03))`,
+                        borderColor: `${accentColor}33`,
+                        borderWidth: 1,
+                        borderStyle: 'solid',
+                      }}
+                    >
+                      <span className="text-gray-400 text-xs mb-1 uppercase tracking-wider font-semibold">Năm</span>
                       <span className="text-white font-medium">{movie.year || 'N/A'}</span>
                     </motion.div>
                     {/* Chất lượng */}
-                    <motion.div variants={itemVariants} className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg">
-                      <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Chất lượng</span>
+                    <motion.div 
+                      variants={itemVariants} 
+                      className="backdrop-blur-md rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg transition-colors duration-500"
+                      style={{
+                        background: `linear-gradient(135deg, ${accentColor}14, rgba(255,255,255,0.03))`,
+                        borderColor: `${accentColor}33`,
+                        borderWidth: 1,
+                        borderStyle: 'solid',
+                      }}
+                    >
+                      <span className="text-gray-400 text-xs mb-1 uppercase tracking-wider font-semibold">Chất lượng</span>
                       <span className="text-white font-medium">{movie.quality || 'N/A'}</span>
                     </motion.div>
                     {/* Ngôn ngữ */}
-                    <motion.div variants={itemVariants} className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg">
-                      <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Ngôn ngữ</span>
+                    <motion.div 
+                      variants={itemVariants} 
+                      className="backdrop-blur-md rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg transition-colors duration-500"
+                      style={{
+                        background: `linear-gradient(135deg, ${accentColor}14, rgba(255,255,255,0.03))`,
+                        borderColor: `${accentColor}33`,
+                        borderWidth: 1,
+                        borderStyle: 'solid',
+                      }}
+                    >
+                      <span className="text-gray-400 text-xs mb-1 uppercase tracking-wider font-semibold">Ngôn ngữ</span>
                       <span className="text-white font-medium">{movie.lang ? cleanLangString(movie.lang, false, isVietnameseMovie(movie)) : "N/A"}</span>
                     </motion.div>
                     {/* Đạo diễn */}
-                    <motion.div variants={itemVariants} className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-2 shadow-lg">
-                      <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Đạo diễn</span>
+                    <motion.div 
+                      variants={itemVariants} 
+                      className="backdrop-blur-md rounded-xl p-3 md:p-4 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-2 shadow-lg transition-colors duration-500"
+                      style={{
+                        background: `linear-gradient(135deg, ${accentColor}14, rgba(255,255,255,0.03))`,
+                        borderColor: `${accentColor}33`,
+                        borderWidth: 1,
+                        borderStyle: 'solid',
+                      }}
+                    >
+                      <span className="text-gray-400 text-xs mb-1 uppercase tracking-wider font-semibold">Đạo diễn</span>
                       <span className="text-white font-medium">{movie.director?.join(', ') || 'Đang cập nhật'}</span>
                     </motion.div>
                     {/* Quốc gia */}
-                    <motion.div variants={itemVariants} className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-2 shadow-lg">
-                      <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Quốc gia</span>
+                    <motion.div 
+                      variants={itemVariants} 
+                      className="backdrop-blur-md rounded-xl p-3 md:p-4 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-2 shadow-lg transition-colors duration-500"
+                      style={{
+                        background: `linear-gradient(135deg, ${accentColor}14, rgba(255,255,255,0.03))`,
+                        borderColor: `${accentColor}33`,
+                        borderWidth: 1,
+                        borderStyle: 'solid',
+                      }}
+                    >
+                      <span className="text-gray-400 text-xs mb-1 uppercase tracking-wider font-semibold">Quốc gia</span>
                       <span className="text-white font-medium">
                         {movie.country && (Array.isArray(movie.country) ? movie.country : Object.values(movie.country)).map((c: any) => c.name).join(', ')}
                       </span>
                     </motion.div>
                     {/* Thể loại */}
-                    <motion.div variants={itemVariants} className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-4 shadow-lg">
-                      <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Thể loại</span>
+                    <motion.div 
+                      variants={itemVariants} 
+                      className="backdrop-blur-md rounded-xl p-3 md:p-4 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-4 shadow-lg transition-colors duration-500"
+                      style={{
+                        background: `linear-gradient(135deg, ${accentColor}14, rgba(255,255,255,0.03))`,
+                        borderColor: `${accentColor}33`,
+                        borderWidth: 1,
+                        borderStyle: 'solid',
+                      }}
+                    >
+                      <span className="text-gray-400 text-xs mb-1 uppercase tracking-wider font-semibold">Thể loại</span>
                       <div className="flex flex-wrap gap-2 mt-1.5">
                         {movie.category && (Array.isArray(movie.category) ? movie.category : Object.values(movie.category)).map((c: any, idx: number) => (
-                          <span key={idx} className="bg-white/10 backdrop-blur-sm text-gray-200 text-xs px-2.5 py-1.5 rounded-md border border-white/10">
+                          <span 
+                            key={idx} 
+                            className="backdrop-blur-sm text-gray-200 text-xs px-2.5 py-1.5 rounded-md transition-colors duration-300"
+                            style={{
+                              backgroundColor: `${accentColor}18`,
+                              borderColor: `${accentColor}38`,
+                              borderWidth: 1,
+                              borderStyle: 'solid',
+                            }}
+                          >
                             {c.name}
                           </span>
                         ))}
@@ -1272,8 +1337,17 @@ export default function Detail() {
                     </motion.div>
                     {/* Từ khóa */}
                     {keywords && keywords.length > 0 && (
-                      <motion.div variants={itemVariants} className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-4 shadow-lg">
-                        <span className="text-gray-500 text-xs mb-1 uppercase tracking-wider font-semibold">Từ khóa</span>
+                      <motion.div 
+                        variants={itemVariants} 
+                        className="backdrop-blur-md rounded-xl p-3 md:p-4 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-4 shadow-lg transition-colors duration-500"
+                        style={{
+                          background: `linear-gradient(135deg, ${accentColor}14, rgba(255,255,255,0.03))`,
+                          borderColor: `${accentColor}33`,
+                          borderWidth: 1,
+                          borderStyle: 'solid',
+                        }}
+                      >
+                        <span className="text-gray-400 text-xs mb-1 uppercase tracking-wider font-semibold">Từ khóa</span>
                         <div className="flex flex-wrap gap-2 mt-1.5">
                           {keywords.map((kw: any, idx: number) => {
                             const kwName = typeof kw === 'string' ? kw : (kw.name || kw.label);
@@ -1282,7 +1356,14 @@ export default function Detail() {
                               <Link
                                 key={idx}
                                 to={`/tim-kiem?q=${encodeURIComponent(kwName)}`}
-                                className="bg-[#E50914]/10 hover:bg-[#E50914]/20 text-red-400 text-xs px-2.5 py-1.5 rounded-md border border-[#E50914]/20 transition-colors"
+                                className="text-xs px-2.5 py-1.5 rounded-md transition-all duration-300 hover:brightness-125 font-medium"
+                                style={{
+                                  backgroundColor: `${accentColor}1C`,
+                                  borderColor: `${accentColor}48`,
+                                  color: accentColor,
+                                  borderWidth: 1,
+                                  borderStyle: 'solid',
+                                }}
                               >
                                 #{kwName}
                               </Link>

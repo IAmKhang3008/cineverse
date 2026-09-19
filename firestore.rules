@@ -18,12 +18,17 @@ service cloud.firestore {
       return (
         (!data.keys().hasAny(['email']) || (data.email is string && data.email.size() <= 200)) &&
         (!data.keys().hasAny(['displayName']) || (data.displayName is string && data.displayName.size() <= 64)) &&
+        (!data.keys().hasAny(['name']) || (data.name is string && data.name.size() <= 64)) &&
+        (!data.keys().hasAny(['photoURL']) || (data.photoURL is string && data.photoURL.size() <= 2000)) &&
+        (!data.keys().hasAny(['avatarUrl']) || (data.avatarUrl is string && data.avatarUrl.size() <= 2000)) &&
         (!data.keys().hasAny(['theme']) || (data.theme == 'light' || data.theme == 'dark')) &&
-        (!data.keys().hasAny(['notifications']) || data.notifications is bool) &&
+        (!data.keys().hasAny(['notifications']) || data.notifications is bool || data.notifications is map) &&
         (!data.keys().hasAny(['emailNotifications']) || data.emailNotifications is bool) &&
         (!data.keys().hasAny(['pushNotifications']) || data.pushNotifications is bool) &&
         (!data.keys().hasAny(['twoFactor']) || data.twoFactor is bool) &&
-        (!data.keys().hasAny(['migrated']) || data.migrated is bool)
+        (!data.keys().hasAny(['migrated']) || data.migrated is bool) &&
+        (!data.keys().hasAny(['createdAt']) || data.createdAt is number || data.createdAt is timestamp) &&
+        (!data.keys().hasAny(['updatedAt']) || data.updatedAt is number || data.updatedAt is timestamp)
       );
     }
 
@@ -48,6 +53,21 @@ service cloud.firestore {
         data.timestamp is timestamp &&
         (!data.keys().hasAny(['progress']) || data.progress is number) &&
         (!data.keys().hasAny(['currentEpisode']) || data.currentEpisode is string)
+      );
+    }
+
+    // Validation Blueprint for Comment
+    function isValidComment(data) {
+      return (
+        data.keys().hasAll(['movieId', 'userId', 'userName', 'userAvatar', 'content', 'likes', 'createdAt']) &&
+        data.keys().hasOnly(['movieId', 'userId', 'userName', 'userAvatar', 'content', 'likes', 'createdAt']) &&
+        data.movieId is string && data.movieId.size() > 0 && data.movieId.size() <= 128 &&
+        data.userId is string && data.userId == request.auth.uid &&
+        data.userName is string && data.userName.size() > 0 && data.userName.size() <= 100 &&
+        data.userAvatar is string && data.userAvatar.size() <= 2000 &&
+        data.content is string && data.content.size() > 0 && data.content.size() <= 2000 &&
+        data.likes is list && data.likes.size() <= 1000 &&
+        data.createdAt is timestamp
       );
     }
 
@@ -76,6 +96,20 @@ service cloud.firestore {
       match /settings/{settingId} {
         allow read, write: if isSignedIn() && request.auth.uid == userId;
       }
+    }
+
+    match /comments/{commentId} {
+      allow read, list: if true;
+      allow create: if isSignedIn() && isValidId(commentId) && isValidComment(incoming());
+      allow update: if isSignedIn() && isValidId(commentId) && (
+        (request.auth.uid == existing().userId &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['content']) &&
+         incoming().content is string && incoming().content.size() > 0 && incoming().content.size() <= 2000)
+        ||
+        (incoming().diff(existing()).affectedKeys().hasOnly(['likes']) &&
+         incoming().likes is list && incoming().likes.size() <= 1000)
+      );
+      allow delete: if isSignedIn() && isValidId(commentId) && (request.auth.uid == existing().userId);
     }
   }
 }
