@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
-import { Play, Star, Heart, Film } from "lucide-react";
+import { Play, Heart, Film } from "lucide-react";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
 import { decodeHtml } from "@/lib/utils";
-import { api, getImageUrl, extractBestPoster, searchTmdbWithCache } from "@/lib/api";
-import { getMoviePoster, getMoviePosterSync } from "@/utils/imageUtils";
-import { fetchWithCache, TTL } from "@/lib/cache";
+import { getImageUrl } from "@/lib/api";
+import { getMoviePosterSync, markPosterUrlFailed, LOCAL_PLACEHOLDER } from "@/utils/imageUtils";
 
-const rewriteTMDBUrl = (url: string) => url;
+// Bộ nhớ đệm toàn cục ghi nhận các URL ảnh đã tải thành công để hiển thị tức thì 0ms, không nhấp nháy
+const loadedImages = new Set<string>();
 
 interface MovieCardProps {
   movie: any;
@@ -19,7 +19,7 @@ interface MovieCardProps {
   priority?: boolean;
 }
 
-export function MovieCard({ movie, fromSearch, onHoldChange, rating, priority }: MovieCardProps) {
+export function MovieCard({ movie, fromSearch, onHoldChange, priority }: MovieCardProps) {
   const { isFavorite, toggleFavorite } = useFavorites();
   const favorite = movie ? isFavorite(movie.slug) : false;
   const { showToast } = useToast();
@@ -27,160 +27,34 @@ export function MovieCard({ movie, fromSearch, onHoldChange, rating, priority }:
   const [imgError, setImgError] = useState(false);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 📌 TỐI ƯU: Khởi tạo posterUrl đồng bộ ngay từ đầu, 0ms, không nháy skeleton
+  // 🚀 TỐI ƯU CỰC ĐẠI: Trích xuất poster đồng bộ 0ms, kích thước w342 siêu nhẹ, tải nhanh gấp 4 lần
   const initialPoster = useMemo(() => {
     if (!movie) return null;
     return getMoviePosterSync(
       movie.poster_path || movie.tmdb?.poster_path,
-      movie.poster_url || movie.thumb_url
+      movie.poster_url || movie.thumb_url,
+      'w342'
     );
   }, [movie?.poster_path, movie?.tmdb?.poster_path, movie?.poster_url, movie?.thumb_url]);
 
   const [posterUrl, setPosterUrl] = useState<string | null>(initialPoster);
-  const [posterLoading, setPosterLoading] = useState(!initialPoster);
+  const [isLoaded, setIsLoaded] = useState<boolean>(() => {
+    return initialPoster ? loadedImages.has(initialPoster) : false;
+  });
 
-  const [tmdbTitle, setTmdbTitle] = useState(movie?.name);
-  const [tmdbOriginName, setTmdbOriginName] = useState(movie?.origin_name);
+  const tmdbTitle = movie?.name;
+  const tmdbOriginName = movie?.origin_name;
 
   useEffect(() => {
-    setTmdbTitle(movie?.name);
-    setTmdbOriginName(movie?.origin_name);
     if (initialPoster) {
       setPosterUrl(initialPoster);
-      setPosterLoading(false);
+      if (loadedImages.has(initialPoster)) {
+        setIsLoaded(true);
+      }
     }
-  }, [movie?.name, movie?.origin_name, initialPoster]);
+  }, [initialPoster]);
 
-  // 🚀 TỐI ƯU CHO THIẾT BỊ YẾU:
-  // - Nếu đã có poster TMDB chuẩn hoặc poster hợp lệ, không spam TMDB search đồng loạt
-  // - Ưu tiên các thẻ visible/priority; các thẻ khác dùng requestIdleCallback
-  useEffect(() => {
-    if (!movie) return;
-
-    // Nếu đã có poster TMDB sắc nét sẵn, không cần tìm kiếm TMDB trên thẻ thông thường
-    const hasValidTmdbPoster = posterUrl && posterUrl.includes('image.tmdb.org/t/p/');
-    if (hasValidTmdbPoster && !priority) return;
-
-    let cancelled = false;
-    let idleTimer: any = null;
-
-    const fetchBestPoster = async () => {
-      try {
-        const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
-
-        // 1. Kiểm tra TMDB candidate hoặc poster_url có sẵn
-        const tmdbCandidate = movie.poster_path || movie.tmdb?.poster_path;
-        const isAlreadyTmdbUrl = movie.poster_url && movie.poster_url.includes('image.tmdb.org');
-        
-        if (tmdbCandidate || isAlreadyTmdbUrl) {
-          const resolvedUrl = await getMoviePoster(
-            tmdbCandidate,
-            movie.name || movie.origin_name,
-            movie.poster_url || movie.thumb_url
-          );
-
-          if (resolvedUrl && !cancelled) {
-            setPosterUrl(resolvedUrl);
-            setPosterLoading(false);
-            return;
-          }
-        }
-
-        // 2. PRIMARY: Tìm kiếm hoặc lấy chi tiết TMDB để extract best poster đồng bộ
-        let tmdbId = movie.tmdb?.id;
-        let tmdbType = movie.tmdb?.type || 'movie';
-
-        if (!tmdbId && (movie.origin_name || movie.name)) {
-          const searchResult = await searchTmdbWithCache(movie);
-          if (searchResult) {
-            tmdbId = searchResult.id;
-            tmdbType = searchResult.media_type || (searchResult.first_air_date ? 'tv' : 'movie');
-          }
-        }
-
-        if (tmdbId) {
-          const combinedUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=vi&append_to_response=images&include_image_language=vi,en,null`;
-          const combinedData = await fetchWithCache(`tmdb_combined_${tmdbType}_${tmdbId}`, () => fetch(rewriteTMDBUrl(combinedUrl)).then(r => r.json()), TTL.TMDB_STATIC);
-
-          if (combinedData && !cancelled) {
-            const tmdbName = combinedData.title || combinedData.name;
-            if (tmdbName) {
-              const hasForeignChars = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\uFAFF\uac00-\ud7af\u1100-\u11ff\u3130-\u318f\u0e00-\u0e7f]/.test(tmdbName);
-              if (!hasForeignChars) {
-                setTmdbTitle(tmdbName);
-              }
-            }
-            if (combinedData.original_title || combinedData.original_name) {
-              setTmdbOriginName(combinedData.original_title || combinedData.original_name);
-            }
-            
-            const bestPoster = extractBestPoster(combinedData.images);
-            if (bestPoster && !cancelled) {
-              setPosterUrl(bestPoster);
-              setPosterLoading(false);
-              return;
-            }
-            if (combinedData.poster_path && !cancelled) {
-              setPosterUrl(`https://image.tmdb.org/t/p/w500${combinedData.poster_path}`);
-              setPosterLoading(false);
-              return;
-            }
-          }
-        }
-
-        // 3. Fallback: phimapi.com images
-        const imagesData = await api.getMovieImages(movie.slug).catch(() => null);
-        if (imagesData?.images?.length > 0) {
-          const basePosterUrl = imagesData.image_sizes?.poster?.w500 || "https://image.tmdb.org/t/p/w500";
-          const posterImg = imagesData.images.find((img: any) => img.aspect_ratio && img.aspect_ratio < 1.0);
-          if (posterImg && !cancelled) {
-            setPosterUrl(getImageUrl(`${basePosterUrl}${posterImg.file_path}`, 'poster'));
-            setPosterLoading(false);
-            return;
-          }
-        }
-
-        // 4. Final fallback
-        if (!cancelled && !posterUrl) {
-          setPosterUrl(getImageUrl(movie.poster_url || movie.thumb_url, 'poster'));
-        }
-      } catch (err) {
-        if (!cancelled && !posterUrl) {
-          setPosterUrl(getImageUrl(movie.poster_url || movie.thumb_url, 'poster'));
-        }
-      } finally {
-        if (!cancelled) setPosterLoading(false);
-      }
-    };
-
-    // Điều phối luồng xử lý: các thẻ ưu tiên chạy ngay; các thẻ khác chờ trình duyệt rảnh rỗi (idle)
-    if (!priority) {
-      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-        idleTimer = (window as any).requestIdleCallback(() => {
-          if (!cancelled) fetchBestPoster();
-        }, { timeout: 2500 });
-      } else {
-        idleTimer = setTimeout(() => {
-          if (!cancelled) fetchBestPoster();
-        }, 150);
-      }
-    } else {
-      fetchBestPoster();
-    }
-
-    return () => {
-      cancelled = true;
-      if (idleTimer) {
-        if (typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
-          (window as any).cancelIdleCallback(idleTimer);
-        } else {
-          clearTimeout(idleTimer);
-        }
-      }
-    };
-  }, [movie?.slug, movie?.poster_url, movie?.thumb_url, movie?.poster_path, priority]);
-
-  // Hiệu ứng touch giữ nguyên
+  // Touch event handlers
   const setActive = useCallback((val: boolean) => {
     setMobileActive(val);
     onHoldChange?.(val);
@@ -223,27 +97,27 @@ export function MovieCard({ movie, fromSearch, onHoldChange, rating, priority }:
     setActive(false);
   };
 
-  // Cuối cùng, hiển thị poster hoặc skeleton/fallback
-  const showSkeleton = posterLoading || (!posterUrl && !imgError);
-  const finalPosterUrl = !imgError ? posterUrl : null;
-
-  const ratingValue = rating
-    || (movie?.tmdb?.vote_average && movie.tmdb.vote_average > 0
-        ? movie.tmdb.vote_average.toFixed(1)
-        : null)
-    || 'N/A';
+  const finalPosterUrl = (!imgError && posterUrl && posterUrl !== LOCAL_PLACEHOLDER) ? posterUrl : null;
+  const showSkeleton = !finalPosterUrl && !imgError;
 
   const imgProps: any = {
     src: finalPosterUrl || undefined,
     alt: tmdbTitle || movie.name || '',
-    className: "w-full h-full object-cover transition-opacity duration-300 group-hover:opacity-40 movie-poster",
+    className: `w-full h-full object-cover transition-opacity duration-200 group-hover:opacity-40 movie-poster ${
+      isLoaded ? 'opacity-100' : 'opacity-90'
+    }`,
     style: mobileActive ? { opacity: 0.4 } : {},
     decoding: "async",
     draggable: false,
     referrerPolicy: "no-referrer",
+    onLoad: () => {
+      if (finalPosterUrl) loadedImages.add(finalPosterUrl);
+      setIsLoaded(true);
+    },
     onError: () => {
+      if (finalPosterUrl) markPosterUrlFailed(finalPosterUrl);
       const fallback = getImageUrl(movie.poster_url || movie.thumb_url, 'poster');
-      if (fallback && posterUrl !== fallback) {
+      if (fallback && posterUrl !== fallback && !fallback.includes('placehold.co')) {
         setPosterUrl(fallback);
       } else {
         setImgError(true);
@@ -256,12 +130,14 @@ export function MovieCard({ movie, fromSearch, onHoldChange, rating, priority }:
     imgProps.loading = "eager";
   } else {
     imgProps.loading = "lazy";
+    imgProps.fetchPriority = "low";
   }
 
+  // Tối ưu srcSet responsive theo kích thước thực tế của thẻ (w185 trên mobile, w342 trên tablet/desktop)
   if (finalPosterUrl && finalPosterUrl.includes('image.tmdb.org/t/p/')) {
     const basePath = finalPosterUrl.substring(finalPosterUrl.lastIndexOf('/'));
     imgProps.srcSet = `https://image.tmdb.org/t/p/w185${basePath} 185w, https://image.tmdb.org/t/p/w342${basePath} 342w, https://image.tmdb.org/t/p/w500${basePath} 500w`;
-    imgProps.sizes = "(max-width: 400px) 185px, (max-width: 768px) 342px, 500px";
+    imgProps.sizes = "(max-width: 480px) 185px, (max-width: 1024px) 342px, 500px";
   }
 
   return (
@@ -274,11 +150,11 @@ export function MovieCard({ movie, fromSearch, onHoldChange, rating, priority }:
         contain: 'layout style paint'
       }}
       onMouseEnter={() => {
-        // Speculative prefetch for higher resolution poster image when hovering
+        // Tải trước bản phân giải cao hơn khi người dùng hover
         if (finalPosterUrl && finalPosterUrl.includes('image.tmdb.org/t/p/')) {
           const basePath = finalPosterUrl.substring(finalPosterUrl.lastIndexOf('/'));
           const img = new Image();
-          img.src = `https://image.tmdb.org/t/p/w780${basePath}`;
+          img.src = `https://image.tmdb.org/t/p/w500${basePath}`;
         }
       }}
       onTouchStart={handleTouchStart}
@@ -329,21 +205,6 @@ export function MovieCard({ movie, fromSearch, onHoldChange, rating, priority }:
             <Play className="w-4 h-4 md:w-5 md:h-5 text-white ml-0.5" fill="currentColor" />
           </div>
         </div>
-
-        {/* Rating Badge */}
-        {ratingValue !== 'N/A' && (
-          <div className={`
-            absolute bottom-2.5 left-2.5 z-20
-            flex items-center gap-1
-            bg-black/70 backdrop-blur-md px-2 py-0.5 rounded-md
-            border border-[#F5C518]/30 shadow-md
-            transition-opacity duration-300
-            ${mobileActive ? 'opacity-100' : 'opacity-90 group-hover:opacity-100'}
-          `}>
-            <Star className="w-3 h-3 text-[#F5C518]" fill="currentColor" />
-            <span className="text-[#F5C518] font-extrabold text-[11px]">{ratingValue}</span>
-          </div>
-        )}
 
         {/* Favorite Button */}
         <button

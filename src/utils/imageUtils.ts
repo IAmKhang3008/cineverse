@@ -1,111 +1,67 @@
-// High-performance poster resolver with memory & storage caching
+// High-performance poster resolver with instant 0ms memory & storage caching
+import { getImageUrl } from "@/lib/api";
 
 const posterCache = new Map<string, string>();
-const verifiedTmdbUrls = new Set<string>();
-const failedTmdbUrls = new Set<string>();
+const failedUrls = new Set<string>();
 
-const LOCAL_PLACEHOLDER = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="500" height="750" viewBox="0 0 500 750"><rect fill="%231a1a1a" width="500" height="750"/><text fill="%23666" font-family="sans-serif" font-size="28" dy="10.5" font-weight="bold" x="50%25" y="50%25" text-anchor="middle">No Poster</text></svg>';
+export const LOCAL_PLACEHOLDER = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="500" height="750" viewBox="0 0 500 750"><rect fill="%23141414" width="500" height="750"/><text fill="%23555" font-family="sans-serif" font-size="28" dy="10.5" font-weight="bold" x="50%25" y="50%25" text-anchor="middle">No Poster</text></svg>';
 
 /**
- * Checks if an image URL is reachable within timeout (default 3000ms)
+ * Marks a poster URL as failed so subsequent renders don't attempt to use it
  */
-async function testImageUrl(url: string, timeoutMs: number = 3000): Promise<boolean> {
-  if (verifiedTmdbUrls.has(url)) return true;
-  if (failedTmdbUrls.has(url)) return false;
-
-  return new Promise((resolve) => {
-    let resolved = false;
-    const img = new Image();
-
-    const timer = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        img.src = '';
-        failedTmdbUrls.add(url);
-        resolve(false);
-      }
-    }, timeoutMs);
-
-    img.onload = () => {
-      if (!resolved) {
-        resolved = true;
-        clearTimeout(timer);
-        verifiedTmdbUrls.add(url);
-        resolve(true);
-      }
-    };
-
-    img.onerror = () => {
-      if (!resolved) {
-        resolved = true;
-        clearTimeout(timer);
-        failedTmdbUrls.add(url);
-        resolve(false);
-      }
-    };
-
-    // Trigger load
-    img.src = url;
-  });
+export function markPosterUrlFailed(url: string) {
+  if (url) failedUrls.add(url);
 }
 
 /**
- * Gets the best available poster URL:
- * 1. Checks in-memory cache for instant 0ms resolution
- * 2. Tries TMDB CDN (https://image.tmdb.org/t/p/w500...) if poster_path exists
- * 3. Verifies TMDB image accessibility with 3s timeout
- * 4. Falls back to phimapi.com URL or local placeholder if TMDB fails
+ * Gets the best available poster URL synchronously (0ms, no network delay, no layout shift)
+ */
+export function getMoviePosterSync(
+  poster_path?: string | null,
+  fallbackUrl?: string | null,
+  size: string = 'w342'
+): string {
+  // 1. Check TMDB path
+  if (poster_path) {
+    if (poster_path.startsWith('http')) {
+      if (!failedUrls.has(poster_path)) return poster_path;
+    } else {
+      const cleanPath = poster_path.startsWith('/') ? poster_path : `/${poster_path}`;
+      const tmdbUrl = `https://image.tmdb.org/t/p/${size}${cleanPath}`;
+      if (!failedUrls.has(tmdbUrl)) return tmdbUrl;
+    }
+  }
+
+  // 2. Check fallbackUrl (phimimg.com, ophim, etc.)
+  if (fallbackUrl) {
+    const cached = posterCache.get(fallbackUrl);
+    if (cached) return cached;
+
+    const normalized = getImageUrl(fallbackUrl, 'poster');
+    if (normalized && !failedUrls.has(normalized)) {
+      posterCache.set(fallbackUrl, normalized);
+      return normalized;
+    }
+  }
+
+  return LOCAL_PLACEHOLDER;
+}
+
+/**
+ * Async resolver for best poster URL (instant cache lookup, zero blocking)
  */
 export async function getMoviePoster(
   poster_path?: string | null,
   title?: string,
   fallbackUrl?: string | null,
-  size: string = 'w500'
+  size: string = 'w342'
 ): Promise<string> {
   const cacheKey = `${poster_path || ''}_${title || ''}_${fallbackUrl || ''}_${size}`;
-  
   if (posterCache.has(cacheKey)) {
     return posterCache.get(cacheKey)!;
   }
 
-  // Try TMDB path construct
-  let candidateTmdbUrl: string | null = null;
-
-  if (poster_path) {
-    if (poster_path.startsWith('http://') || poster_path.startsWith('https://')) {
-      candidateTmdbUrl = poster_path;
-    } else {
-      const cleanPath = poster_path.startsWith('/') ? poster_path : `/${poster_path}`;
-      candidateTmdbUrl = `https://image.tmdb.org/t/p/${size}${cleanPath}`;
-    }
-  }
-
-  if (candidateTmdbUrl) {
-    const isOk = await testImageUrl(candidateTmdbUrl, 3000);
-    if (isOk) {
-      posterCache.set(cacheKey, candidateTmdbUrl);
-      return candidateTmdbUrl;
-    }
-  }
-
-  // Fallback URL handling (e.g. from phimapi.com / phimimg.com)
-  let validFallback = fallbackUrl || null;
-  if (validFallback) {
-    if (validFallback.includes('phimapi.com/image.php')) {
-      try {
-        const urlObj = new URL(validFallback);
-        const actualUrl = urlObj.searchParams.get('url');
-        if (actualUrl) {
-          validFallback = actualUrl.startsWith('http') ? actualUrl : `https://phimimg.com/${actualUrl.startsWith('/') ? actualUrl.slice(1) : actualUrl}`;
-        }
-      } catch {}
-    } else if (!validFallback.startsWith('http')) {
-      const cleanPath = validFallback.startsWith('/') ? validFallback.slice(1) : validFallback;
-      validFallback = `https://phimimg.com/${cleanPath}`;
-    }
-  }
-
-  const result = validFallback || LOCAL_PLACEHOLDER;
+  const result = getMoviePosterSync(poster_path, fallbackUrl, size);
   posterCache.set(cacheKey, result);
   return result;
 }
@@ -121,37 +77,4 @@ export function getPosterSrcSet(url: string | null | undefined): { srcSet?: stri
     srcSet: `https://image.tmdb.org/t/p/w185${basePath} 185w, https://image.tmdb.org/t/p/w342${basePath} 342w, https://image.tmdb.org/t/p/w500${basePath} 500w, https://image.tmdb.org/t/p/w780${basePath} 780w`,
     sizes: '(max-width: 480px) 185px, (max-width: 768px) 342px, (max-width: 1200px) 500px, 780px'
   };
-}
-export function getMoviePosterSync(
-  poster_path?: string | null,
-  fallbackUrl?: string | null,
-  size: string = 'w500'
-): string {
-  if (poster_path) {
-    if (poster_path.startsWith('http')) return poster_path;
-    const cleanPath = poster_path.startsWith('/') ? poster_path : `/${poster_path}`;
-    const tmdbUrl = `https://image.tmdb.org/t/p/${size}${cleanPath}`;
-    if (!failedTmdbUrls.has(tmdbUrl)) {
-      return tmdbUrl;
-    }
-  }
-
-  if (fallbackUrl) {
-    if (fallbackUrl.startsWith('http')) {
-      if (fallbackUrl.includes('phimapi.com/image.php')) {
-        try {
-          const urlObj = new URL(fallbackUrl);
-          const actualUrl = urlObj.searchParams.get('url');
-          if (actualUrl) {
-            return actualUrl.startsWith('http') ? actualUrl : `https://phimimg.com/${actualUrl.startsWith('/') ? actualUrl.slice(1) : actualUrl}`;
-          }
-        } catch {}
-      }
-      return fallbackUrl;
-    }
-    const cleanPath = fallbackUrl.startsWith('/') ? fallbackUrl.slice(1) : fallbackUrl;
-    return `https://phimimg.com/${cleanPath}`;
-  }
-
-  return LOCAL_PLACEHOLDER;
 }

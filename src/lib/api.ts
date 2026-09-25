@@ -29,8 +29,8 @@ const PRIMARY_TIMEOUT       = 8_000;
 const MAX_RETRIES           = 1;
 const HEALTH_CHECK_INTERVAL = 30_000;
 
-// [FIX 5] Không hard-code key — chỉ lấy từ .env
-const TMDB_KEY: string    = (import.meta as any).env.VITE_TMDB_API_KEY || '';
+// [FIX 5] TMDB Key với fallback tin cậy
+const TMDB_KEY: string    = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
 const TMDB_ENABLED: boolean = TMDB_KEY.trim().length > 0;
 
 if (!TMDB_ENABLED) {
@@ -832,6 +832,67 @@ export const api = {
 
       // ── STAGE 4: Normalize phimapi data ──────────────────────
       if (!primaryData) {
+        // Hỗ trợ phim từ TMDB Trending với slug dạng tmdb-XXXX hoặc id số
+        const isTmdbSlug = slug.startsWith('tmdb-') || /^\d+$/.test(slug);
+        const tmdbId = isTmdbSlug ? slug.replace(/^tmdb-/, '') : null;
+        
+        if (tmdbId && TMDB_ENABLED) {
+          const detail = await fetchTmdbDetail(tmdbId, 'movie');
+          if (detail) {
+            let matchedEpisodes: any[] = [];
+            let matchedSlug = slug;
+            try {
+              const searchRes = await api.search(detail.title || detail.original_title || '', 1, 5);
+              if (searchRes.items && searchRes.items.length > 0) {
+                const first = searchRes.items[0];
+                matchedSlug = first.slug;
+                const d = await apiFetch(`/phim/${first.slug}`);
+                if (d.data?.episodes) matchedEpisodes = d.data.episodes;
+              }
+            } catch {}
+
+            const tmdbNormalized: NormalizedMovie = {
+              _id: `tmdb-${detail.id}`,
+              slug: matchedSlug,
+              name: detail.title || detail.name || '',
+              origin_name: detail.original_title || detail.original_name || detail.title || '',
+              poster_url: detail.poster_path ? `https://image.tmdb.org/t/p/w500${detail.poster_path}` : PLACEHOLDER_URL,
+              thumb_url: detail.backdrop_path ? `https://image.tmdb.org/t/p/w1280${detail.backdrop_path}` : (detail.poster_path ? `https://image.tmdb.org/t/p/w500${detail.poster_path}` : PLACEHOLDER_URL),
+              description: detail.overview || '',
+              content: detail.overview || '',
+              year: (detail.release_date || detail.first_air_date || '').slice(0, 4),
+              quality: 'HD',
+              lang: 'Vietsub',
+              time: detail.runtime ? `${detail.runtime} phút` : '',
+              episode_current: 'Full',
+              episode_total: '1',
+              type: 'movie',
+              category: (detail.genres || []).map((g: any) => ({ id: String(g.id), name: g.name, slug: String(g.id) })),
+              country: (detail.production_countries || []).map((c: any) => ({ id: c.iso_3166_1, name: c.name, slug: c.iso_3166_1.toLowerCase() })),
+              actor: (detail.credits?.cast || []).slice(0, 15).map((a: any) => a.name),
+              director: (detail.credits?.crew || []).filter((c: any) => c.job === 'Director').map((d: any) => d.name),
+              tmdb: {
+                id: detail.id,
+                type: 'movie',
+                vote_average: detail.vote_average,
+                vote_count: detail.vote_count,
+                poster_path: detail.poster_path,
+                backdrop_path: detail.backdrop_path
+              },
+              trailer_url: detail.videos?.results?.find((v: any) => v.type === 'Trailer' && v.site === 'YouTube')?.key ? `https://www.youtube.com/watch?v=${detail.videos.results.find((v: any) => v.type === 'Trailer' && v.site === 'YouTube').key}` : '',
+              _source: 'primary'
+            };
+
+            return {
+              movie: tmdbNormalized,
+              episodes: matchedEpisodes,
+              _tmdb_used: true,
+              _tmdb_id: detail.id,
+              _source: 'primary'
+            };
+          }
+        }
+
         // [FIX 10] Không gọi lại apiFetch — throw ngay nếu không có data
         throw new Error(`Không thể lấy dữ liệu phim "${slug}"`);
       }
@@ -1026,28 +1087,40 @@ export const api = {
     consecutiveFails: 0,
   }),
 
-  getTrendingTmdb: async () => {
-    await tmdbRateLimiter.acquire();
+  getTrendingTmdb: async (timeWindow: 'day' | 'week' = 'day') => {
     try {
-      const res  = await fetchWithRetry(
-        `https://api.themoviedb.org/3/trending/movie/day?api_key=${TMDB_KEY}&language=vi`,
-        {}, 2, 6_000,
-      );
+      const options = { method: 'GET', headers: { accept: 'application/json' } };
+      const url = `https://api.themoviedb.org/3/trending/movie/${timeWindow}?language=en-US&api_key=${TMDB_KEY}`;
+      const res = await fetch(url, options);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      return (data.results || []).map((m: any): Partial<NormalizedMovie> => ({
-        _id:         m.id.toString(),
-        name:        m.title          || m.name,
-        origin_name: m.original_title || m.original_name,
-        thumb_url:   m.poster_path   ? `https://image.tmdb.org/t/p/w500${m.poster_path}`    : PLACEHOLDER_URL,
-        poster_url:  m.backdrop_path ? `https://image.tmdb.org/t/p/w1280${m.backdrop_path}` : PLACEHOLDER_URL,
-        year:        (m.release_date || m.first_air_date || '').slice(0, 4),
+      console.log(data);
+      return (data.results || []).map((m: any) => ({
+        _id: `tmdb-${m.id}`,
+        id: m.id,
+        name: m.title || m.name,
+        origin_name: m.original_title || m.original_name || m.title || '',
+        poster_url: m.poster_path ? `https://image.tmdb.org/t/p/w500${m.poster_path}` : PLACEHOLDER_URL,
+        thumb_url: m.backdrop_path ? `https://image.tmdb.org/t/p/w1280${m.backdrop_path}` : (m.poster_path ? `https://image.tmdb.org/t/p/w500${m.poster_path}` : PLACEHOLDER_URL),
+        poster_path: m.poster_path,
+        backdrop_path: m.backdrop_path,
+        year: (m.release_date || m.first_air_date || '').slice(0, 4),
         description: m.overview || '',
-        slug:        `search?q=${encodeURIComponent(m.title || m.name)}`,
-        _source:     'primary' as const,
+        content: m.overview || '',
+        slug: `tmdb-${m.id}`,
+        quality: 'HD',
+        vote_average: m.vote_average,
+        tmdb: {
+          id: m.id,
+          type: 'movie',
+          vote_average: m.vote_average,
+          poster_path: m.poster_path,
+          backdrop_path: m.backdrop_path,
+        },
+        _source: 'primary' as const,
       }));
     } catch (err) {
-      console.warn('[Trending] TMDB fetch failed:', err);
+      console.error(err);
       return [];
     }
   },

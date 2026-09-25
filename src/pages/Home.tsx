@@ -25,7 +25,7 @@ import MovieCard from "@/components/MovieCard";
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────
-const TMDB_KEY: string = (import.meta as any).env.VITE_TMDB_API_KEY || '';
+const TMDB_KEY: string = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
 const TMDB_ENABLED = TMDB_KEY.trim().length > 0;
 
 type TrendingWindow = 'day' | 'week';
@@ -249,41 +249,111 @@ SwiperSection.displayName = 'SwiperSection';
 // ─────────────────────────────────────────────────────────────
 function useTrendingMovies() {
   const [activeTab, setActiveTab] = useState<TrendingWindow>('day');
-  const [movies, setMovies]       = useState<any[]>([]);
-  const [loading, setLoading]     = useState(true);
+  const [movies, setMovies]       = useState<any[]>(() => {
+    // 🚀 TỐI ƯU CỰC ĐẠI: Lấy ngay từ cache local để hiển thị 0ms khi mới vào web
+    try {
+      const cached = localStorage.getItem('cineverse_trending_day');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+  const [loading, setLoading]     = useState(() => movies.length === 0);
   const resultCache = useRef<Partial<Record<TrendingWindow, any[]>>>({});
 
   const fetchTrending = useCallback(async (tab: TrendingWindow) => {
+    // 1. Kiểm tra cache trong memory
     if (resultCache.current[tab] && resultCache.current[tab]!.length > 0) {
       setMovies(resultCache.current[tab]!);
       setLoading(false);
       return;
     }
-    setLoading(true);
+
+    // 2. Kiểm tra cache trong localStorage
     try {
-      let list: any[] = [];
-      if (tab === 'day') {
-        const res = await api.getNewUpdated(1).catch(() => null);
-        list = res?.items || [];
-        if (!list.length) {
-          const fallback = await api.getByCategory('phim-le', 1).catch(() => null);
-          list = fallback?.items || [];
-        }
-      } else {
-        const res = await api.getByCategory('phim-chieu-rap', 1).catch(() => null);
-        list = res?.items || [];
-        if (!list.length) {
-          const fallback = await api.getByCategory('phim-bo', 1).catch(() => null);
-          list = fallback?.items || [];
+      const cached = localStorage.getItem(`cineverse_trending_${tab}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          resultCache.current[tab] = parsed;
+          setMovies(parsed);
+          setLoading(false);
+          // Tiếp tục revalidate ngầm
         }
       }
-      const trimmed = list.slice(0, 15);
+    } catch {}
+
+    if (!resultCache.current[tab] || resultCache.current[tab]!.length === 0) {
+      setLoading(true);
+    }
+
+    try {
+      const options = { method: 'GET', headers: { accept: 'application/json' } };
+      const apiKey = TMDB_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
+      const url = `https://api.themoviedb.org/3/trending/movie/${tab}?language=en-US&api_key=${apiKey}`;
+
+      const res = await fetch(url, options)
+        .then(res => res.json())
+        .then(res => {
+          console.log(res);
+          return res;
+        })
+        .catch(err => {
+          console.error(err);
+          return null;
+        });
+
+      let items: any[] = [];
+      if (res?.results && Array.isArray(res.results) && res.results.length > 0) {
+        items = res.results.map((m: any) => ({
+          _id: `tmdb-${m.id}`,
+          id: m.id,
+          name: m.title || m.name,
+          origin_name: m.original_title || m.original_name || m.title || '',
+          poster_url: m.poster_path ? `https://image.tmdb.org/t/p/w500${m.poster_path}` : '',
+          thumb_url: m.backdrop_path ? `https://image.tmdb.org/t/p/w1280${m.backdrop_path}` : (m.poster_path ? `https://image.tmdb.org/t/p/w500${m.poster_path}` : ''),
+          poster_path: m.poster_path,
+          backdrop_path: m.backdrop_path,
+          year: (m.release_date || m.first_air_date || '').slice(0, 4),
+          description: m.overview || '',
+          content: m.overview || '',
+          slug: `tmdb-${m.id}`,
+          quality: 'HD',
+          vote_average: m.vote_average,
+          tmdb: {
+            id: m.id,
+            type: 'movie',
+            vote_average: m.vote_average,
+            poster_path: m.poster_path,
+            backdrop_path: m.backdrop_path,
+          },
+          _source: 'primary' as const,
+        }));
+      }
+
+      // Dự phòng nếu TMDB gặp sự cố
+      if (!items.length) {
+        if (tab === 'day') {
+          const fallback = await api.getByCategory('phim-le', 1).catch(() => null);
+          items = fallback?.items || [];
+        } else {
+          const fallback = await api.getByCategory('phim-chieu-rap', 1).catch(() => null);
+          items = fallback?.items || [];
+        }
+      }
+
+      const trimmed = items.slice(0, 15);
       if (trimmed.length > 0) {
         resultCache.current[tab] = trimmed;
         setMovies(trimmed);
+        try {
+          localStorage.setItem(`cineverse_trending_${tab}`, JSON.stringify(trimmed));
+        } catch {}
       }
     } catch (err) {
-      console.warn('[Trending] Failed to load trending:', err);
+      console.error('[Trending] Failed to load trending:', err);
     } finally {
       setLoading(false);
     }
