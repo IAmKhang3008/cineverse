@@ -411,10 +411,23 @@ export default function Detail() {
           const collectionId = detailsData?.belongs_to_collection?.id;
 
           if (collectionId) {
-            // 1.3. Lấy danh sách phim trong collection
-            const collectionUrl = `https://api.themoviedb.org/3/collection/${collectionId}?api_key=${apiKey}&language=vi&append_to_response=translations`;
-            const collectionData = await fetchWithCache(`tmdb_collection_${collectionId}`, () => fetch(collectionUrl).then(r => r.json()), TTL.TMDB_STATIC);
+            // 1.3. Lấy danh sách phim trong collection (tiếng Việt cho tiêu đề, tiếng Anh cho poster)
+            const collectionUrlVi = `https://api.themoviedb.org/3/collection/${collectionId}?api_key=${apiKey}&language=vi&append_to_response=translations`;
+            const collectionUrlEn = `https://api.themoviedb.org/3/collection/${collectionId}?api_key=${apiKey}&language=en-US`;
+            const [collectionData, collectionDataEn] = await Promise.all([
+              fetchWithCache(`tmdb_collection_vi_${collectionId}`, () => fetch(collectionUrlVi).then(r => r.json()), TTL.TMDB_STATIC),
+              fetchWithCache(`tmdb_collection_en_${collectionId}`, () => fetch(collectionUrlEn).then(r => r.json()), TTL.TMDB_STATIC),
+            ]);
             
+            // Luôn gán poster_path của từng phần sang poster tiếng Anh
+            const enPartsPosterMap = new Map((collectionDataEn?.parts || []).map((p: any) => [p.id, p.poster_path]));
+            if (collectionData?.parts && collectionData.parts.length > 0) {
+              collectionData.parts.forEach((p: any) => {
+                const enPoster = enPartsPosterMap.get(p.id);
+                if (enPoster) p.poster_path = enPoster;
+              });
+            }
+
             // Fallback overview sang tiếng Anh nếu tiếng Việt trống
             if (collectionData && !collectionData.overview && collectionData.translations) {
               const enOverview = collectionData.translations.translations?.find((t: any) => t.iso_639_1 === 'en')?.data?.overview;
@@ -616,7 +629,7 @@ export default function Detail() {
     };
   }, [movie, hasFetchedRelated, slug]);
 
-  // 🚀 TỐI ƯU: Ưu tiên lấy peoples và images từ phimapi, fallback sang TMDb khi cần
+  // 🚀 TỐI ƯU: Lấy diễn viên (cast) và hình ảnh (images) trực tiếp từ TMDb
   useEffect(() => {
     if (!movie) return;
     
@@ -624,44 +637,6 @@ export default function Detail() {
       setLoadingCast(true);
       setLoadingImages(true);
       
-      let gotPeoples = false;
-      let gotImages = false;
-
-      try {
-        const [imagesData, keywordsData] = await Promise.all([
-          api.getMovieImages(movie.slug).catch(() => null),
-          api.getMovieKeywords(movie.slug).catch(() => null),
-        ]);
-        if (imagesData && imagesData.images && imagesData.images.length > 0) {
-          const uniqueImages = imagesData.images.filter((img: any, index: number, self: any[]) =>
-            self.findIndex((i: any) => i.file_path === img.file_path) === index
-          );
-          if (uniqueImages.length > 0) {
-            setImages(uniqueImages.slice(0, 16));
-            gotImages = true;
-          }
-        }
-        if (keywordsData && keywordsData.keywords && keywordsData.keywords.length > 0) {
-          setKeywords(keywordsData.keywords);
-        }
-        
-        if (movie.tmdb?.vote_average) {
-          let formattedVotes = '';
-          if (movie.tmdb.vote_count) {
-            formattedVotes = Number(movie.tmdb.vote_count) >= 1000 
-               ? `${(Number(movie.tmdb.vote_count) / 1000).toFixed(1)}K` 
-               : `${movie.tmdb.vote_count}`;
-          }
-          setRating({
-            source: 'TMDb',
-            score: Number(movie.tmdb.vote_average).toFixed(1),
-            votes: formattedVotes
-          });
-        }
-      } catch (err) {
-        console.warn("[API] Failed to fetch images from phimapi:", err);
-      }
-
       const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
       
       try {
@@ -677,51 +652,66 @@ export default function Detail() {
         }
 
         if (tmdbId) {
-          // Lấy credits từ TMDb như yêu cầu
-          const creditsUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}/credits?api_key=${apiKey}&language=vi`;
-          const creditsData = await fetchWithCache(`tmdb_credits_${tmdbType}_${tmdbId}`, () => fetch(creditsUrl).then(r => r.json()), TTL.TMDB_STATIC);
-          
-          if (creditsData.cast) {
-            setCast(creditsData.cast.slice(0, 12));
-            gotPeoples = true;
+          // Lấy credits & images từ TMDb
+          const [creditsData, detailData, keywordsData] = await Promise.all([
+            fetchWithCache(`tmdb_credits_${tmdbType}_${tmdbId}`, () => 
+              fetch(`https://api.themoviedb.org/3/${tmdbType}/${tmdbId}/credits?api_key=${apiKey}&language=vi-VN`).then(r => r.json()),
+              TTL.TMDB_STATIC
+            ).catch(() => null),
+            fetchWithCache(`tmdb_detail_${tmdbType}_${tmdbId}`, () => 
+              fetch(`https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=vi-VN&append_to_response=images&include_image_language=en,null`).then(r => r.json()),
+              TTL.TMDB_STATIC
+            ).catch(() => null),
+            api.getMovieKeywords(movie.slug).catch(() => null),
+          ]);
+
+          if (creditsData?.cast?.length) {
+            setCast(creditsData.cast.slice(0, 16));
           }
-          
-          if (!rating || !gotImages) {
-             const detailUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=vi&append_to_response=images&include_image_language=vi,en,null`;
-             const detailData = await fetchWithCache(`tmdb_detail_${tmdbType}_${tmdbId}`, () => fetch(detailUrl).then(r => r.json()), TTL.TMDB_STATIC);
 
-             if (!rating && detailData.vote_average) {
-                let formattedVotes = '';
-                if (detailData.vote_count) {
-                  formattedVotes = detailData.vote_count >= 1000 
-                     ? `${(detailData.vote_count / 1000).toFixed(1)}K` 
-                     : `${detailData.vote_count}`;
-                }
-                setRating({
-                  source: 'TMDb',
-                  score: detailData.vote_average.toFixed(1),
-                  votes: formattedVotes
-                });
-             }
+          if (keywordsData?.keywords?.length) {
+            setKeywords(keywordsData.keywords);
+          }
 
-             if (!gotImages) {
-                let extendedImages: any[] = [];
-                if (detailData.images?.backdrops?.length > 0) {
-                  extendedImages = [...detailData.images.backdrops];
-                }
-                if (detailData.images?.posters?.length > 0 && extendedImages.length < 5) {
-                  extendedImages = [...extendedImages, ...detailData.images.posters];
-                }
-                const uniqueImages = extendedImages.filter((img, index, self) =>
-                  self.findIndex(i => i.file_path === img.file_path) === index
-                );
-                setImages(uniqueImages.slice(0, 16));
-             }
+          // Rating
+          const voteAvg = detailData?.vote_average || movie.tmdb?.vote_average;
+          const voteCnt = detailData?.vote_count || movie.tmdb?.vote_count;
+          if (voteAvg) {
+            let formattedVotes = '';
+            if (voteCnt) {
+              formattedVotes = Number(voteCnt) >= 1000 
+                ? `${(Number(voteCnt) / 1000).toFixed(1)}K` 
+                : `${voteCnt}`;
+            }
+            setRating({
+              source: 'TMDb',
+              score: Number(voteAvg).toFixed(1),
+              votes: formattedVotes
+            });
+          }
+
+          // Images từ TMDb
+          let extendedImages: any[] = [];
+          if (detailData?.images?.backdrops?.length > 0) {
+            extendedImages = [...detailData.images.backdrops];
+          }
+          if (detailData?.images?.posters?.length > 0 && extendedImages.length < 8) {
+            extendedImages = [...extendedImages, ...detailData.images.posters];
+          }
+          const uniqueImages = extendedImages.filter((img, index, self) =>
+            self.findIndex(i => i.file_path === img.file_path) === index
+          );
+          if (uniqueImages.length > 0) {
+            setImages(uniqueImages.slice(0, 18));
+          }
+        } else {
+          // Fallback nếu không có tmdbId
+          if (movie.actor && movie.actor.length > 0 && movie.actor[0] !== "Đang cập nhật") {
+            setCast(movie.actor.slice(0, 12).map((a: string) => ({ name: a })));
           }
         }
-
       } catch (error) {
-        console.warn("Failed to fetch TMDB data, falling back to local metadata:", error);
+        console.warn("Failed to fetch TMDB data:", error);
       } finally {
         setLoadingCast(false);
         setLoadingImages(false);
@@ -990,7 +980,13 @@ export default function Detail() {
                 </span>
               )}
               {movie.quality && (
-                <span className="bg-[#E50914]/10 text-[#E50914] text-sm font-bold px-3 py-1.5 rounded-md border border-[#E50914]/30">
+                <span className={`text-sm font-extrabold px-3 py-1.5 rounded-md border flex items-center gap-1.5 ${
+                  movie.quality === 'CHƯA RA MẮT'
+                    ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                    : movie.quality === 'CAM'
+                    ? 'bg-orange-600/20 text-orange-400 border-orange-500/40 shadow-[0_0_12px_rgba(234,88,12,0.25)]'
+                    : 'bg-[#E50914]/10 text-[#E50914] border-[#E50914]/30'
+                }`}>
                   {movie.quality}
                 </span>
               )}
@@ -1044,22 +1040,42 @@ export default function Detail() {
               className="relative z-20 flex items-center justify-center lg:justify-start flex-wrap gap-4 pt-4 pb-2 md:pb-0 mt-2"
             >
 
-              {/* ========== PRIMARY BUTTON: XEM NGAY ========== */}
-              <motion.div variants={buttonVariants} whileHover={{ scale: 1.02 }} className="flex-shrink-0">
-                <Link
-                  to={`/watch/${movie.slug}`}
-                  state={{ fromSearch }}
-                  className="relative inline-flex items-center justify-center gap-2 bg-[#E50914] hover:bg-red-700 text-white px-8 md:px-10 py-3 md:py-3.5 rounded-lg font-bold transition-all text-sm md:text-base shadow-[0_4px_20px_rgba(229,9,20,0.5)] overflow-hidden group"
-                  style={{ boxShadow: `0 4px 20px rgba(229,9,20,0.5), 0 0 25px ${accentColor}33` }}
-                >
-                  <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out"></span>
-                  <Play className="w-5 h-5 relative z-10" fill="currentColor" />
-                  <span className="relative z-10">Xem Ngay</span>
-                </Link>
-              </motion.div>
+              {/* ========== PRIMARY BUTTON: XEM NGAY / XEM TRAILER ========== */}
+              {movie.quality === 'CHƯA RA MẮT' ? (
+                movie.trailer_url ? (
+                  <motion.div variants={buttonVariants} whileHover={{ scale: 1.02 }} className="flex-shrink-0">
+                    <button
+                      onClick={() => setShowTrailer(true)}
+                      className="relative inline-flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-black px-8 md:px-10 py-3 md:py-3.5 rounded-lg font-bold transition-all text-sm md:text-base shadow-[0_4px_20px_rgba(245,158,11,0.5)] overflow-hidden group cursor-pointer"
+                    >
+                      <Play className="w-5 h-5 relative z-10" fill="currentColor" />
+                      <span className="relative z-10">Xem Trailer</span>
+                    </button>
+                  </motion.div>
+                ) : (
+                  <motion.div variants={buttonVariants} className="flex-shrink-0">
+                    <span className="inline-flex items-center gap-2 bg-amber-500/20 text-amber-400 border border-amber-500/40 px-6 py-3 md:py-3.5 rounded-lg font-bold text-sm md:text-base">
+                      Phim Chưa Ra Mắt
+                    </span>
+                  </motion.div>
+                )
+              ) : (
+                <motion.div variants={buttonVariants} whileHover={{ scale: 1.02 }} className="flex-shrink-0">
+                  <Link
+                    to={`/watch/${movie.slug}`}
+                    state={{ fromSearch }}
+                    className="relative inline-flex items-center justify-center gap-2 bg-[#E50914] hover:bg-red-700 text-white px-8 md:px-10 py-3 md:py-3.5 rounded-lg font-bold transition-all text-sm md:text-base shadow-[0_4px_20px_rgba(229,9,20,0.5)] overflow-hidden group"
+                    style={{ boxShadow: `0 4px 20px rgba(229,9,20,0.5), 0 0 25px ${accentColor}33` }}
+                  >
+                    <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out"></span>
+                    <Play className="w-5 h-5 relative z-10" fill="currentColor" />
+                    <span className="relative z-10">Xem Ngay</span>
+                  </Link>
+                </motion.div>
+              )}
               
-              {/* ========== SECONDARY BUTTON: TRAILER ========== */}
-              {movie.trailer_url && (
+              {/* ========== SECONDARY BUTTON: TRAILER (chỉ hiện khi chưa dùng ở nút chính) ========== */}
+              {movie.quality !== 'CHƯA RA MẮT' && movie.trailer_url && (
                 <motion.div variants={buttonVariants} whileHover={{ scale: 1.02 }} className="flex-shrink-0">
                   <button 
                     onClick={() => setShowTrailer(true)}

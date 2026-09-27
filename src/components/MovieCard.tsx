@@ -17,9 +17,10 @@ interface MovieCardProps {
   onHoldChange?: (holding: boolean) => void;
   rating?: string;
   priority?: boolean;
+  hasRank?: boolean;
 }
 
-export function MovieCard({ movie, fromSearch, onHoldChange, priority }: MovieCardProps) {
+export function MovieCard({ movie, fromSearch, onHoldChange, priority, hasRank }: MovieCardProps) {
   const { isFavorite, toggleFavorite } = useFavorites();
   const favorite = movie ? isFavorite(movie.slug) : false;
   const { showToast } = useToast();
@@ -185,8 +186,14 @@ export function MovieCard({ movie, fromSearch, onHoldChange, priority }: MovieCa
 
         {/* Quality Badge */}
         {movie.quality && (
-          <div className="absolute top-2.5 left-2.5 z-10">
-            <span className="bg-black/70 backdrop-blur-md text-white text-[9px] sm:text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider border border-white/15 shadow-md">
+          <div className={`absolute top-2.5 z-10 ${hasRank ? 'left-10 md:left-11' : 'left-2.5'}`}>
+            <span className={`backdrop-blur-md text-[9px] sm:text-[10px] px-2 py-0.5 rounded-md uppercase tracking-wider border shadow-md ${
+              movie.quality === 'CHƯA RA MẮT'
+                ? 'bg-amber-500/90 text-black border-amber-300 font-black shadow-[0_0_12px_rgba(245,158,11,0.5)]'
+                : movie.quality === 'CAM'
+                ? 'bg-orange-600/90 text-white border-orange-400 font-extrabold shadow-[0_0_12px_rgba(234,88,12,0.4)]'
+                : 'bg-black/75 text-white border-white/20 font-extrabold'
+            }`}>
               {movie.quality}
             </span>
           </div>

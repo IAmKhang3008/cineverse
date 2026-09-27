@@ -202,39 +202,45 @@ export default function Watch() {
           }
         } else {
           // Movie (Single episode)
-          let multiSubServerData = [];
-          
-          multiSubServerData.push({
-            name: '#1 Full',
-            slug: 'full-1',
-            filename: 'Full',
-            link_embed: isMobileDevice 
-              ? `https://vaplayer.ru/embed/movie/${tmdbId || ''}?autoplay=1` 
-              : `https://peachify.pro/embed/movie/${tmdbId || ''}`
+          fetchedEpisodes.push({
+            server_name: "Multi-sub #1",
+            server_data: [{
+              name: 'Full',
+              slug: 'full-1',
+              filename: 'Full',
+              link_embed: isMobileDevice 
+                ? `https://vaplayer.ru/embed/movie/${tmdbId || ''}?autoplay=1` 
+                : `https://peachify.pro/embed/movie/${tmdbId || ''}`
+            }]
           });
-          
-          multiSubServerData.push({
-            name: '#2 Full',
-            slug: 'full-2',
-            filename: 'Full',
-            link_embed: `https://vidsrc.tw/embed/movie/${tmdbId || ''}`
+          fetchedEpisodes.push({
+            server_name: "Multi-sub #2",
+            server_data: [{
+              name: 'Full',
+              slug: 'full-2',
+              filename: 'Full',
+              link_embed: `https://vidsrc.tw/embed/movie/${tmdbId || ''}`
+            }]
           });
-          
-          multiSubServerData.push({
-            name: '#3 Full',
-            slug: 'full-3',
-            filename: 'Full',
-            link_embed: `https://embedmaster.link/movie/${tmdbId || ''}`
+          fetchedEpisodes.push({
+            server_name: "Multi-sub #3",
+            server_data: [{
+              name: 'Full',
+              slug: 'full-3',
+              filename: 'Full',
+              link_embed: `https://embedmaster.link/movie/${tmdbId || ''}`
+            }]
           });
-
-          fetchedEpisodes.push({ server_name: "Multi-sub", server_data: multiSubServerData });
         }
 
         setEpisodes(fetchedEpisodes);
-        if (fetchedEpisodes?.[0]?.server_data?.[0]) {
-
-          setCurrentEpisode(fetchedEpisodes[0].server_data[0]);
-          setCurrentServer(fetchedEpisodes[0].server_name);
+        if (fetchedEpisodes.length > 0) {
+          const vietsub = fetchedEpisodes.find(s => !s.server_name?.includes('Multi-sub') && !s.server_name?.toLowerCase().includes('peachify'));
+          const defaultServer = vietsub || fetchedEpisodes.find(s => s.server_name === 'Multi-sub #3' || s.server_name?.includes('Multi-sub #3')) || fetchedEpisodes[0];
+          if (defaultServer?.server_data?.[0]) {
+            setCurrentEpisode(defaultServer.server_data[0]);
+            setCurrentServer(defaultServer.server_name);
+          }
         }
         
         if (res.movie?.category?.[0]?.slug) {
@@ -321,6 +327,7 @@ export default function Watch() {
 
   const handleSwitchToVietsub = () => {
     if (vietsubServer && vietsubServer.server_data?.[0]) {
+      hasAutoOpenedRef.current = false;
       setCurrentServer(vietsubServer.server_name);
       setCurrentEpisode(vietsubServer.server_data[0]);
       showToast(`Đã chuyển sang server ${formatServerDisplayName(vietsubServer.server_name)}`, "info");
@@ -359,10 +366,30 @@ export default function Watch() {
   const hasTriggeredRef = useRef<boolean>(false);
 
   const triggerMultiSubAuto = async () => {
-    let multiSubServerObj = episodes.find(s => s.server_name?.includes('Multi-sub') || s.server_name?.toLowerCase().includes('peachify'));
-    let targetEp = multiSubServerObj?.server_data?.[0];
-    let tmdbId = movie?.tmdb?.id;
+    // Prefer Multi-sub #3 (EmbedMaster)
+    let multiSubServerObj = episodes.find(s => s.server_name === 'Multi-sub #3' || s.server_name?.includes('Multi-sub #3'))
+      || episodes.find(s => s.server_name?.includes('Multi-sub') || s.server_name?.toLowerCase().includes('peachify'));
 
+    // Match current episode number if available
+    let targetEp: any = null;
+    if (multiSubServerObj?.server_data?.length) {
+      if (currentEpisode) {
+        const currentEpMatch = currentEpisode.name?.match(/\d+/) || currentEpisode.slug?.match(/\d+/);
+        if (currentEpMatch) {
+          const currentNum = parseInt(currentEpMatch[0], 10);
+          targetEp = multiSubServerObj.server_data.find((ep: any) => {
+            const epMatch = ep.name?.match(/\d+/) || ep.slug?.match(/\d+/);
+            return epMatch && parseInt(epMatch[0], 10) === currentNum;
+          });
+        }
+      }
+      if (!targetEp) {
+        targetEp = multiSubServerObj.server_data.find((ep: any) => ep.name?.includes('#3') || ep.slug?.includes('embedmaster'))
+          || multiSubServerObj.server_data[0];
+      }
+    }
+
+    let tmdbId = movie?.tmdb?.id;
     if (!tmdbId && movie) {
       const tmdbRes = await searchTmdbWithCache(movie);
       if (tmdbRes?.id) {
@@ -385,20 +412,25 @@ export default function Watch() {
     
     const fastSeasonFb = movie?.season;
     const seasonNum = fastSeasonFb || movie?.tmdb?.season || 1; 
+    const currentEpMatch = currentEpisode?.name?.match(/\d+/) || currentEpisode?.slug?.match(/\d+/);
+    const epNum = currentEpMatch ? parseInt(currentEpMatch[0], 10).toString() : '1';
+
+    // Multi-sub #3 (EmbedMaster) fallback URL
     const fallbackUrl = isTv 
-      ? (isMobileDevice ? `https://vaplayer.ru/embed/tv/${tmdbId || ''}/${seasonNum}/1?autoplay=1` : `https://peachify.pro/embed/tv/${tmdbId || ''}/${seasonNum}/1`) 
-      : (isMobileDevice ? `https://vaplayer.ru/embed/movie/${tmdbId || ''}?autoplay=1` : `https://peachify.pro/embed/movie/${tmdbId || ''}`);
+      ? `https://embedmaster.link/tv/${tmdbId || ''}/${seasonNum}/${epNum}`
+      : `https://embedmaster.link/movie/${tmdbId || ''}`;
     const urlToOpen = targetEp?.link_embed || fallbackUrl;
 
+    hasAutoOpenedRef.current = true;
     if (multiSubServerObj && targetEp) {
       setCurrentServer(multiSubServerObj.server_name);
       setCurrentEpisode(targetEp);
     } else {
-      setCurrentServer('Multi-sub');
+      setCurrentServer('Multi-sub #3');
       setCurrentEpisode({
-        name: 'Tập 1 (Multi-sub)',
-        slug: 'tap-1-multisub',
-        filename: 'Multi-sub',
+        name: isTv ? `Tập ${epNum} (Multi-sub #3)` : 'Full (Multi-sub #3)',
+        slug: isTv ? `tap-${epNum}-embedmaster` : 'full-embedmaster',
+        filename: 'Multi-sub #3',
         link_embed: fallbackUrl,
         link_m3u8: '',
       });
@@ -429,7 +461,7 @@ export default function Watch() {
         }
       }
     }
-    showToast("Đã tự động chuyển sang trình phát Multi-sub", "info");
+    showToast("Đã chuyển sang trình phát Multi-sub #3", "info");
   };
 
   useEffect(() => {
@@ -627,7 +659,7 @@ export default function Watch() {
                 {/* Glowing Badge */}
                 <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#E50914]/15 border border-[#E50914]/40 text-[#E50914] text-xs font-semibold tracking-wide mb-5 shadow-[0_0_15px_rgba(229,9,20,0.25)] animate-pulse">
                   <Sparkles className="w-4 h-4 text-[#E50914]" />
-                  <span>Nguồn: Multi-sub</span>
+                  <span>Nguồn: {currentServer || "Multi-sub #3"}</span>
                 </div>
 
                 {/* Main Heading requested by user */}
@@ -685,7 +717,7 @@ export default function Watch() {
                   Nguồn phát chính không khả dụng.
                 </h3>
                 <p className="text-xs sm:text-sm font-semibold text-gray-300 mb-6 text-center">
-                  Đang tự động chuyển sang nguồn phụ...
+                  Đang tự động chuyển sang nguồn phụ Multi-sub #3...
                 </p>
 
                 <button
@@ -762,11 +794,22 @@ export default function Watch() {
                     window.open(currentEpisode.link_embed, '_blank', 'noopener,noreferrer');
                   }
                 }}
-                className="flex items-center gap-2 text-sm font-medium text-[#A0A0A0] hover:text-white transition-colors whitespace-nowrap bg-[#2A2A2A] px-3 py-1.5 rounded-lg hover:bg-white/10"
+                className="flex items-center gap-2 text-sm font-medium text-[#A0A0A0] hover:text-white transition-colors whitespace-nowrap bg-[#2A2A2A] px-3 py-1.5 rounded-lg hover:bg-white/10 cursor-pointer"
                 title="Mở trình phát trong tab mới nếu gặp sự cố iframe/sandbox"
               >
                 <ExternalLink className="w-4 h-4 text-[#E50914]" />
                 Mở trong tab mới
+              </button>
+            )}
+
+            {!isMultiSub && episodes.some(s => s.server_name?.includes('Multi-sub')) && (
+              <button
+                onClick={triggerMultiSubAuto}
+                className="flex items-center gap-2 text-sm font-medium text-[#A0A0A0] hover:text-white transition-colors whitespace-nowrap bg-[#2A2A2A] px-3 py-1.5 rounded-lg hover:bg-white/10 cursor-pointer"
+                title="Chuyển sang nguồn phụ Multi-sub #3"
+              >
+                <Sparkles className="w-4 h-4 text-yellow-400" />
+                <span>Nguồn phụ #3</span>
               </button>
             )}
           </div>
@@ -981,11 +1024,17 @@ function AsyncRelatedPoster({ movie }: { movie: any }) {
 
         if (tmdbId) {
           const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
-          const combinedUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=vi&append_to_response=images&include_image_language=vi,en,null`;
+          const combinedUrl = `https://api.themoviedb.org/3/${tmdbType}/${tmdbId}?api_key=${apiKey}&language=vi&append_to_response=images&include_image_language=en,null`;
           const { fetchWithCache, TTL } = await import('@/lib/cache');
           const { extractBestPoster } = await import('@/lib/api');
           const combinedData = await fetchWithCache(`tmdb_combined_${tmdbType}_${tmdbId}`, () => fetch(combinedUrl).then(r => r.json()), TTL.TMDB_STATIC);
-          const bestPoster = extractBestPoster(combinedData.images);
+          if (combinedData?.images?.posters?.length) {
+            const enPoster = combinedData.images.posters.find((p: any) => p.iso_639_1 === 'en');
+            if (enPoster?.file_path) {
+              combinedData.poster_path = enPoster.file_path;
+            }
+          }
+          const bestPoster = extractBestPoster(combinedData?.images);
           if (bestPoster && !cancelled) {
             setPosterUrl(bestPoster);
             return;

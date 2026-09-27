@@ -2,7 +2,7 @@ import React, {
   useEffect, useState, Suspense,
   useRef, useCallback, memo, useMemo,
 } from "react";
-import { api, getImageUrl, NormalizedMovie, extractBestBackdrop, extractBestPoster, searchTmdbWithCache } from "@/lib/api";
+import { api, getImageUrl, NormalizedMovie, extractBestBackdrop, extractBestPoster, searchTmdbWithCache, calculateMovieQuality } from "@/lib/api";
 import {
   Play, Info, ChevronRight, Heart, X, Flame, TrendingUp, Star
 } from "lucide-react";
@@ -292,45 +292,57 @@ function useTrendingMovies() {
     try {
       const options = { method: 'GET', headers: { accept: 'application/json' } };
       const apiKey = TMDB_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
-      const url = `https://api.themoviedb.org/3/trending/movie/${tab}?language=en-US&api_key=${apiKey}`;
+      const urlVi = `https://api.themoviedb.org/3/trending/movie/${tab}?language=vi-VN&api_key=${apiKey}`;
+      const urlEn = `https://api.themoviedb.org/3/trending/movie/${tab}?language=en-US&api_key=${apiKey}`;
 
-      const res = await fetch(url, options)
-        .then(res => res.json())
-        .then(res => {
-          console.log(res);
-          return res;
-        })
-        .catch(err => {
-          console.error(err);
-          return null;
-        });
+      const [resVi, resEn] = await Promise.all([
+        fetch(urlVi, options).then(r => r.json()).catch(() => null),
+        fetch(urlEn, options).then(r => r.json()).catch(() => null),
+      ]);
+      const res = resVi || resEn;
+      const enPosters = new Map((resEn?.results || []).map((m: any) => [m.id, m.poster_path]));
 
       let items: any[] = [];
       if (res?.results && Array.isArray(res.results) && res.results.length > 0) {
-        items = res.results.map((m: any) => ({
-          _id: `tmdb-${m.id}`,
-          id: m.id,
-          name: m.title || m.name,
-          origin_name: m.original_title || m.original_name || m.title || '',
-          poster_url: m.poster_path ? `https://image.tmdb.org/t/p/w500${m.poster_path}` : '',
-          thumb_url: m.backdrop_path ? `https://image.tmdb.org/t/p/w1280${m.backdrop_path}` : (m.poster_path ? `https://image.tmdb.org/t/p/w500${m.poster_path}` : ''),
-          poster_path: m.poster_path,
-          backdrop_path: m.backdrop_path,
-          year: (m.release_date || m.first_air_date || '').slice(0, 4),
-          description: m.overview || '',
-          content: m.overview || '',
-          slug: `tmdb-${m.id}`,
-          quality: 'HD',
-          vote_average: m.vote_average,
-          tmdb: {
+        const topResults = res.results.slice(0, 15);
+
+        // Fetch song song release_dates để tính thẻ chất lượng chính xác
+        const releasePromises = topResults.map((m: any) =>
+          fetch(`https://api.themoviedb.org/3/movie/${m.id}/release_dates?api_key=${apiKey}`)
+            .then(r => r.json())
+            .catch(() => null)
+        );
+        const releaseResults = await Promise.all(releasePromises);
+
+        items = topResults.map((m: any, idx: number) => {
+          const qualityTag = calculateMovieQuality(releaseResults[idx], m.release_date);
+          const englishPosterPath = enPosters.get(m.id) || m.poster_path;
+
+          return {
+            _id: `tmdb-${m.id}`,
             id: m.id,
-            type: 'movie',
-            vote_average: m.vote_average,
-            poster_path: m.poster_path,
+            name: m.title || m.name,
+            origin_name: m.original_title || m.original_name || m.title || '',
+            poster_url: englishPosterPath ? `https://image.tmdb.org/t/p/w500${englishPosterPath}` : '',
+            thumb_url: m.backdrop_path ? `https://image.tmdb.org/t/p/w1280${m.backdrop_path}` : (englishPosterPath ? `https://image.tmdb.org/t/p/w500${englishPosterPath}` : ''),
+            poster_path: englishPosterPath,
             backdrop_path: m.backdrop_path,
-          },
-          _source: 'primary' as const,
-        }));
+            year: (m.release_date || m.first_air_date || '').slice(0, 4),
+            description: m.overview || '',
+            content: m.overview || '',
+            slug: `tmdb-${m.id}`,
+            quality: qualityTag,
+            vote_average: m.vote_average,
+            tmdb: {
+              id: m.id,
+              type: 'movie',
+              vote_average: m.vote_average,
+              poster_path: englishPosterPath,
+              backdrop_path: m.backdrop_path,
+            },
+            _source: 'primary' as const,
+          };
+        });
       }
 
       // Dự phòng nếu TMDB gặp sự cố
@@ -490,7 +502,7 @@ export default function Home() {
                   if (tmdbId) {
                     const imgData = await fetchWithCache(
                       `tmdb_images_${tmdbType}_${tmdbId}`,
-                      () => fetch(`https://api.themoviedb.org/3/${tmdbType}/${tmdbId}/images?api_key=${TMDB_KEY}&language=vi&include_image_language=vi,en,null`).then(r => r.json()),
+                      () => fetch(`https://api.themoviedb.org/3/${tmdbType}/${tmdbId}/images?api_key=${TMDB_KEY}&language=vi&include_image_language=en,null`).then(r => r.json()),
                       TTL.TMDB_STATIC,
                     );
                     const bestBackdrop = extractBestBackdrop(imgData);
@@ -924,7 +936,7 @@ export default function Home() {
                                 {i === 0 ? '👑 1' : `#${i + 1}`}
                               </div>
                             </div>
-                            <MovieCard movie={movie} onHoldChange={handleHoldChange} priority={i < 4} />
+                            <MovieCard movie={movie} onHoldChange={handleHoldChange} priority={i < 4} hasRank={true} />
                           </div>
                         </SwiperSlide>
                       ))}
