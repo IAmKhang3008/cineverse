@@ -165,7 +165,7 @@ export default function Watch() {
                multiSub3Data.push({
                  ...ep,
                  slug: ep.slug + '-embedmaster',
-                 link_embed: `https://embedmaster.link/tv/${tmdbId || ''}/${seasonNum}/${epNum}`
+                 link_embed: `https://embedmaster.link/tv/${tmdbId || ''}/${seasonNum}/${epNum}?skin=onyx&welcome_page=on&autoplay=on`
                });
             });
             
@@ -191,7 +191,7 @@ export default function Watch() {
               name: 'Tập 1',
               slug: 'tap-1-embedmaster',
               filename: 'Tập 1',
-              link_embed: `https://embedmaster.link/tv/${tmdbId || ''}/${seasonNum}/1`
+              link_embed: `https://embedmaster.link/tv/${tmdbId || ''}/${seasonNum}/1?skin=onyx&welcome_page=on&autoplay=on`
             });
           }
 
@@ -228,7 +228,7 @@ export default function Watch() {
               name: 'Full',
               slug: 'full-3',
               filename: 'Full',
-              link_embed: `https://embedmaster.link/movie/${tmdbId || ''}`
+              link_embed: `https://embedmaster.link/movie/${tmdbId || ''}?skin=onyx&welcome_page=on&autoplay=on`
             }]
           });
         }
@@ -417,8 +417,8 @@ export default function Watch() {
 
     // Multi-sub #3 (EmbedMaster) fallback URL
     const fallbackUrl = isTv 
-      ? `https://embedmaster.link/tv/${tmdbId || ''}/${seasonNum}/${epNum}`
-      : `https://embedmaster.link/movie/${tmdbId || ''}`;
+      ? `https://embedmaster.link/tv/${tmdbId || ''}/${seasonNum}/${epNum}?skin=onyx&welcome_page=on&autoplay=on`
+      : `https://embedmaster.link/movie/${tmdbId || ''}?skin=onyx&welcome_page=on&autoplay=on`;
     const urlToOpen = targetEp?.link_embed || fallbackUrl;
 
     hasAutoOpenedRef.current = true;
@@ -597,6 +597,13 @@ export default function Watch() {
           console.error("Error reading vidapi progress", e);
         }
       }
+
+      // EmbedMaster Onyx Skin & Autoplay
+      if (newUrl.hostname === 'embedmaster.link') {
+        if (!newUrl.searchParams.has('skin')) newUrl.searchParams.set('skin', 'onyx');
+        if (!newUrl.searchParams.has('welcome_page')) newUrl.searchParams.set('welcome_page', 'on');
+        if (!newUrl.searchParams.has('autoplay')) newUrl.searchParams.set('autoplay', 'on');
+      }
       
       return newUrl.toString();
     } catch (e) {
@@ -731,11 +738,13 @@ export default function Watch() {
             </div>
           ) : currentEpisode?.link_embed ? (
             <iframe
+              key={currentEpisode?.slug || currentEpisode?.link_embed || currentServer}
               src={getCleanedEmbedUrl(currentEpisode.link_embed) || undefined}
               title={currentEpisode.name || "Video player"}
+              width="100%"
+              height="100%"
               className="w-full h-full"
               allowFullScreen
-              sandbox={currentEpisode.link_embed?.includes('embedmaster') ? undefined : "allow-scripts allow-same-origin allow-fullscreen"}
               allow="autoplay *; fullscreen *; picture-in-picture *; encrypted-media *"
               frameBorder="0"
             ></iframe>
