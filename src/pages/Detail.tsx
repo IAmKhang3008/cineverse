@@ -1,9 +1,155 @@
-import { useEffect, useState, useRef, useLayoutEffect } from "react";
+import { useEffect, useState, useRef, useLayoutEffect, useMemo } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
-import { api, getImageUrl, getTmdbPosterUrl, searchTmdbWithCache } from "@/lib/api";
+import { api, getImageUrl, getTmdbPosterUrl, searchTmdbWithCache, translateTmdbCountry, cleanTmdbGenre, fetchTmdbVideos } from "@/lib/api";
 import { extractDominantColor } from "@/lib/colorExtractor";
 import { getMoviePoster, getMoviePosterSync } from "@/utils/imageUtils";
 import { Play, Plus, Star, Clock, Calendar, Globe, Heart, X, ArrowLeft, Share2, Copy, Link as LinkIcon, RefreshCcw } from "lucide-react";
+
+// Helper nhận diện Talk Show
+const isTalkShowCredit = (credit: any): boolean => {
+  if (!credit) return false;
+  const title = (credit.title || credit.name || '').toLowerCase();
+  const character = (credit.character || '').toLowerCase();
+  const genreIds = Array.isArray(credit.genre_ids) ? credit.genre_ids : [];
+
+  // Mã thể loại 10767 trong TMDb là Talk
+  if (genreIds.includes(10767)) return true;
+
+  const talkPatterns = [
+    /tonight show/i,
+    /late show/i,
+    /late night/i,
+    /jimmy kimmel/i,
+    /graham norton/i,
+    /ellen degeneres/i,
+    /james corden/i,
+    /conan/i,
+    /daily show/i,
+    /kelly clarkson/i,
+    /seth meyers/i,
+    /stephen colbert/i,
+    /jimmy fallon/i,
+    /david letterman/i,
+    /jay leno/i,
+    /craig ferguson/i,
+    /john oliver/i,
+    /last week tonight/i,
+    /saturday night live/i,
+    /good morning america/i,
+    /the view/i,
+    /today show/i,
+    /talk show/i,
+    /talkshow/i,
+    /chuyện cuối tuần/i,
+  ];
+
+  if (talkPatterns.some(p => p.test(title))) return true;
+
+  if (credit.media_type === 'tv' && (character.includes('self') || character.includes('guest') || character.includes('himself') || character.includes('herself'))) {
+    if (title.includes('show') || title.includes('live') || title.includes('night') || title.includes('talk') || title.includes('morning')) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+// Component thẻ "Buổi Talk Show" với poster đổi liên tục mỗi 1.2s
+function AnimatedTalkShowCard({ talkShows, onSearch }: { talkShows: any[]; onSearch: (q: string) => void }) {
+  const posters = useMemo(() => {
+    const list: { url: string; title: string }[] = [];
+    const seen = new Set<string>();
+    for (const ts of talkShows) {
+      const path = ts.poster_path || ts.backdrop_path;
+      if (path && !seen.has(path)) {
+        seen.add(path);
+        list.push({
+          url: `https://image.tmdb.org/t/p/w342${path}`,
+          title: ts.title || ts.name || 'Talk Show',
+        });
+      }
+    }
+    return list;
+  }, [talkShows]);
+
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  // Preload all talk show posters for instantaneous loading
+  useEffect(() => {
+    posters.forEach((p) => {
+      const img = new Image();
+      img.src = p.url;
+    });
+  }, [posters]);
+
+  useEffect(() => {
+    if (posters.length <= 1) return;
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % posters.length);
+    }, 1200); // 1.2 giây chuyển poster để tải đầy đủ
+    return () => clearInterval(interval);
+  }, [posters.length]);
+
+  const currentPoster = posters[currentIndex] || null;
+  const sampleTitles = talkShows.slice(0, 3).map((ts) => ts.title || ts.name).join(', ');
+
+  return (
+    <div className="bg-gradient-to-br from-amber-500/10 via-white/5 to-white/5 border border-amber-500/40 hover:border-amber-500/70 rounded-lg p-2.5 flex flex-col justify-between transition-all group col-span-2 sm:col-span-1 shadow-[0_4px_16px_rgba(245,158,11,0.15)] relative overflow-hidden">
+      <div className="absolute top-1.5 right-1.5 z-10">
+        <span className="bg-amber-500 text-black text-[9px] font-black px-1.5 py-0.5 rounded shadow tracking-wide">
+          {talkShows.length} SHOWS
+        </span>
+      </div>
+
+      <div className="flex gap-2.5">
+        <div className="relative w-12 h-18 sm:w-14 sm:h-20 flex-shrink-0 rounded overflow-hidden bg-[#1a1a1a] border border-white/10 shadow-md">
+          {currentPoster ? (
+            <img
+              key={currentPoster.url}
+              src={currentPoster.url}
+              alt={currentPoster.title}
+              className="w-full h-full object-cover transition-opacity duration-300"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-amber-500/20 text-amber-400 text-xs font-bold">
+              TV
+            </div>
+          )}
+          {posters.length > 1 && (
+            <div className="absolute bottom-0 inset-x-0 bg-black/80 py-0.5 text-center">
+              <span className="text-[8px] text-amber-300 font-mono font-bold">
+                {currentIndex + 1}/{posters.length}
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex-grow min-w-0 pr-12">
+          <div className="flex items-center gap-1.5 mb-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping flex-shrink-0" />
+            <h5 className="font-bold text-xs md:text-sm text-amber-200 line-clamp-1" title="Buổi Talk Show">
+              Buổi Talk Show
+            </h5>
+          </div>
+          <p className="text-[10px] text-gray-300 line-clamp-2 leading-tight" title={sampleTitles}>
+            {sampleTitles}{talkShows.length > 3 ? ` và ${talkShows.length - 3} show khác` : ''}
+          </p>
+        </div>
+      </div>
+
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onSearch('Talk Show');
+        }}
+        className="mt-2 w-full bg-gradient-to-r from-amber-500/25 to-amber-600/25 hover:from-amber-500 hover:to-amber-600 text-amber-300 hover:text-black border border-amber-500/40 hover:border-transparent text-[10px] py-1 px-2 rounded font-bold transition-all text-center cursor-pointer shadow-sm"
+      >
+        Tìm talk show trên Cineverse
+      </button>
+    </div>
+  );
+}
 import MovieCard from "@/components/MovieCard";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
@@ -90,7 +236,6 @@ const LazyImage = ({ src, alt, className }: { src: string; alt: string; classNam
 export default function Detail() {
   const { slug } = useParams<{ slug: string }>();
   const [movie, setMovie] = useState<any>(null);
-  const [accentColor, setAccentColor] = useState('#E50914');
   
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [isDescriptionTruncated, setIsDescriptionTruncated] = useState(false);
@@ -360,22 +505,20 @@ export default function Detail() {
     return () => { isMounted = false; };
   }, [slug, showToast]);
 
+  // Tự động tìm và cập nhật trailer chính thức từ TMDB nếu phim chưa có
   useEffect(() => {
-    if (!movie) return;
-
     let isMounted = true;
-    extractDominantColor(movie).then((color) => {
-      if (isMounted && color) {
-        setAccentColor(color);
-      }
-    }).catch((err) => {
-      console.warn("Dynamic color extraction error:", err);
-    });
+    if (movie && !movie.trailer_url && movie.tmdb?.id) {
+      fetchTmdbVideos(movie.tmdb.id, movie.tmdb.type || movie.type || 'movie').then(trailer => {
+        if (isMounted && trailer) {
+          setMovie((prev: any) => prev ? { ...prev, trailer_url: trailer } : prev);
+        }
+      }).catch(() => {});
+    }
+    return () => { isMounted = false; };
+  }, [movie?.tmdb?.id, movie?.trailer_url, movie?.tmdb?.type, movie?.type]);
 
-    return () => {
-      isMounted = false;
-    };
-  }, [movie]);
+
 
   useEffect(() => {
     let isMounted = true;
@@ -779,11 +922,18 @@ export default function Detail() {
 
   const getTrailerUrl = (url: string) => {
     if (!url) return null;
-    // Convert watch?v= to embed/
-    if (url.includes('watch?v=')) {
-      return url.replace('watch?v=', 'embed/');
+    let embedUrl = url;
+    if (embedUrl.includes('watch?v=')) {
+      embedUrl = embedUrl.replace('watch?v=', 'embed/');
     }
-    return url;
+    if (embedUrl.includes('youtu.be/')) {
+      const id = embedUrl.split('youtu.be/')[1]?.split('?')[0];
+      if (id) embedUrl = `https://www.youtube.com/embed/${id}`;
+    }
+    if (!embedUrl.includes('autoplay=')) {
+      embedUrl += (embedUrl.includes('?') ? '&' : '?') + 'autoplay=1';
+    }
+    return embedUrl;
   };
 
   return (
@@ -954,7 +1104,7 @@ export default function Detail() {
                 <span>•</span>
                 <span>{movie.year}</span>
                 <span>•</span>
-                <span>{movie.country?.[0]?.name || 'N/A'}</span>
+                <span>{translateTmdbCountry(movie.country?.[0]?.name) || 'N/A'}</span>
               </motion.div>
             </motion.div>
 
@@ -963,7 +1113,7 @@ export default function Detail() {
               <div className="flex items-center gap-2 flex-wrap">
                 {movie.category && (Array.isArray(movie.category) ? movie.category : Object.values(movie.category)).map((cat: any, index: number) => (
                   <span key={cat.id || index} className="px-3 py-1 rounded-full bg-white/10 border border-white/20 text-sm text-white backdrop-blur-md">
-                    {cat.name}
+                    {cleanTmdbGenre(cat.name)}
                   </span>
                 ))}
               </div>
@@ -1063,9 +1213,8 @@ export default function Detail() {
                 <motion.div variants={buttonVariants} whileHover={{ scale: 1.02 }} className="flex-shrink-0">
                   <Link
                     to={`/watch/${movie.slug}`}
-                    state={{ fromSearch }}
+                    state={{ fromSearch, movieDetail: movie }}
                     className="relative inline-flex items-center justify-center gap-2 bg-[#E50914] hover:bg-red-700 text-white px-8 md:px-10 py-3 md:py-3.5 rounded-lg font-bold transition-all text-sm md:text-base shadow-[0_4px_20px_rgba(229,9,20,0.5)] overflow-hidden group"
-                    style={{ boxShadow: `0 4px 20px rgba(229,9,20,0.5), 0 0 25px ${accentColor}33` }}
                   >
                     <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out"></span>
                     <Play className="w-5 h-5 relative z-10" fill="currentColor" />
@@ -1152,24 +1301,11 @@ export default function Detail() {
           </div>
         </div> {/* Đóng flex container */}
 
-        {/* Detailed Info Tabs – GLASSMORPHISM PANEL */}
+        {/* Detailed Info Tabs */}
         <motion.div 
           layout
-          className="relative mt-8 md:mt-12 backdrop-blur-3xl rounded-3xl overflow-hidden transition-all duration-700"
-          style={{
-            background: `linear-gradient(135deg, ${accentColor}28, rgba(15,15,15,0.94))`,
-            borderColor: `${accentColor}55`,
-            borderWidth: 1,
-            borderStyle: 'solid',
-            boxShadow: `0 20px 80px rgba(0,0,0,0.55), 0 0 45px ${accentColor}28`
-          }}
+          className="relative mt-8 md:mt-12 backdrop-blur-xl bg-[#141414]/90 border border-white/10 rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl"
         >
-          {/* Subtle glow inside */}
-          <div 
-            className="absolute inset-0 pointer-events-none rounded-3xl transition-opacity duration-700"
-            style={{ background: `linear-gradient(to bottom right, ${accentColor}18, transparent)` }}
-          />
-
           {/* Tab header */}
           <div className="relative flex items-center gap-4 md:gap-6 border-b border-white/10 pb-4 mb-6 overflow-x-auto no-scrollbar whitespace-nowrap p-6 md:p-8 pb-0">
             <button 
@@ -1178,7 +1314,7 @@ export default function Detail() {
             >
               Chi tiết
               {activeTab === 'details' && (
-                <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5" style={{ backgroundColor: accentColor }} />
+                <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#E50914]" />
               )}
             </button>
             <button 
@@ -1187,7 +1323,7 @@ export default function Detail() {
             >
               Diễn viên
               {activeTab === 'cast' && (
-                <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5" style={{ backgroundColor: accentColor }} />
+                <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#E50914]" />
               )}
             </button>
             <button 
@@ -1196,12 +1332,12 @@ export default function Detail() {
             >
               Hình ảnh
               {activeTab === 'images' && (
-                <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5" style={{ backgroundColor: accentColor }} />
+                <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#E50914]" />
               )}
             </button>
           </div>
           
-          {/* Tab content – thêm padding tương ứng */}
+          {/* Tab content */}
           <div className="relative px-6 md:px-8 pb-6 md:pb-8">
             <AnimatePresence mode="wait">
               <motion.div
@@ -1221,13 +1357,7 @@ export default function Detail() {
                     {/* Tình trạng */}
                     <motion.div 
                       variants={itemVariants} 
-                      className="backdrop-blur-md rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg transition-colors duration-500"
-                      style={{
-                        background: `linear-gradient(135deg, ${accentColor}14, rgba(255,255,255,0.03))`,
-                        borderColor: `${accentColor}33`,
-                        borderWidth: 1,
-                        borderStyle: 'solid',
-                      }}
+                      className="backdrop-blur-md bg-white/5 border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg"
                     >
                       <span className="text-gray-400 text-xs mb-1 uppercase tracking-wider font-semibold">Tình trạng</span>
                       <span className="text-white font-medium">{movie.episode_current || 'N/A'}</span>
@@ -1235,13 +1365,7 @@ export default function Detail() {
                     {/* Số tập */}
                     <motion.div 
                       variants={itemVariants} 
-                      className="backdrop-blur-md rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg transition-colors duration-500"
-                      style={{
-                        background: `linear-gradient(135deg, ${accentColor}14, rgba(255,255,255,0.03))`,
-                        borderColor: `${accentColor}33`,
-                        borderWidth: 1,
-                        borderStyle: 'solid',
-                      }}
+                      className="backdrop-blur-md bg-white/5 border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg"
                     >
                       <span className="text-gray-400 text-xs mb-1 uppercase tracking-wider font-semibold">Số tập</span>
                       <span className="text-white font-medium">{movie.episode_total || 'N/A'}</span>
@@ -1249,13 +1373,7 @@ export default function Detail() {
                     {/* Thời lượng */}
                     <motion.div 
                       variants={itemVariants} 
-                      className="backdrop-blur-md rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg transition-colors duration-500"
-                      style={{
-                        background: `linear-gradient(135deg, ${accentColor}14, rgba(255,255,255,0.03))`,
-                        borderColor: `${accentColor}33`,
-                        borderWidth: 1,
-                        borderStyle: 'solid',
-                      }}
+                      className="backdrop-blur-md bg-white/5 border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg"
                     >
                       <span className="text-gray-400 text-xs mb-1 uppercase tracking-wider font-semibold">Thời lượng</span>
                       <span className="text-white font-medium">{movie.time || 'N/A'}</span>
@@ -1263,13 +1381,7 @@ export default function Detail() {
                     {/* Năm */}
                     <motion.div 
                       variants={itemVariants} 
-                      className="backdrop-blur-md rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg transition-colors duration-500"
-                      style={{
-                        background: `linear-gradient(135deg, ${accentColor}14, rgba(255,255,255,0.03))`,
-                        borderColor: `${accentColor}33`,
-                        borderWidth: 1,
-                        borderStyle: 'solid',
-                      }}
+                      className="backdrop-blur-md bg-white/5 border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg"
                     >
                       <span className="text-gray-400 text-xs mb-1 uppercase tracking-wider font-semibold">Năm</span>
                       <span className="text-white font-medium">{movie.year || 'N/A'}</span>
@@ -1277,13 +1389,7 @@ export default function Detail() {
                     {/* Chất lượng */}
                     <motion.div 
                       variants={itemVariants} 
-                      className="backdrop-blur-md rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg transition-colors duration-500"
-                      style={{
-                        background: `linear-gradient(135deg, ${accentColor}14, rgba(255,255,255,0.03))`,
-                        borderColor: `${accentColor}33`,
-                        borderWidth: 1,
-                        borderStyle: 'solid',
-                      }}
+                      className="backdrop-blur-md bg-white/5 border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg"
                     >
                       <span className="text-gray-400 text-xs mb-1 uppercase tracking-wider font-semibold">Chất lượng</span>
                       <span className="text-white font-medium">{movie.quality || 'N/A'}</span>
@@ -1291,13 +1397,7 @@ export default function Detail() {
                     {/* Ngôn ngữ */}
                     <motion.div 
                       variants={itemVariants} 
-                      className="backdrop-blur-md rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg transition-colors duration-500"
-                      style={{
-                        background: `linear-gradient(135deg, ${accentColor}14, rgba(255,255,255,0.03))`,
-                        borderColor: `${accentColor}33`,
-                        borderWidth: 1,
-                        borderStyle: 'solid',
-                      }}
+                      className="backdrop-blur-md bg-white/5 border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center shadow-lg"
                     >
                       <span className="text-gray-400 text-xs mb-1 uppercase tracking-wider font-semibold">Ngôn ngữ</span>
                       <span className="text-white font-medium">{movie.lang ? cleanLangString(movie.lang, false, isVietnameseMovie(movie)) : "N/A"}</span>
@@ -1305,13 +1405,7 @@ export default function Detail() {
                     {/* Đạo diễn */}
                     <motion.div 
                       variants={itemVariants} 
-                      className="backdrop-blur-md rounded-xl p-3 md:p-4 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-2 shadow-lg transition-colors duration-500"
-                      style={{
-                        background: `linear-gradient(135deg, ${accentColor}14, rgba(255,255,255,0.03))`,
-                        borderColor: `${accentColor}33`,
-                        borderWidth: 1,
-                        borderStyle: 'solid',
-                      }}
+                      className="backdrop-blur-md bg-white/5 border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-2 shadow-lg"
                     >
                       <span className="text-gray-400 text-xs mb-1 uppercase tracking-wider font-semibold">Đạo diễn</span>
                       <span className="text-white font-medium">{movie.director?.join(', ') || 'Đang cập nhật'}</span>
@@ -1319,44 +1413,26 @@ export default function Detail() {
                     {/* Quốc gia */}
                     <motion.div 
                       variants={itemVariants} 
-                      className="backdrop-blur-md rounded-xl p-3 md:p-4 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-2 shadow-lg transition-colors duration-500"
-                      style={{
-                        background: `linear-gradient(135deg, ${accentColor}14, rgba(255,255,255,0.03))`,
-                        borderColor: `${accentColor}33`,
-                        borderWidth: 1,
-                        borderStyle: 'solid',
-                      }}
+                      className="backdrop-blur-md bg-white/5 border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-2 shadow-lg"
                     >
                       <span className="text-gray-400 text-xs mb-1 uppercase tracking-wider font-semibold">Quốc gia</span>
                       <span className="text-white font-medium">
-                        {movie.country && (Array.isArray(movie.country) ? movie.country : Object.values(movie.country)).map((c: any) => c.name).join(', ')}
+                        {movie.country && (Array.isArray(movie.country) ? movie.country : Object.values(movie.country)).map((c: any) => translateTmdbCountry(c.name)).join(', ')}
                       </span>
                     </motion.div>
                     {/* Thể loại */}
                     <motion.div 
                       variants={itemVariants} 
-                      className="backdrop-blur-md rounded-xl p-3 md:p-4 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-4 shadow-lg transition-colors duration-500"
-                      style={{
-                        background: `linear-gradient(135deg, ${accentColor}14, rgba(255,255,255,0.03))`,
-                        borderColor: `${accentColor}33`,
-                        borderWidth: 1,
-                        borderStyle: 'solid',
-                      }}
+                      className="backdrop-blur-md bg-white/5 border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-4 shadow-lg"
                     >
                       <span className="text-gray-400 text-xs mb-1 uppercase tracking-wider font-semibold">Thể loại</span>
                       <div className="flex flex-wrap gap-2 mt-1.5">
                         {movie.category && (Array.isArray(movie.category) ? movie.category : Object.values(movie.category)).map((c: any, idx: number) => (
                           <span 
                             key={idx} 
-                            className="backdrop-blur-sm text-gray-200 text-xs px-2.5 py-1.5 rounded-md transition-colors duration-300"
-                            style={{
-                              backgroundColor: `${accentColor}18`,
-                              borderColor: `${accentColor}38`,
-                              borderWidth: 1,
-                              borderStyle: 'solid',
-                            }}
+                            className="backdrop-blur-sm bg-white/10 border border-white/20 text-gray-200 text-xs px-2.5 py-1.5 rounded-md"
                           >
-                            {c.name}
+                            {cleanTmdbGenre(c.name)}
                           </span>
                         ))}
                       </div>
@@ -1365,13 +1441,7 @@ export default function Detail() {
                     {keywords && keywords.length > 0 && (
                       <motion.div 
                         variants={itemVariants} 
-                        className="backdrop-blur-md rounded-xl p-3 md:p-4 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-4 shadow-lg transition-colors duration-500"
-                        style={{
-                          background: `linear-gradient(135deg, ${accentColor}14, rgba(255,255,255,0.03))`,
-                          borderColor: `${accentColor}33`,
-                          borderWidth: 1,
-                          borderStyle: 'solid',
-                        }}
+                        className="backdrop-blur-md bg-white/5 border border-white/10 rounded-xl p-3 md:p-4 flex flex-col justify-center col-span-2 sm:col-span-3 md:col-span-4 shadow-lg"
                       >
                         <span className="text-gray-400 text-xs mb-1 uppercase tracking-wider font-semibold">Từ khóa</span>
                         <div className="flex flex-wrap gap-2 mt-1.5">
@@ -1382,14 +1452,7 @@ export default function Detail() {
                               <Link
                                 key={idx}
                                 to={`/tim-kiem?q=${encodeURIComponent(kwName)}`}
-                                className="text-xs px-2.5 py-1.5 rounded-md transition-all duration-300 hover:brightness-125 font-medium"
-                                style={{
-                                  backgroundColor: `${accentColor}1C`,
-                                  borderColor: `${accentColor}48`,
-                                  color: accentColor,
-                                  borderWidth: 1,
-                                  borderStyle: 'solid',
-                                }}
+                                className="text-xs px-2.5 py-1.5 rounded-md bg-white/5 border border-white/10 text-gray-300 hover:border-[#E50914] hover:text-[#E50914] transition-all font-medium"
                               >
                                 #{kwName}
                               </Link>
@@ -1612,7 +1675,7 @@ export default function Detail() {
             ) : relatedMovies.length > 0 ? (
               <>
                 <h2 className="text-xl md:text-2xl font-heading font-bold text-white tracking-wider mb-6 md:mb-8 flex items-center gap-2 md:gap-3">
-                   <span className="w-1.5 h-6 md:h-8 rounded-full inline-block" style={{ backgroundColor: accentColor }}></span>
+                   <span className="w-1.5 h-6 md:h-8 rounded-full inline-block bg-[#E50914]"></span>
                   Phim Liên Quan
                 </h2>
                 <motion.div 
@@ -1709,13 +1772,28 @@ export default function Detail() {
                           <span className="w-1 h-5 bg-[#E50914] rounded-full inline-block"></span>
                           Phim đã tham gia
                         </h4>
-                        {actorDetails.combined_credits?.cast && actorDetails.combined_credits.cast.length > 0 ? (
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
-                            {actorDetails.combined_credits.cast
-                              .filter((credit: any) => credit.title || credit.name)
-                              .sort((a: any, b: any) => (b.popularity || 0) - (a.popularity || 0))
-                              .slice(0, 12)
-                              .map((credit: any, index: number) => {
+                        {actorDetails.combined_credits?.cast && actorDetails.combined_credits.cast.length > 0 ? (() => {
+                          const allCredits = actorDetails.combined_credits.cast;
+                          const talkShowCredits = allCredits.filter(isTalkShowCredit);
+                          const regularCredits = allCredits
+                            .filter((c: any) => !isTalkShowCredit(c) && (c.title || c.name))
+                            .sort((a: any, b: any) => (b.popularity || 0) - (a.popularity || 0))
+                            .slice(0, 11);
+
+                          return (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
+                              {/* Thẻ gộp Talk Show động nếu diễn viên từng tham gia talk show */}
+                              {talkShowCredits.length > 0 && (
+                                <AnimatedTalkShowCard
+                                  talkShows={talkShowCredits}
+                                  onSearch={(query) => {
+                                    setSelectedActor(null);
+                                    navigate(`/search?q=${encodeURIComponent(query)}`);
+                                  }}
+                                />
+                              )}
+
+                              {regularCredits.map((credit: any, index: number) => {
                                 const title = credit.title || credit.name;
                                 const character = credit.character;
                                 return (
@@ -1750,8 +1828,9 @@ export default function Detail() {
                                   </div>
                                 );
                               })}
-                          </div>
-                        ) : (
+                            </div>
+                          );
+                        })() : (
                           <p className="italic text-gray-500 text-sm">Không có thông tin phim tham gia.</p>
                         )}
                       </div>

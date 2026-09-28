@@ -186,7 +186,13 @@ export function MovieCard({ movie, fromSearch, onHoldChange, priority, hasRank }
 
         {/* Quality Badge */}
         {movie.quality && (
-          <div className={`absolute top-2.5 z-10 ${hasRank ? 'left-10 md:left-11' : 'left-2.5'}`}>
+          <div className={`
+            absolute top-2.5 z-10 transition-all duration-300 ease-out
+            ${hasRank 
+              ? (mobileActive ? 'right-12' : 'right-2.5 group-hover:right-12') 
+              : 'left-2.5'
+            }
+          `}>
             <span className={`backdrop-blur-md text-[9px] sm:text-[10px] px-2 py-0.5 rounded-md uppercase tracking-wider border shadow-md ${
               movie.quality === 'CHƯA RA MẮT'
                 ? 'bg-amber-500/90 text-black border-amber-300 font-black shadow-[0_0_12px_rgba(245,158,11,0.5)]'

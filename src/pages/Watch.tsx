@@ -103,6 +103,17 @@ export default function Watch() {
       setLoading(true);
       try {
         const res = await api.getMovieDetail(slug);
+        
+        // Bảo vệ dữ liệu phim từ trang Detail (tránh nhầm lẫn phim cùng tên như Runner vs The Runner)
+        const movieFromState = location.state?.movieDetail;
+        if (movieFromState && res.movie) {
+          if (movieFromState.tmdb?.id) {
+            res.movie.tmdb = movieFromState.tmdb;
+          }
+          if (movieFromState.name) res.movie.name = movieFromState.name;
+          if (movieFromState.origin_name) res.movie.origin_name = movieFromState.origin_name;
+        }
+
         setMovie(res.movie);
         
         // 1. Shallow copy to avoid mutating the cached res.episodes array
@@ -112,7 +123,7 @@ export default function Watch() {
         );
         
         // Inject VidSrc Server if TMDB ID is available or resolved
-        let tmdbId = res.movie?.tmdb?.id;
+        let tmdbId = res.movie?.tmdb?.id || movieFromState?.tmdb?.id;
         if (!tmdbId && res.movie) {
           const tmdbRes = await searchTmdbWithCache(res.movie);
           if (tmdbRes?.id) {
@@ -134,7 +145,7 @@ export default function Watch() {
         }
         
         
-        const fastSeason = res.movie?.season;
+        const fastSeason = (res.movie as any)?.season;
         const isSeries = isTv || epsCount > 1;
 
         if (isSeries) {
@@ -147,7 +158,7 @@ export default function Watch() {
                const epMatch = ep.name.match(/\d+/);
                // Parse to integer to remove leading zeros for EmbedMaster
                const epNum = epMatch ? parseInt(epMatch[0], 10).toString() : '1';
-               const seasonNum = fastSeason || res.movie?.tmdb?.season || 1;
+               const seasonNum = fastSeason || (res.movie?.tmdb as any)?.season || 1;
                
                multiSub1Data.push({
                  ...ep,
@@ -172,7 +183,7 @@ export default function Watch() {
 
           } else {
             // Fallback for TV series with no fetched episodes
-            const seasonNum = fastSeason || res.movie?.tmdb?.season || 1;
+            const seasonNum = fastSeason || (res.movie?.tmdb as any)?.season || 1;
             multiSub1Data.push({
               name: 'Tập 1',
               slug: 'tap-1',
@@ -236,10 +247,27 @@ export default function Watch() {
         setEpisodes(fetchedEpisodes);
         if (fetchedEpisodes.length > 0) {
           const vietsub = fetchedEpisodes.find(s => !s.server_name?.includes('Multi-sub') && !s.server_name?.toLowerCase().includes('peachify'));
-          const defaultServer = vietsub || fetchedEpisodes.find(s => s.server_name === 'Multi-sub #3' || s.server_name?.includes('Multi-sub #3')) || fetchedEpisodes[0];
-          if (defaultServer?.server_data?.[0]) {
-            setCurrentEpisode(defaultServer.server_data[0]);
-            setCurrentServer(defaultServer.server_name);
+          const hasVietsubPlayable = Boolean(
+            vietsub &&
+            vietsub.server_data?.some((ep: any) => 
+              ep.link_embed && 
+              ep.slug?.toLowerCase().trim() !== 'trailer' && 
+              ep.name?.toLowerCase().trim() !== 'trailer'
+            )
+          );
+
+          if (hasVietsubPlayable && vietsub?.server_data?.[0]) {
+            setCurrentEpisode(vietsub.server_data[0]);
+            setCurrentServer(vietsub.server_name);
+          } else {
+            // Phim không có trên phimapi hoặc chỉ có trailer:
+            // Khởi tạo nguồn chính tạm thời để kích hoạt đếm ngược 5 giây trước khi chuyển sang Multi-sub #3
+            setCurrentServer(vietsub ? vietsub.server_name : 'Nguồn chính');
+            setCurrentEpisode(vietsub?.server_data?.[0] || {
+              name: 'Chưa có bản chiếu chính',
+              slug: 'trailer',
+              link_embed: '',
+            });
           }
         }
         
@@ -362,7 +390,7 @@ export default function Watch() {
     }
   }, [loading, isMultiSub, currentEpisode]);
 
-  const [autoRedirectTimer, setAutoRedirectTimer] = useState<number>(3);
+  const [autoRedirectTimer, setAutoRedirectTimer] = useState<number>(5);
   const hasTriggeredRef = useRef<boolean>(false);
 
   const triggerMultiSubAuto = async () => {
@@ -410,8 +438,8 @@ export default function Watch() {
       isTv = localType === 'series' || localType === 'tvshows' || epsCount > 1 || (localType === 'hoathinh' && totalEps > 1);
     }
     
-    const fastSeasonFb = movie?.season;
-    const seasonNum = fastSeasonFb || movie?.tmdb?.season || 1; 
+    const fastSeasonFb = (movie as any)?.season;
+    const seasonNum = fastSeasonFb || (movie?.tmdb as any)?.season || 1; 
     const currentEpMatch = currentEpisode?.name?.match(/\d+/) || currentEpisode?.slug?.match(/\d+/);
     const epNum = currentEpMatch ? parseInt(currentEpMatch[0], 10).toString() : '1';
 
@@ -466,9 +494,9 @@ export default function Watch() {
 
   useEffect(() => {
     if (isStreamBrokenOrTrailer) {
-      setAutoRedirectTimer(3);
+      setAutoRedirectTimer(5);
       hasTriggeredRef.current = false;
-      let count = 3;
+      let count = 5;
       const interval = setInterval(() => {
         count -= 1;
         if (count <= 0) {
@@ -680,17 +708,21 @@ export default function Watch() {
 
                 {/* Action buttons */}
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-3 w-full sm:w-auto">
-                  <button
-                    onClick={() => {
-                      if (currentEpisode?.link_embed) {
-                        window.open(currentEpisode.link_embed, '_blank', 'noopener,noreferrer');
+                  <a
+                    href={currentEpisode?.link_embed || '#'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => {
+                      if (!currentEpisode?.link_embed) {
+                        e.preventDefault();
+                        triggerMultiSubAuto();
                       }
                     }}
-                    className="bg-[#E50914] hover:bg-red-700 text-white w-full sm:w-auto px-4 py-2 sm:px-5 sm:py-2.5 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-[0_4px_20px_rgba(229,9,20,0.4)] hover:scale-105 active:scale-95 cursor-pointer"
+                    className="bg-[#E50914] hover:bg-red-700 text-white w-full sm:w-auto px-4 py-2 sm:px-5 sm:py-2.5 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-[0_4px_20px_rgba(229,9,20,0.4)] hover:scale-105 active:scale-95 cursor-pointer inline-flex"
                   >
                     <ExternalLink className="w-4 h-4" />
                     <span>Mở lại tab mới</span>
-                  </button>
+                  </a>
 
                   {vietsubServer && (
                     <button

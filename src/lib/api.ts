@@ -260,11 +260,260 @@ export function extractBestBackdrop(images: any) {
   return `https://image.tmdb.org/t/p/w1280${images.backdrops[0].file_path}`;
 }
 
-export function extractBestTrailer(videos: any) {
-  if (!videos?.results?.length) return null;
-  const trailer = videos.results.find((v: any) => v.type === 'Trailer' && v.site === 'YouTube');
-  if (trailer) return `https://www.youtube.com/watch?v=${trailer.key}`;
-  return null;
+export function toSlug(str: string): string {
+  if (!str) return '';
+  return str
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-');
+}
+
+export const TMDB_GENRE_MAP: Record<string, string> = {
+  'action': 'Hành Động',
+  'adventure': 'Phiêu Lưu',
+  'animation': 'Hoạt Hình',
+  'comedy': 'Hài',
+  'crime': 'Tội Phạm',
+  'documentary': 'Tài Liệu',
+  'drama': 'Chính Kịch',
+  'family': 'Gia Đình',
+  'fantasy': 'Giả Tưởng',
+  'history': 'Lịch Sử',
+  'horror': 'Kinh Dị',
+  'music': 'Âm Nhạc',
+  'mystery': 'Bí Ẩn',
+  'romance': 'Lãng Mạn',
+  'science fiction': 'Khoa Học Viễn Tưởng',
+  'tv movie': 'Truyền Hình',
+  'thriller': 'Gây Cấn',
+  'war': 'Chiến Tranh',
+  'western': 'Miền Tây',
+  'action & adventure': 'Hành Động & Phiêu Lưu',
+  'kids': 'Trẻ Em',
+  'news': 'Tin Tức',
+  'reality': 'Truyền Hình Thực Tế',
+  'sci-fi & fantasy': 'Khoa Học Viễn Tưởng & Giả Tưởng',
+  'soap': 'Tâm Lý Tình Cảm',
+  'talk': 'Trò Chuyện',
+  'war & politics': 'Chiến Tranh & Chính Trị',
+};
+
+export function cleanTmdbGenre(name: string): string {
+  if (!name) return '';
+  const trimmed = name.trim();
+  const lower = trimmed.toLowerCase();
+  
+  if (TMDB_GENRE_MAP[lower]) {
+    return TMDB_GENRE_MAP[lower];
+  }
+
+  // Loại bỏ từ "Phim ", "phim ", "Phim - " ở đầu
+  let cleaned = trimmed.replace(/^(?:phim\s*[-–—:]*\s*)/i, '').trim();
+  if (cleaned.toLowerCase() === 'phim truyền hình') return 'Truyền Hình';
+  if (cleaned.toLowerCase() === 'phim tài liệu') return 'Tài Liệu';
+  
+  if (cleaned.length > 0) {
+    cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  }
+  return cleaned;
+}
+
+export const TMDB_COUNTRY_MAP: Record<string, string> = {
+  'us': 'Hoa Kỳ',
+  'usa': 'Hoa Kỳ',
+  'united states': 'Hoa Kỳ',
+  'united states of america': 'Hoa Kỳ',
+  'gb': 'Anh',
+  'uk': 'Anh',
+  'united kingdom': 'Anh',
+  'great britain': 'Anh',
+  'de': 'Đức',
+  'germany': 'Đức',
+  'deutschland': 'Đức',
+  'fr': 'Pháp',
+  'france': 'Pháp',
+  'kr': 'Hàn Quốc',
+  'korea': 'Hàn Quốc',
+  'south korea': 'Hàn Quốc',
+  'republic of korea': 'Hàn Quốc',
+  'jp': 'Nhật Bản',
+  'japan': 'Nhật Bản',
+  'cn': 'Trung Quốc',
+  'china': 'Trung Quốc',
+  'hk': 'Hồng Kông',
+  'hong kong': 'Hồng Kông',
+  'tw': 'Đài Loan',
+  'taiwan': 'Đài Loan',
+  'th': 'Thái Lan',
+  'thailand': 'Thái Lan',
+  'in': 'Ấn Độ',
+  'india': 'Ấn Độ',
+  'it': 'Ý',
+  'italy': 'Ý',
+  'es': 'Tây Ban Nha',
+  'spain': 'Tây Ban Nha',
+  'ca': 'Canada',
+  'au': 'Úc',
+  'australia': 'Úc',
+  'ru': 'Nga',
+  'russia': 'Nga',
+  'russian federation': 'Nga',
+  'vn': 'Việt Nam',
+  'vietnam': 'Việt Nam',
+  'viet nam': 'Việt Nam',
+  'br': 'Brazil',
+  'mx': 'Mexico',
+  'se': 'Thụy Điển',
+  'sweden': 'Thụy Điển',
+  'no': 'Na Uy',
+  'norway': 'Na Uy',
+  'dk': 'Đan Mạch',
+  'denmark': 'Đan Mạch',
+  'nl': 'Hà Lan',
+  'netherlands': 'Hà Lan',
+  'be': 'Bỉ',
+  'belgium': 'Bỉ',
+  'pl': 'Ba Lan',
+  'poland': 'Ba Lan',
+  'ch': 'Thụy Sĩ',
+  'switzerland': 'Thụy Sĩ',
+  'at': 'Áo',
+  'austria': 'Áo',
+  'ie': 'Ireland',
+  'nz': 'New Zealand',
+  'sg': 'Singapore',
+  'ph': 'Philippines',
+  'id': 'Indonesia',
+  'my': 'Malaysia',
+  'tr': 'Thổ Nhĩ Kỳ',
+  'turkey': 'Thổ Nhĩ Kỳ',
+  'eg': 'Ai Cập',
+  'egypt': 'Ai Cập',
+  'za': 'Nam Phi',
+  'south africa': 'Nam Phi',
+  'ar': 'Argentina',
+  'co': 'Colombia',
+  'cl': 'Chile',
+  'cz': 'Cộng Hòa Séc',
+  'czech republic': 'Cộng Hòa Séc',
+  'gr': 'Hy Lạp',
+  'greece': 'Hy Lạp',
+  'hu': 'Hungary',
+  'pt': 'Bồ Đào Nha',
+  'portugal': 'Bồ Đào Nha',
+  'ro': 'Romania',
+  'ua': 'Ukraine',
+  'il': 'Israel',
+  'ir': 'Iran',
+  'is': 'Iceland',
+  'fi': 'Phần Lan',
+  'finland': 'Phần Lan',
+};
+
+export function translateTmdbCountry(nameOrIso: string): string {
+  if (!nameOrIso) return '';
+  const lower = nameOrIso.trim().toLowerCase();
+  if (TMDB_COUNTRY_MAP[lower]) return TMDB_COUNTRY_MAP[lower];
+  return nameOrIso.trim();
+}
+
+export function translateTmdbCountries(productionCountries?: any[], originCountries?: any[]): { id: string; name: string; slug: string }[] {
+  const result: { id: string; name: string; slug: string }[] = [];
+  const seen = new Set<string>();
+
+  if (Array.isArray(productionCountries) && productionCountries.length > 0) {
+    for (const c of productionCountries) {
+      const iso = c.iso_3166_1 || c.id || '';
+      const rawName = c.name || iso;
+      const vnName = translateTmdbCountry(iso) || translateTmdbCountry(rawName) || rawName;
+      if (vnName && !seen.has(vnName.toLowerCase())) {
+        seen.add(vnName.toLowerCase());
+        result.push({
+          id: iso || vnName,
+          name: vnName,
+          slug: toSlug(vnName),
+        });
+      }
+    }
+  }
+
+  if (result.length === 0 && Array.isArray(originCountries)) {
+    for (const iso of originCountries) {
+      if (typeof iso === 'string') {
+        const vnName = translateTmdbCountry(iso) || iso;
+        if (vnName && !seen.has(vnName.toLowerCase())) {
+          seen.add(vnName.toLowerCase());
+          result.push({
+            id: iso,
+            name: vnName,
+            slug: toSlug(vnName),
+          });
+        }
+      }
+    }
+  }
+
+  return result.length > 0 ? result : [{ id: 'us', name: 'Hoa Kỳ', slug: 'hoa-ky' }];
+}
+
+export function extractBestTrailer(videos: any): string | null {
+  if (!videos?.results || !Array.isArray(videos.results) || videos.results.length === 0) return null;
+  const ytVideos = videos.results.filter((v: any) => v.site === 'YouTube' && v.key);
+  if (ytVideos.length === 0) return null;
+
+  // 1. Trailer chính thức (type === "Trailer" && official === true)
+  const officialTrailer = ytVideos.find((v: any) => v.type === 'Trailer' && (v.official === true || v.official === 'true'));
+  if (officialTrailer) return `https://www.youtube.com/embed/${officialTrailer.key}`;
+
+  // 2. Bất kỳ Trailer nào (type === "Trailer")
+  const anyTrailer = ytVideos.find((v: any) => v.type === 'Trailer');
+  if (anyTrailer) return `https://www.youtube.com/embed/${anyTrailer.key}`;
+
+  // 3. Teaser hoặc Clip chính thức
+  const officialTeaser = ytVideos.find((v: any) => (v.type === 'Teaser' || v.type === 'Clip') && (v.official === true || v.official === 'true'));
+  if (officialTeaser) return `https://www.youtube.com/embed/${officialTeaser.key}`;
+
+  // 4. Bất kỳ video chính thức nào
+  const anyOfficial = ytVideos.find((v: any) => v.official === true || v.official === 'true');
+  if (anyOfficial) return `https://www.youtube.com/embed/${anyOfficial.key}`;
+
+  // 5. Fallback video YouTube đầu tiên
+  return `https://www.youtube.com/embed/${ytVideos[0].key}`;
+}
+
+export async function fetchTmdbVideos(id: string | number, type: 'movie' | 'tv' | string = 'movie', seasonNum?: number, epNum?: number): Promise<string | null> {
+  if (!TMDB_ENABLED || !id) return null;
+  const cleanId = String(id).replace(/^tmdb-/, '');
+  const t = type === 'tv' ? 'tv' : 'movie';
+  const cacheKey = `tmdb_vid_v3_${t}_${cleanId}${seasonNum ? `_s${seasonNum}_e${epNum || 1}` : ''}`;
+  return fetchWithCache(cacheKey, async () => {
+    try {
+      let url = `https://api.themoviedb.org/3/${t}/${cleanId}/videos?api_key=${TMDB_KEY}&language=en-US`;
+      if (t === 'tv' && seasonNum && epNum) {
+        url = `https://api.themoviedb.org/3/tv/${cleanId}/season/${seasonNum}/episode/${epNum}/videos?api_key=${TMDB_KEY}&language=en-US`;
+      }
+      let res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        const trailer = extractBestTrailer(data);
+        if (trailer) return trailer;
+      }
+      // Fallback with all video languages
+      const fallbackUrl = `https://api.themoviedb.org/3/${t}/${cleanId}/videos?api_key=${TMDB_KEY}&include_video_language=en,vi,null`;
+      res = await fetch(fallbackUrl);
+      if (res.ok) {
+        const data = await res.json();
+        return extractBestTrailer(data);
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }, TTL.TMDB_STATIC);
 }
 
 export async function fetchTmdbByExternalId(externalId: string, source: string = 'imdb_id') {
@@ -320,37 +569,43 @@ export async function fetchTmdbSearch(title: string, year?: string, type?: 'movi
 
     let bestMatch = valid[0];
     const targetYear = year ? parseInt(year) : null;
+    const normClean = normalizeTitleForComparison(cleanTitle);
 
-    if (targetYear) {
-      // Score results
-      let bestScore = -1;
-      for (const item of valid) {
-        let score = 0;
-        const itemYearStr = item.release_date ? item.release_date.substring(0, 4) : (item.first_air_date ? item.first_air_date.substring(0, 4) : null);
-        const itemYear = itemYearStr ? parseInt(itemYearStr) : null;
-        
-        const nameMatch = item.title?.toLowerCase() === cleanTitle.toLowerCase() || item.name?.toLowerCase() === cleanTitle.toLowerCase();
-        const originNameMatch = item.original_title?.toLowerCase() === cleanTitle.toLowerCase() || item.original_name?.toLowerCase() === cleanTitle.toLowerCase();
-        
-        // Name match is the most important
-        if (nameMatch || originNameMatch) {
-            score += 20;
-        }
+    // Score results for best exact match
+    let bestScore = -100;
+    for (const item of valid) {
+      let score = 0;
+      const itemYearStr = item.release_date ? item.release_date.substring(0, 4) : (item.first_air_date ? item.first_air_date.substring(0, 4) : null);
+      const itemYear = itemYearStr ? parseInt(itemYearStr) : null;
 
-        // Exact year match is crucial for separating reboots, but for later seasons of TV shows, the year might be the season's year, not the show's premiere year.
+      const normItemTitle = normalizeTitleForComparison(item.title || item.name);
+      const normItemOrig = normalizeTitleForComparison(item.original_title || item.original_name);
+
+      const isExactMatch = normClean && (normItemTitle === normClean || normItemOrig === normClean);
+
+      if (isExactMatch) {
+        score += 60; // Khớp tiêu đề chính xác 100%
+      } else {
+        // Nếu tiêu đề khác nhau (ví dụ: "The Runner" vs "Runner", "Blade Runner" vs "Runner"): trừ điểm nặng
+        score -= 30;
+      }
+
+      // So khớp năm phát hành
+      if (targetYear && itemYear) {
         if (itemYear === targetYear) {
-            score += 10;
-        } else if (itemYear && Math.abs(itemYear - targetYear) === 1) {
-            score += 5; // Sometimes TMDB year and PhimAPI year differ by 1
-        } else if (type === 'tv' && itemYear && itemYear < targetYear) {
-            // For TV shows, if the show premiered before the target year, it's very likely valid (e.g. Season 2 in 2023, premiered in 2021)
-            score += 3;
+          score += 25;
+        } else if (Math.abs(itemYear - targetYear) === 1) {
+          score += 10;
+        } else if (type === 'tv' && itemYear < targetYear) {
+          score += 5;
+        } else {
+          score -= 20;
         }
+      }
 
-        if (score > bestScore) {
-            bestScore = score;
-            bestMatch = item;
-        }
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = item;
       }
     }
 
@@ -515,7 +770,7 @@ export async function fetchTmdbDetail(id: string | number, type?: string) {
   if (!TMDB_ENABLED) return null;
   const t = type || 'movie';
   try {
-    const res = await fetch(`https://api.themoviedb.org/3/${t}/${id}?api_key=${TMDB_KEY}&language=vi-VN&append_to_response=images,videos,credits,external_ids,release_dates&include_image_language=en,null`);
+    const res = await fetch(`https://api.themoviedb.org/3/${t}/${id}?api_key=${TMDB_KEY}&language=vi-VN&append_to_response=images,videos,credits,external_ids,release_dates&include_image_language=en,null&include_video_language=en,vi,null`);
     if (!res.ok) return null;
     const data = await res.json();
     if (data) {
@@ -663,25 +918,35 @@ export async function findMatchInPhimApi(tmdbDetail: any): Promise<{ matched: an
     const itemYear = parseInt(item.year, 10);
 
     let score = 0;
+    let exactTitleMatch = false;
 
-    // So khớp tên gốc (Original Title)
-    if (itemOrig && normOrig) {
-      if (itemOrig === normOrig) score += 60;
-      else if (itemOrig.includes(normOrig) || normOrig.includes(itemOrig)) score += 35;
+    // 1. So khớp tuyệt đối tên gốc (Original Title)
+    if (itemOrig && normOrig && itemOrig === normOrig) {
+      score += 70;
+      exactTitleMatch = true;
+    }
+    // 2. So khớp tuyệt đối tên tiếng Việt (Vietnamese Title)
+    else if (itemName && normVi && itemName === normVi) {
+      score += 70;
+      exactTitleMatch = true;
+    }
+    // 3. Khớp chéo tuyệt đối
+    else if ((itemOrig && normVi && itemOrig === normVi) || (itemName && normOrig && itemName === normOrig)) {
+      score += 65;
+      exactTitleMatch = true;
     }
 
-    // So khớp tên tiếng Việt (Vietnamese Title)
-    if (itemName && normVi) {
-      if (itemName === normVi) score += 60;
-      else if (itemName.includes(normVi) || normVi.includes(itemName)) score += 35;
+    // [QUAN TRỌNG]: Tuyệt đối KHÔNG ghép bừa phim khác nhau chỉ vì chung vài từ (ví dụ: "Runner" vs "The Runner", "Blade Runner" vs "Runner")
+    if (!exactTitleMatch) {
+      continue;
     }
 
-    // So khớp năm phát hành
+    // So khớp năm phát hành (phải chính xác hoặc chênh lệch tối đa 1 năm do liên hoan phim)
     if (!isNaN(itemYear) && !isNaN(tmdbYear)) {
       const yearDiff = Math.abs(itemYear - tmdbYear);
-      if (yearDiff === 0) score += 40;
-      else if (yearDiff === 1) score += 20;
-      else if (yearDiff >= 3) score -= 50;
+      if (yearDiff === 0) score += 30;
+      else if (yearDiff === 1) score += 15;
+      else if (yearDiff >= 2) score -= 40;
     }
 
     if (score > bestScore) {
@@ -690,7 +955,8 @@ export async function findMatchInPhimApi(tmdbDetail: any): Promise<{ matched: an
     }
   }
 
-  return { matched: bestScore >= 70 ? bestMatch : null, score: bestScore };
+  // Đòi hỏi score >= 85 (bắt buộc phải khớp tên 100% và năm chênh lệch không quá 1 năm)
+  return { matched: bestScore >= 85 ? bestMatch : null, score: bestScore };
 }
 
 export const getImageUrl = (path: string, _type: 'poster' | 'banner' = 'poster', domain?: string): string => {
@@ -1018,9 +1284,27 @@ export const api = {
                 // Cập nhật tag chất lượng theo quy tắc
                 normPrimary.quality = qualityTag || normPrimary.quality || 'FHD';
 
-                // Trailer từ TMDb
-                if (!normPrimary.trailer_url && tmdbDetail.videos) {
-                  normPrimary.trailer_url = extractBestTrailer(tmdbDetail.videos) || '';
+                // [YÊU CẦU]: Quốc gia phát hành chuẩn từ TMDB (Hoa Kỳ, Đức, Anh,...)
+                if (tmdbDetail.production_countries?.length || (tmdbDetail as any).origin_country?.length) {
+                  normPrimary.country = translateTmdbCountries(tmdbDetail.production_countries, (tmdbDetail as any).origin_country);
+                }
+
+                // [YÊU CẦU]: Thể loại từ TMDB loại bỏ chữ "Phim"
+                if (tmdbDetail.genres?.length) {
+                  normPrimary.category = tmdbDetail.genres.map((g: any) => ({
+                    id: String(g.id),
+                    name: cleanTmdbGenre(g.name),
+                    slug: toSlug(cleanTmdbGenre(g.name)),
+                  }));
+                }
+
+                // [YÊU CẦU]: Trailer từ TMDb
+                let trailer = extractBestTrailer(tmdbDetail.videos);
+                if (!trailer && tmdbDetail.id) {
+                  trailer = await fetchTmdbVideos(tmdbDetail.id, 'movie');
+                }
+                if (trailer) {
+                  normPrimary.trailer_url = trailer;
                 }
 
                 normPrimary.tmdb = {
@@ -1032,7 +1316,7 @@ export const api = {
                   backdrop_path: tmdbDetail.backdrop_path,
                   title: tmdbDetail.title,
                   original_title: tmdbDetail.original_title,
-                  genres: tmdbDetail.genres?.map((g: any) => g.name) || [],
+                  genres: tmdbDetail.genres?.map((g: any) => cleanTmdbGenre(g.name)) || [],
                   runtime: tmdbDetail.runtime,
                 };
 
@@ -1071,8 +1355,8 @@ export const api = {
             episode_current: qualityTag === 'CHƯA RA MẮT' ? 'Chưa chiếu' : 'Bản chiếu rạp / Trailer',
             episode_total: '1',
             type: 'movie',
-            category: (tmdbDetail.genres || []).map((g: any) => ({ id: String(g.id), name: g.name, slug: String(g.id) })),
-            country: (tmdbDetail.production_countries || []).map((c: any) => ({ id: c.iso_3166_1, name: c.name, slug: c.iso_3166_1.toLowerCase() })),
+            category: (tmdbDetail.genres || []).map((g: any) => ({ id: String(g.id), name: cleanTmdbGenre(g.name), slug: toSlug(cleanTmdbGenre(g.name)) })),
+            country: translateTmdbCountries(tmdbDetail.production_countries, (tmdbDetail as any).origin_country),
             actor: (tmdbDetail.credits?.cast || []).slice(0, 15).map((a: any) => a.name),
             director: (tmdbDetail.credits?.crew || []).filter((c: any) => c.job === 'Director').map((d: any) => d.name),
             tmdb: {
@@ -1084,7 +1368,7 @@ export const api = {
               backdrop_path: tmdbDetail.backdrop_path,
               title: tmdbDetail.title,
               original_title: tmdbDetail.original_title,
-              genres: tmdbDetail.genres?.map((g: any) => g.name) || [],
+              genres: tmdbDetail.genres?.map((g: any) => cleanTmdbGenre(g.name)) || [],
               runtime: tmdbDetail.runtime,
             },
             trailer_url: extractBestTrailer(tmdbDetail.videos) || '',
@@ -1135,6 +1419,64 @@ export const api = {
 
       // ── STAGE 4: Normalize phimapi data ──────────────────────
       if (!primaryData) {
+        if (TMDB_ENABLED) {
+          try {
+            const cleanSlug = slug.replace(/^tmdb-/, '').replace(/-/g, ' ');
+            const search = await fetchTmdbSearch(cleanSlug, undefined, 'multi');
+            const tmdbId = search?.id || (slug.match(/^\d+$/) ? slug : null);
+            if (tmdbId) {
+              const tmdbDetail = await fetchTmdbDetail(tmdbId, search?.media_type || 'movie');
+              if (tmdbDetail) {
+                const qTag = calculateMovieQuality(tmdbDetail.release_dates, tmdbDetail.release_date);
+                const bestPoster = extractBestPoster(tmdbDetail.images) || (tmdbDetail.poster_path ? `https://image.tmdb.org/t/p/w500${tmdbDetail.poster_path}` : PLACEHOLDER_URL);
+                const bestBackdrop = extractBestBackdrop(tmdbDetail.images) || (tmdbDetail.backdrop_path ? `https://image.tmdb.org/t/p/w1280${tmdbDetail.backdrop_path}` : PLACEHOLDER_URL);
+                return {
+                  movie: {
+                    _id: `tmdb-${tmdbDetail.id}`,
+                    slug: `tmdb-${tmdbDetail.id}`,
+                    name: tmdbDetail.title || tmdbDetail.name || '',
+                    origin_name: tmdbDetail.original_title || tmdbDetail.original_name || tmdbDetail.title || '',
+                    poster_url: bestPoster,
+                    thumb_url: bestBackdrop,
+                    poster_path: tmdbDetail.poster_path,
+                    backdrop_path: tmdbDetail.backdrop_path,
+                    description: tmdbDetail.overview || 'Chưa có thông tin giới thiệu tiếng Việt cho phim này.',
+                    content: tmdbDetail.overview || 'Chưa có thông tin giới thiệu tiếng Việt cho phim này.',
+                    year: (tmdbDetail.release_date || tmdbDetail.first_air_date || '').slice(0, 4),
+                    quality: qTag,
+                    lang: 'Vietsub',
+                    time: tmdbDetail.runtime ? `${tmdbDetail.runtime} phút` : '',
+                    episode_current: qTag === 'CHƯA RA MẮT' ? 'Chưa chiếu' : 'Bản chiếu rạp / Trailer',
+                    episode_total: '1',
+                    type: 'movie',
+                    category: (tmdbDetail.genres || []).map((g: any) => ({ id: String(g.id), name: cleanTmdbGenre(g.name), slug: toSlug(cleanTmdbGenre(g.name)) })),
+                    country: translateTmdbCountries(tmdbDetail.production_countries, tmdbDetail.origin_country),
+                    actor: (tmdbDetail.credits?.cast || []).slice(0, 15).map((a: any) => a.name),
+                    director: (tmdbDetail.credits?.crew || []).filter((c: any) => c.job === 'Director').map((d: any) => d.name),
+                    tmdb: {
+                      id: tmdbDetail.id,
+                      type: 'movie',
+                      vote_average: tmdbDetail.vote_average,
+                      vote_count: tmdbDetail.vote_count,
+                      poster_path: tmdbDetail.poster_path,
+                      backdrop_path: tmdbDetail.backdrop_path,
+                      title: tmdbDetail.title,
+                      original_title: tmdbDetail.original_title,
+                      genres: tmdbDetail.genres?.map((g: any) => cleanTmdbGenre(g.name)) || [],
+                      runtime: tmdbDetail.runtime,
+                    },
+                    trailer_url: extractBestTrailer(tmdbDetail.videos) || await fetchTmdbVideos(tmdbDetail.id, 'movie') || '',
+                    _source: 'primary',
+                  },
+                  episodes: [],
+                  _tmdb_used: true,
+                  _tmdb_id: tmdbDetail.id,
+                  _source: 'primary',
+                };
+              }
+            }
+          } catch { /* continue to error */ }
+        }
         throw new Error(`Không thể lấy dữ liệu phim "${slug}"`);
       }
 
@@ -1183,9 +1525,27 @@ export const api = {
           else if (tmdbDetail.number_of_episodes) normalized.time = `${tmdbDetail.number_of_episodes} tập`;
         }
 
-        // [FIX 9] Trailer — lấy từ TMDB videos
-        if (!normalized.trailer_url) {
-          normalized.trailer_url = extractBestTrailer(tmdbDetail.videos);
+        // [YÊU CẦU]: Trailer — lấy từ TMDB videos
+        let trailer = extractBestTrailer(tmdbDetail.videos);
+        if (!trailer && tmdbDetail.id) {
+          trailer = await fetchTmdbVideos(tmdbDetail.id, tmdbSearch?.media_type || normalized.type);
+        }
+        if (trailer) {
+          normalized.trailer_url = trailer;
+        }
+
+        // [YÊU CẦU]: Quốc gia phát hành chuẩn từ TMDB (Hoa Kỳ, Đức, Anh,...)
+        if (tmdbDetail.production_countries?.length || (tmdbDetail as any).origin_country?.length) {
+          normalized.country = translateTmdbCountries(tmdbDetail.production_countries, (tmdbDetail as any).origin_country);
+        }
+
+        // [YÊU CẦU]: Thể loại từ TMDB, loại bỏ chữ "Phim"
+        if (tmdbDetail.genres?.length) {
+          normalized.category = tmdbDetail.genres.map((g: any) => ({
+            id: String(g.id),
+            name: cleanTmdbGenre(g.name),
+            slug: toSlug(cleanTmdbGenre(g.name)),
+          }));
         }
 
         // Cast từ TMDB credits (nếu phimapi thiếu)
@@ -1210,7 +1570,7 @@ export const api = {
           vote_count:    tmdbDetail.vote_count,
           title:         tmdbDetail.title || tmdbDetail.name,
           original_title: tmdbDetail.original_title || tmdbDetail.original_name,
-          genres:        tmdbDetail.genres?.map(g => g.name) || [],
+          genres:        tmdbDetail.genres?.map(g => cleanTmdbGenre(g.name)) || [],
           runtime:       tmdbDetail.runtime,
         };
 
