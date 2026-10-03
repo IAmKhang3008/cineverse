@@ -410,8 +410,22 @@ export default function Header() {
                               <p className="text-xs text-secondary-text mt-0.5 line-clamp-1">{movie.origin_name}</p>
                               <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                                 <span className="text-[10px] bg-input-bg text-secondary-text px-1.5 py-0.5 rounded">{movie.year || "N/A"}</span>
-                                {movie.quality && <span className="text-[10px] bg-foreground/10 border border-card-border text-foreground px-1.5 py-0.5 rounded">{movie.quality}</span>}
-                                {movie.lang && <span className="text-[10px] bg-[#3B82F6]/20 border border-[#3B82F6]/30 text-[#3B82F6] px-1.5 py-0.5 rounded">{cleanLangString(movie.lang, false, isVietnameseMovie(movie))}</span>}
+                                {movie.quality && (
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold border ${
+                                    movie.quality === 'CHƯA RA MẮT' 
+                                      ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                                      : movie.quality === 'CAM'
+                                      ? 'bg-orange-500/20 text-orange-400 border-orange-500/30'
+                                      : 'bg-foreground/10 text-foreground border-card-border'
+                                  }`}>
+                                    {movie.quality}
+                                  </span>
+                                )}
+                                {movie.lang && (
+                                  <span className="text-[10px] bg-[#3B82F6]/20 border border-[#3B82F6]/30 text-[#3B82F6] px-1.5 py-0.5 rounded font-medium">
+                                    {cleanLangString(movie.lang, false, isVietnameseMovie(movie))}
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </button>

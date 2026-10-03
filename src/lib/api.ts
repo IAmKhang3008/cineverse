@@ -784,6 +784,17 @@ export async function fetchTmdbDetail(id: string | number, type?: string) {
           data.poster_path = nullPoster.file_path;
         }
       }
+
+      // Nếu không có tóm tắt tiếng Việt, lấy tóm tắt tiếng Anh
+      if (!data.overview) {
+        try {
+          const enRes = await fetch(`https://api.themoviedb.org/3/${t}/${id}?api_key=${TMDB_KEY}&language=en-US`);
+          if (enRes.ok) {
+            const enData = await enRes.json();
+            if (enData.overview) data.overview = enData.overview;
+          }
+        } catch {}
+      }
     }
     return data;
   } catch { return null; }
@@ -862,6 +873,197 @@ export function calculateMovieQuality(releaseDatesResult: any, defaultReleaseDat
   return 'FHD';
 }
 
+export const TMDB_GENRE_ID_MAP: Record<number, string> = {
+  28: 'Hành Động',
+  12: 'Phiêu Lưu',
+  16: 'Hoạt Hình',
+  35: 'Hài',
+  80: 'Tội Phạm',
+  99: 'Tài Liệu',
+  18: 'Chính Kịch',
+  10751: 'Gia Đình',
+  14: 'Giả Tưởng',
+  36: 'Lịch Sử',
+  27: 'Kinh Dị',
+  10402: 'Âm Nhạc',
+  9648: 'Bí Ẩn',
+  10749: 'Lãng Mạn',
+  878: 'Khoa Học Viễn Tưởng',
+  10770: 'Truyền Hình',
+  53: 'Gây Cấn',
+  10752: 'Chiến Tranh',
+  37: 'Miền Tây',
+  10759: 'Hành Động & Phiêu Lưu',
+  10762: 'Trẻ Em',
+  10763: 'Tin Tức',
+  10764: 'Truyền Hình Thực Tế',
+  10765: 'Khoa Học Viễn Tưởng & Giả Tưởng',
+  10766: 'Tâm Lý',
+  10767: 'Talk Show',
+  10768: 'Chiến Tranh & Chính Trị',
+};
+
+/**
+ * Tìm kiếm phim & series từ TMDb khi phim không tồn tại trên phimapi.com
+ * Chuẩn hóa cấu trúc dữ liệu giống hệt phim thịnh hành (Phim Thịnh Hành)
+ */
+export async function searchTmdbMultiList(query: string, page = 1, limit = 24, filters?: any): Promise<{ items: any[]; pagination: any }> {
+  if (!TMDB_ENABLED || !query || !query.trim()) return { items: [], pagination: null };
+  const cleanQ = query.trim();
+
+  const cacheKey = `tmdb_search_multi_v4_${cleanQ}_${page}_${limit}_${JSON.stringify(filters || {})}`;
+  return fetchWithCache(cacheKey, async () => {
+    try {
+      const options = { method: 'GET', headers: { accept: 'application/json' } };
+      let yearQuery = '';
+      if (filters?.year) {
+        yearQuery = `&year=${filters.year}&primary_release_year=${filters.year}&first_air_date_year=${filters.year}`;
+      }
+
+      const [resVi, resEn] = await Promise.all([
+        fetch(`https://api.themoviedb.org/3/search/multi?query=${encodeURIComponent(cleanQ)}&language=vi-VN&api_key=${TMDB_KEY}&page=${page}&include_adult=false${yearQuery}`, options)
+          .then(r => r.ok ? r.json() : null)
+          .catch(() => null),
+        fetch(`https://api.themoviedb.org/3/search/multi?query=${encodeURIComponent(cleanQ)}&language=en-US&api_key=${TMDB_KEY}&page=${page}&include_adult=false${yearQuery}`, options)
+          .then(r => r.ok ? r.json() : null)
+          .catch(() => null),
+      ]);
+
+      const dataViResults: any[] = resVi?.results || [];
+      const dataEnResults: any[] = resEn?.results || [];
+
+      // Bản đồ chứa dữ liệu tiếng Anh để fallback poster, backdrop và tiêu đề
+      const enMap = new Map<number, any>(dataEnResults.map(m => [m.id, m]));
+
+      // Hợp nhất danh sách phim
+      const mergedList: any[] = [];
+      const seenIds = new Set<number>();
+
+      for (const m of [...dataViResults, ...dataEnResults]) {
+        if (!m || seenIds.has(m.id)) continue;
+        if (m.media_type !== 'movie' && m.media_type !== 'tv') continue;
+        seenIds.add(m.id);
+        mergedList.push(m);
+      }
+
+      // Lọc theo năm nếu có trong filters
+      let filteredList = mergedList;
+      if (filters?.year) {
+        const yStr = String(filters.year);
+        filteredList = filteredList.filter((m: any) => {
+          const mYear = (m.release_date || m.first_air_date || '').slice(0, 4);
+          return mYear === yStr;
+        });
+        if (filteredList.length === 0) filteredList = mergedList;
+      }
+
+      const validItems = filteredList.slice(0, limit);
+      if (validItems.length === 0) {
+        return { items: [], pagination: null };
+      }
+
+      // Lấy release_dates song song cho các phim điện ảnh để tính qualityTag
+      const releasePromises = validItems.map((m: any) => {
+        if (m.media_type === 'movie') {
+          return fetch(`https://api.themoviedb.org/3/movie/${m.id}/release_dates?api_key=${TMDB_KEY}`)
+            .then(r => r.ok ? r.json() : null)
+            .catch(() => null);
+        }
+        return Promise.resolve(null);
+      });
+
+      const releaseResults = await Promise.all(releasePromises);
+
+      const items = validItems.map((m: any, idx: number) => {
+        const enItem = enMap.get(m.id) || {};
+        const releaseInfo = releaseResults[idx];
+        const releaseDate = m.release_date || m.first_air_date || enItem.release_date || enItem.first_air_date || '';
+        
+        let qualityTag: 'CHƯA RA MẮT' | 'CAM' | 'FHD' = 'FHD';
+        if (m.media_type === 'movie') {
+          qualityTag = calculateMovieQuality(releaseInfo, releaseDate);
+        } else {
+          if (releaseDate && new Date(releaseDate).getTime() > Date.now()) {
+            qualityTag = 'CHƯA RA MẮT';
+          } else {
+            qualityTag = 'FHD';
+          }
+        }
+
+        const englishPosterPath = enItem.poster_path || m.poster_path;
+        const posterUrl = englishPosterPath 
+          ? `https://image.tmdb.org/t/p/w500${englishPosterPath}` 
+          : PLACEHOLDER_URL;
+        const backdropPath = m.backdrop_path || enItem.backdrop_path;
+        const thumbUrl = backdropPath 
+          ? `https://image.tmdb.org/t/p/w1280${backdropPath}` 
+          : posterUrl;
+
+        const displayName = m.title || m.name || enItem.title || enItem.name || '';
+        const originName = m.original_title || m.original_name || enItem.original_title || enItem.original_name || displayName;
+        const year = releaseDate ? releaseDate.slice(0, 4) : '';
+        const overview = m.overview || enItem.overview || '';
+
+        const genres = (m.genre_ids || enItem.genre_ids || []).map((gid: number) => {
+          const gName = TMDB_GENRE_ID_MAP[gid] || 'Phim';
+          return {
+            id: String(gid),
+            name: gName,
+            slug: toSlug(gName),
+          };
+        });
+
+        return {
+          _id: `tmdb-${m.id}`,
+          id: m.id,
+          name: displayName,
+          origin_name: originName,
+          poster_url: posterUrl,
+          thumb_url: thumbUrl,
+          poster_path: englishPosterPath || m.poster_path,
+          backdrop_path: backdropPath,
+          year: year,
+          description: overview,
+          content: overview,
+          slug: `tmdb-${m.id}`,
+          quality: qualityTag,
+          lang: qualityTag === 'CHƯA RA MẮT' ? '' : 'Vietsub',
+          vote_average: m.vote_average || enItem.vote_average || 0,
+          vote_count: m.vote_count || enItem.vote_count || 0,
+          type: m.media_type === 'tv' ? 'series' : 'movie',
+          category: genres,
+          tmdb: {
+            id: m.id,
+            type: m.media_type || (m.first_air_date ? 'tv' : 'movie'),
+            vote_average: m.vote_average || enItem.vote_average || 0,
+            vote_count: m.vote_count || enItem.vote_count || 0,
+            poster_path: englishPosterPath || m.poster_path,
+            backdrop_path: backdropPath,
+          },
+          _source: 'primary' as const,
+          _fromTmdbSearch: true,
+        };
+      });
+
+      const totalResults = Math.max(resVi?.total_results || 0, resEn?.total_results || 0, items.length);
+      const totalPgs = Math.min(Math.max(resVi?.total_pages || 1, resEn?.total_pages || 1), 50);
+
+      return {
+        items,
+        pagination: {
+          totalItems: totalResults,
+          totalPages: totalPgs,
+          currentPage: page,
+          pageSizes: limit,
+        },
+      };
+    } catch (err) {
+      console.warn('[TMDB Search Multi] Failed:', err);
+      return { items: [], pagination: null };
+    }
+  }, TTL.SEARCH);
+}
+
 /**
  * Chuẩn hóa tiêu đề để so sánh chính xác cao và siêu nhanh
  */
@@ -881,12 +1083,17 @@ export function normalizeTitleForComparison(s: string): string {
 export async function findMatchInPhimApi(tmdbDetail: any): Promise<{ matched: any | null; score: number }> {
   if (!tmdbDetail) return { matched: null, score: 0 };
 
-  const normOrig = normalizeTitleForComparison(tmdbDetail.original_title);
+  const normOrig = normalizeTitleForComparison(tmdbDetail.original_title || tmdbDetail.original_name);
   const normVi = normalizeTitleForComparison(tmdbDetail.title || tmdbDetail.name);
   const tmdbYear = parseInt((tmdbDetail.release_date || tmdbDetail.first_air_date || '').slice(0, 4), 10);
 
   // Tìm kiếm song song cả tên gốc và tên tiếng Việt
-  const queries = Array.from(new Set([tmdbDetail.original_title, tmdbDetail.title].filter(Boolean) as string[]));
+  const queries = Array.from(new Set([
+    tmdbDetail.original_title,
+    tmdbDetail.original_name,
+    tmdbDetail.title,
+    tmdbDetail.name
+  ].filter(Boolean) as string[]));
   const searchPromises = queries.map(q =>
     fetchWithTimeout(`${PRIMARY_URL}/v1/api/tim-kiem?keyword=${encodeURIComponent(q)}&limit=10`, 3500)
       .then(r => r.json())
@@ -1246,10 +1453,23 @@ export const api = {
 
       // ── TRƯỜNG HỢP 1: Phim từ TMDB (ví dụ: Phim Thịnh Hành tmdb-xxxx) ──
       if (tmdbIdFromSlug && TMDB_ENABLED) {
-        const tmdbDetail = await fetchTmdbDetail(tmdbIdFromSlug, 'movie');
+        let tmdbDetail = await fetchTmdbDetail(tmdbIdFromSlug, 'movie');
+        if (!tmdbDetail) {
+          tmdbDetail = await fetchTmdbDetail(tmdbIdFromSlug, 'tv');
+        }
         if (tmdbDetail) {
-          // Tính toán chất lượng: CHƯA RA MẮT, CAM, hoặc FHD
-          const qualityTag = calculateMovieQuality(tmdbDetail.release_dates, tmdbDetail.release_date);
+          const isTv = !tmdbDetail.title && (!!tmdbDetail.name || !!tmdbDetail.number_of_seasons);
+          const releaseDate = tmdbDetail.release_date || tmdbDetail.first_air_date || '';
+          let qualityTag: 'CHƯA RA MẮT' | 'CAM' | 'FHD' = 'FHD';
+          if (!isTv) {
+            qualityTag = calculateMovieQuality(tmdbDetail.release_dates, releaseDate);
+          } else {
+            if (releaseDate && new Date(releaseDate).getTime() > Date.now()) {
+              qualityTag = 'CHƯA RA MẮT';
+            } else {
+              qualityTag = 'FHD';
+            }
+          }
 
           // Thuật toán so sánh siêu nhanh và ổn định xem phim có tồn tại trên phimapi.com không
           const { matched } = await findMatchInPhimApi(tmdbDetail);
@@ -1337,6 +1557,11 @@ export const api = {
           const bestPoster = extractBestPoster(tmdbDetail.images) || (tmdbDetail.poster_path ? `https://image.tmdb.org/t/p/w500${tmdbDetail.poster_path}` : PLACEHOLDER_URL);
           const bestBackdrop = extractBestBackdrop(tmdbDetail.images) || (tmdbDetail.backdrop_path ? `https://image.tmdb.org/t/p/w1280${tmdbDetail.backdrop_path}` : PLACEHOLDER_URL);
 
+          let trailer = extractBestTrailer(tmdbDetail.videos);
+          if (!trailer && tmdbDetail.id) {
+            trailer = await fetchTmdbVideos(tmdbDetail.id, isTv ? 'tv' : 'movie');
+          }
+
           const tmdbOnlyMovie: NormalizedMovie = {
             _id: `tmdb-${tmdbDetail.id}`,
             slug: `tmdb-${tmdbDetail.id}`,
@@ -1351,27 +1576,27 @@ export const api = {
             year: (tmdbDetail.release_date || tmdbDetail.first_air_date || '').slice(0, 4),
             quality: qualityTag,
             lang: 'Vietsub',
-            time: tmdbDetail.runtime ? `${tmdbDetail.runtime} phút` : '',
-            episode_current: qualityTag === 'CHƯA RA MẮT' ? 'Chưa chiếu' : 'Bản chiếu rạp / Trailer',
-            episode_total: '1',
-            type: 'movie',
+            time: tmdbDetail.runtime ? `${tmdbDetail.runtime} phút` : (tmdbDetail.episode_run_time?.[0] ? `${tmdbDetail.episode_run_time[0]} phút/tập` : ''),
+            episode_current: qualityTag === 'CHƯA RA MẮT' ? 'Chưa chiếu' : (isTv ? (tmdbDetail.number_of_episodes ? `${tmdbDetail.number_of_episodes} Tập` : 'Trọn bộ') : 'Bản chiếu rạp / Trailer'),
+            episode_total: String(tmdbDetail.number_of_episodes || tmdbDetail.number_of_seasons || 1),
+            type: isTv ? 'series' : 'movie',
             category: (tmdbDetail.genres || []).map((g: any) => ({ id: String(g.id), name: cleanTmdbGenre(g.name), slug: toSlug(cleanTmdbGenre(g.name)) })),
             country: translateTmdbCountries(tmdbDetail.production_countries, (tmdbDetail as any).origin_country),
             actor: (tmdbDetail.credits?.cast || []).slice(0, 15).map((a: any) => a.name),
             director: (tmdbDetail.credits?.crew || []).filter((c: any) => c.job === 'Director').map((d: any) => d.name),
             tmdb: {
               id: tmdbDetail.id,
-              type: 'movie',
+              type: isTv ? 'tv' : 'movie',
               vote_average: tmdbDetail.vote_average,
               vote_count: tmdbDetail.vote_count,
               poster_path: tmdbDetail.poster_path,
               backdrop_path: tmdbDetail.backdrop_path,
-              title: tmdbDetail.title,
-              original_title: tmdbDetail.original_title,
+              title: tmdbDetail.title || tmdbDetail.name,
+              original_title: tmdbDetail.original_title || tmdbDetail.original_name,
               genres: tmdbDetail.genres?.map((g: any) => cleanTmdbGenre(g.name)) || [],
               runtime: tmdbDetail.runtime,
             },
-            trailer_url: extractBestTrailer(tmdbDetail.videos) || '',
+            trailer_url: trailer || '',
             _source: 'primary',
           };
 
@@ -1683,11 +1908,27 @@ export const api = {
         if (filters.sort_lang) params.append('sort_lang', filters.sort_lang);
 
         const { data, source } = await apiFetch(`/v1/api/tim-kiem?${params.toString()}`);
-        const items      = data.data?.items || data.items || [];
-        const pagination = data.data?.params?.pagination || data.pagination || null;
-        return { items: items.map((i: any) => normalizeBySource(i, source)), pagination };
+        let items      = (data.data?.items || data.items || []).map((i: any) => normalizeBySource(i, source));
+        let pagination = data.data?.params?.pagination || data.pagination || null;
+
+        // Nếu phim không tồn tại trên phimapi.com (0 kết quả), tự động fallback sang TMDb giống như Phim Thịnh Hành để tìm kiếm & preview
+        if (!items || items.length === 0) {
+          const tmdbRes = await searchTmdbMultiList(cleanKeyword, page, limit, filters);
+          if (tmdbRes && tmdbRes.items && tmdbRes.items.length > 0) {
+            return tmdbRes;
+          }
+        }
+
+        return { items, pagination };
       } catch (err) {
         console.warn('[API Search] Search failed for:', cleanKeyword, err);
+        // Fallback sang TMDB nếu phimapi lỗi
+        try {
+          const tmdbRes = await searchTmdbMultiList(cleanKeyword, page, limit, filters);
+          if (tmdbRes && tmdbRes.items && tmdbRes.items.length > 0) {
+            return tmdbRes;
+          }
+        } catch {}
         return { items: [], pagination: null };
       }
     }, TTL.SEARCH);

@@ -606,7 +606,7 @@ export default function Detail() {
                     thumb_url: getTmdbPosterUrl(part.backdrop_path || part.poster_path, 'w500'),
                     poster_url: getTmdbPosterUrl(part.poster_path, 'w500'),
                     year: part.release_date ? parseInt(part.release_date.substring(0, 4)) : null,
-                    slug: '', 
+                    slug: `tmdb-${part.id}`, 
                     tmdb: { type: 'movie', id: part.id, vote_average: part.vote_average }
                 };
 
@@ -667,7 +667,7 @@ export default function Detail() {
                         thumb_url: getTmdbPosterUrl(part.poster_path, 'w500'),
                         poster_url: getTmdbPosterUrl(part.poster_path, 'w500'),
                         year: part.release_date ? parseInt(part.release_date.substring(0, 4)) : null,
-                        slug: '', 
+                        slug: `tmdb-${part.id}`, 
                         tmdb: { type: 'movie', id: part.id, vote_average: part.vote_average }
                     });
                   }
