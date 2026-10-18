@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { api, getImageUrl, searchTmdbWithCache } from "@/lib/api";
 import { getMoviePosterSync } from "@/utils/imageUtils";
@@ -149,9 +149,8 @@ export default function Watch() {
         const isSeries = isTv || epsCount > 1;
 
         if (isSeries) {
-          let multiSub1Data = [];
-          let multiSub2Data = [];
-          let multiSub3Data = [];
+          let multiSub1Data: any[] = [];
+          let multiSub2Data: any[] = [];
           
           if (fetchedEpisodes[0]?.server_data?.length) {
             fetchedEpisodes[0].server_data.forEach((ep) => {
@@ -160,86 +159,63 @@ export default function Watch() {
                const epNum = epMatch ? parseInt(epMatch[0], 10).toString() : '1';
                const seasonNum = fastSeason || (res.movie?.tmdb as any)?.season || 1;
                
+               // Multi-sub #1 (EmbedMaster)
                multiSub1Data.push({
                  ...ep,
-                 link_embed: isMobileDevice 
-                   ? `https://vaplayer.ru/embed/tv/${tmdbId || ''}/${seasonNum}/${epNum}?autoplay=1` 
-                   : `https://peachify.pro/embed/tv/${tmdbId || ''}/${seasonNum}/${epNum}`
+                 slug: ep.slug + '-embedmaster',
+                 link_embed: `https://embedmaster.link/tv/${tmdbId || ''}/${seasonNum}/${epNum}?skin=onyx&welcome_page=on&autoplay=on`
                });
 
+               // Multi-sub #2 (vidsrc)
                multiSub2Data.push({
                  ...ep,
                  slug: ep.slug + '-vidsrc',
                  link_embed: `https://vidsrc.tw/embed/tv/${tmdbId || ''}/${seasonNum}/${epNum}`
                });
-
-               multiSub3Data.push({
-                 ...ep,
-                 slug: ep.slug + '-embedmaster',
-                 link_embed: `https://embedmaster.link/tv/${tmdbId || ''}/${seasonNum}/${epNum}?skin=onyx&welcome_page=on&autoplay=on`
-               });
             });
-            
-
           } else {
             // Fallback for TV series with no fetched episodes
             const seasonNum = fastSeason || (res.movie?.tmdb as any)?.season || 1;
+            // Multi-sub #1 (EmbedMaster)
             multiSub1Data.push({
               name: 'Tập 1',
-              slug: 'tap-1',
+              slug: 'tap-1-embedmaster',
               filename: 'Tập 1',
-              link_embed: isMobileDevice 
-                 ? `https://vaplayer.ru/embed/tv/${tmdbId || ''}/${seasonNum}/1?autoplay=1` 
-                 : `https://peachify.pro/embed/tv/${tmdbId || ''}/${seasonNum}/1`
+              link_embed: `https://embedmaster.link/tv/${tmdbId || ''}/${seasonNum}/1?skin=onyx&welcome_page=on&autoplay=on`
             });
+            // Multi-sub #2 (vidsrc)
             multiSub2Data.push({
               name: 'Tập 1',
               slug: 'tap-1-vidsrc',
               filename: 'Tập 1',
               link_embed: `https://vidsrc.tw/embed/tv/${tmdbId || ''}/${seasonNum}/1`
             });
-            multiSub3Data.push({
-              name: 'Tập 1',
-              slug: 'tap-1-embedmaster',
-              filename: 'Tập 1',
-              link_embed: `https://embedmaster.link/tv/${tmdbId || ''}/${seasonNum}/1?skin=onyx&welcome_page=on&autoplay=on`
-            });
           }
 
           if (multiSub1Data.length > 0) {
             fetchedEpisodes.push({ server_name: "Multi-sub #1", server_data: multiSub1Data });
             fetchedEpisodes.push({ server_name: "Multi-sub #2", server_data: multiSub2Data });
-            fetchedEpisodes.push({ server_name: "Multi-sub #3", server_data: multiSub3Data });
           }
         } else {
           // Movie (Single episode)
+          // Multi-sub #1 (EmbedMaster)
           fetchedEpisodes.push({
             server_name: "Multi-sub #1",
             server_data: [{
               name: 'Full',
-              slug: 'full-1',
+              slug: 'full-embedmaster',
               filename: 'Full',
-              link_embed: isMobileDevice 
-                ? `https://vaplayer.ru/embed/movie/${tmdbId || ''}?autoplay=1` 
-                : `https://peachify.pro/embed/movie/${tmdbId || ''}`
+              link_embed: `https://embedmaster.link/movie/${tmdbId || ''}?skin=onyx&welcome_page=on&autoplay=on`
             }]
           });
+          // Multi-sub #2 (vidsrc)
           fetchedEpisodes.push({
             server_name: "Multi-sub #2",
             server_data: [{
               name: 'Full',
-              slug: 'full-2',
+              slug: 'full-vidsrc',
               filename: 'Full',
               link_embed: `https://vidsrc.tw/embed/movie/${tmdbId || ''}`
-            }]
-          });
-          fetchedEpisodes.push({
-            server_name: "Multi-sub #3",
-            server_data: [{
-              name: 'Full',
-              slug: 'full-3',
-              filename: 'Full',
-              link_embed: `https://embedmaster.link/movie/${tmdbId || ''}?skin=onyx&welcome_page=on&autoplay=on`
             }]
           });
         }
@@ -261,7 +237,7 @@ export default function Watch() {
             setCurrentServer(vietsub.server_name);
           } else {
             // Phim không có trên phimapi hoặc chỉ có trailer:
-            // Khởi tạo nguồn chính tạm thời để kích hoạt đếm ngược 5 giây trước khi chuyển sang Multi-sub #3
+            // Khởi tạo nguồn chính tạm thời để kích hoạt đếm ngược 5 giây trước khi chuyển sang Multi-sub #1
             setCurrentServer(vietsub ? vietsub.server_name : 'Nguồn chính');
             setCurrentEpisode(vietsub?.server_data?.[0] || {
               name: 'Chưa có bản chiếu chính',
@@ -378,24 +354,70 @@ export default function Watch() {
 
   const isStreamBrokenOrTrailer = Boolean(!loading && movie && currentEpisode && !isMultiSub && (isLinkBroken || isOnlyTrailer));
 
+  // Centralized, debounced single-tab launcher using dedicated '_cineverse_player' window
+  const lastOpenedTimeRef = useRef<number>(0);
+  const lastOpenedUrlRef = useRef<string>('');
+
+  const openSinglePlayerTab = useCallback((rawUrl: string, force = false) => {
+    if (!rawUrl) return;
+    const now = Date.now();
+    // Strictly prevent double-triggers within 1200ms
+    if (!force && (now - lastOpenedTimeRef.current < 1200 || (lastOpenedUrlRef.current === rawUrl && now - lastOpenedTimeRef.current < 2500))) {
+      return;
+    }
+    lastOpenedTimeRef.current = now;
+    lastOpenedUrlRef.current = rawUrl;
+
+    let targetUrl = rawUrl;
+    if (targetUrl.includes('vaplayer.ru') || targetUrl.includes('vidapi.ru')) {
+      targetUrl += (targetUrl.includes('?') ? '&' : '?') + 'autoplay=1';
+    }
+
+    try {
+      // Use named target window '_cineverse_player' to reuse the same tab and prevent tab clutter
+      const win = window.open(targetUrl, '_cineverse_player');
+      if (win) {
+        try {
+          win.focus?.();
+        } catch {
+          // ignore cross-origin focus restriction
+        }
+      } else {
+        // Fallback for browsers that block window.open without direct user gesture
+        const a = document.createElement('a');
+        a.href = targetUrl;
+        a.target = '_cineverse_player';
+        a.rel = 'noopener noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+    } catch (err) {
+      console.warn('Single tab dispatcher error:', err);
+      const a = document.createElement('a');
+      a.href = targetUrl;
+      a.target = '_cineverse_player';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+  }, []);
+
   const hasAutoOpenedRef = useRef<boolean>(false);
   useEffect(() => {
     if (!loading && isMultiSub && currentEpisode?.link_embed && !hasAutoOpenedRef.current) {
       hasAutoOpenedRef.current = true;
-      let urlToOpen = currentEpisode.link_embed;
-      if (urlToOpen.includes('vaplayer.ru') || urlToOpen.includes('vidapi.ru')) {
-        urlToOpen += (urlToOpen.includes('?') ? '&' : '?') + 'autoplay=1';
-      }
-      window.open(urlToOpen, '_blank', 'noopener,noreferrer');
+      openSinglePlayerTab(currentEpisode.link_embed);
     }
-  }, [loading, isMultiSub, currentEpisode]);
+  }, [loading, isMultiSub, currentEpisode, openSinglePlayerTab]);
 
   const [autoRedirectTimer, setAutoRedirectTimer] = useState<number>(5);
   const hasTriggeredRef = useRef<boolean>(false);
 
-  const triggerMultiSubAuto = async () => {
-    // Prefer Multi-sub #3 (EmbedMaster)
-    let multiSubServerObj = episodes.find(s => s.server_name === 'Multi-sub #3' || s.server_name?.includes('Multi-sub #3'))
+  const triggerMultiSubAuto = async (isManualClick = false) => {
+    // Prefer Multi-sub #1 (EmbedMaster)
+    let multiSubServerObj = episodes.find(s => s.server_name === 'Multi-sub #1' || s.server_name?.includes('Multi-sub #1'))
       || episodes.find(s => s.server_name?.includes('Multi-sub') || s.server_name?.toLowerCase().includes('peachify'));
 
     // Match current episode number if available
@@ -412,7 +434,7 @@ export default function Watch() {
         }
       }
       if (!targetEp) {
-        targetEp = multiSubServerObj.server_data.find((ep: any) => ep.name?.includes('#3') || ep.slug?.includes('embedmaster'))
+        targetEp = multiSubServerObj.server_data.find((ep: any) => ep.name?.includes('#1') || ep.slug?.includes('embedmaster'))
           || multiSubServerObj.server_data[0];
       }
     }
@@ -443,7 +465,7 @@ export default function Watch() {
     const currentEpMatch = currentEpisode?.name?.match(/\d+/) || currentEpisode?.slug?.match(/\d+/);
     const epNum = currentEpMatch ? parseInt(currentEpMatch[0], 10).toString() : '1';
 
-    // Multi-sub #3 (EmbedMaster) fallback URL
+    // Multi-sub #1 (EmbedMaster) fallback URL
     const fallbackUrl = isTv 
       ? `https://embedmaster.link/tv/${tmdbId || ''}/${seasonNum}/${epNum}?skin=onyx&welcome_page=on&autoplay=on`
       : `https://embedmaster.link/movie/${tmdbId || ''}?skin=onyx&welcome_page=on&autoplay=on`;
@@ -454,42 +476,20 @@ export default function Watch() {
       setCurrentServer(multiSubServerObj.server_name);
       setCurrentEpisode(targetEp);
     } else {
-      setCurrentServer('Multi-sub #3');
+      setCurrentServer('Multi-sub #1');
       setCurrentEpisode({
-        name: isTv ? `Tập ${epNum} (Multi-sub #3)` : 'Full (Multi-sub #3)',
+        name: isTv ? `Tập ${epNum} (Multi-sub #1)` : 'Full (Multi-sub #1)',
         slug: isTv ? `tap-${epNum}-embedmaster` : 'full-embedmaster',
-        filename: 'Multi-sub #3',
+        filename: 'Multi-sub #1',
         link_embed: fallbackUrl,
         link_m3u8: '',
       });
     }
 
     if (urlToOpen) {
-      let opened = false;
-      try {
-        const win = window.open(urlToOpen, '_blank', 'noopener,noreferrer');
-        if (win && !win.closed && typeof win.closed !== 'undefined') {
-          opened = true;
-        }
-      } catch (err) {
-        console.warn('window.open failed:', err);
-      }
-
-      if (!opened) {
-        try {
-          const a = document.createElement('a');
-          a.href = urlToOpen;
-          a.target = '_blank';
-          a.rel = 'noopener noreferrer';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-        } catch (err) {
-          console.warn('anchor click failed:', err);
-        }
-      }
+      openSinglePlayerTab(urlToOpen, isManualClick);
     }
-    showToast("Đã chuyển sang trình phát Multi-sub #3", "info");
+    showToast("Đã chuyển sang trình phát Multi-sub #1", "info");
   };
 
   useEffect(() => {
@@ -504,7 +504,7 @@ export default function Watch() {
           setAutoRedirectTimer(0);
           if (!hasTriggeredRef.current) {
             hasTriggeredRef.current = true;
-            triggerMultiSubAuto();
+            triggerMultiSubAuto(false);
           }
         } else {
           setAutoRedirectTimer(count);
@@ -694,7 +694,7 @@ export default function Watch() {
                 {/* Glowing Badge */}
                 <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#E50914]/15 border border-[#E50914]/40 text-[#E50914] text-xs font-semibold tracking-wide mb-5 shadow-[0_0_15px_rgba(229,9,20,0.25)] animate-pulse">
                   <Sparkles className="w-4 h-4 text-[#E50914]" />
-                  <span>Nguồn: {currentServer || "Multi-sub #3"}</span>
+                  <span>Nguồn: {currentServer || "Multi-sub #1"}</span>
                 </div>
 
                 {/* Main Heading requested by user */}
@@ -708,26 +708,24 @@ export default function Watch() {
 
                 {/* Action buttons */}
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-3 w-full sm:w-auto">
-                  <a
-                    href={currentEpisode?.link_embed || '#'}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => {
-                      if (!currentEpisode?.link_embed) {
-                        e.preventDefault();
-                        triggerMultiSubAuto();
+                  <button
+                    onClick={() => {
+                      if (currentEpisode?.link_embed) {
+                        openSinglePlayerTab(currentEpisode.link_embed, true);
+                      } else {
+                        triggerMultiSubAuto(true);
                       }
                     }}
-                    className="bg-[#E50914] hover:bg-red-700 text-white w-full sm:w-auto px-4 py-2 sm:px-5 sm:py-2.5 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-[0_4px_20px_rgba(229,9,20,0.4)] hover:scale-105 active:scale-95 cursor-pointer inline-flex"
+                    className="bg-[#E50914] hover:bg-red-700 text-white w-full sm:w-auto min-h-[48px] px-5 py-2.5 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-[0_4px_20px_rgba(229,9,20,0.4)] hover:scale-105 active:scale-95 cursor-pointer"
                   >
                     <ExternalLink className="w-4 h-4" />
                     <span>Mở lại tab mới</span>
-                  </a>
+                  </button>
 
                   {vietsubServer && (
                     <button
                       onClick={handleSwitchToVietsub}
-                      className="bg-white/10 hover:bg-white/20 border border-white/15 text-white w-full sm:w-auto px-4 py-2 sm:px-5 sm:py-2.5 rounded-lg font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-md"
+                      className="bg-white/10 hover:bg-white/20 border border-white/15 text-white w-full sm:w-auto min-h-[48px] px-5 py-2.5 rounded-lg font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-md"
                     >
                       <Tv className="w-4 h-4 text-[#E50914]" />
                       <span>Về nguồn chính</span>
@@ -756,15 +754,15 @@ export default function Watch() {
                   Nguồn phát chính không khả dụng.
                 </h3>
                 <p className="text-xs sm:text-sm font-semibold text-gray-300 mb-6 text-center">
-                  Đang tự động chuyển sang nguồn phụ Multi-sub #3...
+                  Đang tự động chuyển sang nguồn phụ Multi-sub #1...
                 </p>
 
                 <button
-                  onClick={triggerMultiSubAuto}
-                  className="bg-[#E50914] hover:bg-red-700 text-white w-full sm:w-auto px-4 py-2 sm:px-5 sm:py-2.5 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-[0_4px_20px_rgba(229,9,20,0.4)] hover:scale-105 active:scale-95 cursor-pointer"
+                  onClick={() => triggerMultiSubAuto(true)}
+                  className="bg-[#E50914] hover:bg-red-700 text-white w-full sm:w-auto min-h-[48px] px-6 py-3 rounded-xl font-bold text-sm sm:text-base flex items-center justify-center gap-2.5 transition-all shadow-[0_4px_25px_rgba(229,9,20,0.5)] hover:scale-105 active:scale-95 cursor-pointer"
                 >
-                  <ExternalLink className="w-4 h-4" />
-                  <span>Chuyển nguồn ngay ({autoRedirectTimer}s)</span>
+                  <ExternalLink className="w-5 h-5" />
+                  <span>Chuyển nguồn ngay ({autoRedirectTimer > 0 ? `${autoRedirectTimer}s` : 'Multi-sub #1'})</span>
                 </button>
               </div>
             </div>
@@ -832,7 +830,7 @@ export default function Watch() {
               <button
                 onClick={() => {
                   if (currentEpisode?.link_embed) {
-                    window.open(currentEpisode.link_embed, '_blank', 'noopener,noreferrer');
+                    openSinglePlayerTab(currentEpisode.link_embed, true);
                   }
                 }}
                 className="flex items-center gap-2 text-sm font-medium text-[#A0A0A0] hover:text-white transition-colors whitespace-nowrap bg-[#2A2A2A] px-3 py-1.5 rounded-lg hover:bg-white/10 cursor-pointer"
@@ -845,12 +843,12 @@ export default function Watch() {
 
             {!isMultiSub && episodes.some(s => s.server_name?.includes('Multi-sub')) && (
               <button
-                onClick={triggerMultiSubAuto}
+                onClick={() => triggerMultiSubAuto(true)}
                 className="flex items-center gap-2 text-sm font-medium text-[#A0A0A0] hover:text-white transition-colors whitespace-nowrap bg-[#2A2A2A] px-3 py-1.5 rounded-lg hover:bg-white/10 cursor-pointer"
-                title="Chuyển sang nguồn phụ Multi-sub #3"
+                title="Chuyển sang nguồn phụ Multi-sub #1"
               >
                 <Sparkles className="w-4 h-4 text-yellow-400" />
-                <span>Nguồn phụ #3</span>
+                <span>Nguồn phụ #1</span>
               </button>
             )}
           </div>
@@ -959,7 +957,7 @@ export default function Watch() {
                                 setCurrentEpisode(ep);
                                 setCurrentServer(server.server_name);
                                 if (isMultiSubServer && ep.link_embed) {
-                                  window.open(ep.link_embed, '_blank', 'noopener,noreferrer');
+                                  openSinglePlayerTab(ep.link_embed, true);
                                 }
                               }}
                               className={`
