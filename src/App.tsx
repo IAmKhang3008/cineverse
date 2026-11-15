@@ -27,6 +27,7 @@ import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
+import Browse from "./pages/Browse";
 
 function LoadingFallback() {
   return (
@@ -48,6 +49,7 @@ function AnimatedRoutes() {
             <Route path="movies" element={<Suspense fallback={<LoadingFallback />}><Movies /></Suspense>} />
             <Route path="series" element={<Suspense fallback={<LoadingFallback />}><Series /></Suspense>} />
             <Route path="genres" element={<Suspense fallback={<LoadingFallback />}><Genres /></Suspense>} />
+            <Route path="browse" element={<Suspense fallback={<LoadingFallback />}><Browse /></Suspense>} />
             <Route path="movie/:slug" element={<Suspense fallback={<LoadingFallback />}><Detail /></Suspense>} />
             <Route path="watch/:slug" element={<Suspense fallback={<LoadingFallback />}><Watch /></Suspense>} />
             <Route path="search" element={<Suspense fallback={<LoadingFallback />}><Search /></Suspense>} />

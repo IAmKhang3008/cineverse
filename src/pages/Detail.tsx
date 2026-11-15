@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useLayoutEffect, useMemo } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
-import { api, getImageUrl, getTmdbPosterUrl, searchTmdbWithCache, translateTmdbCountry, cleanTmdbGenre, fetchTmdbVideos } from "@/lib/api";
+import { api, getImageUrl, getTmdbPosterUrl, searchTmdbWithCache, translateTmdbCountry, cleanTmdbGenre, fetchTmdbVideos, resolveCanonicalTitles, getCachedCanonicalTitle } from "@/lib/api";
 import { extractDominantColor } from "@/lib/colorExtractor";
 import { getMoviePoster, getMoviePosterSync } from "@/utils/imageUtils";
 import { Play, Plus, Star, Clock, Calendar, Globe, Heart, X, ArrowLeft, Share2, Copy, Link as LinkIcon, RefreshCcw } from "lucide-react";
@@ -562,12 +562,12 @@ export default function Detail() {
               fetchWithCache(`tmdb_collection_en_${collectionId}`, () => fetch(collectionUrlEn).then(r => r.json()), TTL.TMDB_STATIC),
             ]);
             
-            // Luôn gán poster_path của từng phần sang poster tiếng Anh
-            const enPartsPosterMap = new Map((collectionDataEn?.parts || []).map((p: any) => [p.id, p.poster_path]));
+            // Luôn gán poster_path của từng phần sang poster tiếng Anh và map thông tin tiếng Anh
+            const enPartMap = new Map<number, any>((collectionDataEn?.parts || []).map((p: any) => [p.id, p]));
             if (collectionData?.parts && collectionData.parts.length > 0) {
               collectionData.parts.forEach((p: any) => {
-                const enPoster = enPartsPosterMap.get(p.id);
-                if (enPoster) p.poster_path = enPoster;
+                const enPart = enPartMap.get(p.id);
+                if (enPart?.poster_path) p.poster_path = enPart.poster_path;
               });
             }
 
@@ -586,23 +586,38 @@ export default function Detail() {
               });
 
               // BLAAAZINGLY FAST: Set TMDB parts immediately for instant render
-              const initialParts = sortedParts.map((part: any) => ({
-                    _id: part.id.toString(),
-                    name: part.title,
-                    origin_name: part.original_title,
-                    thumb_url: getTmdbPosterUrl(part.backdrop_path || part.poster_path, 'w500'),
-                    poster_url: getTmdbPosterUrl(part.poster_path, 'w500'),
-                    year: part.release_date ? parseInt(part.release_date.substring(0, 4)) : null,
-                    slug: part.id === tmdbId ? movie.slug : '', 
-                    tmdb: { type: 'movie', id: part.id, vote_average: part.vote_average }
-              }));
+              const initialParts = sortedParts.map((part: any) => {
+                    const enPart = enPartMap.get(part.id);
+                    const cachedPart = getCachedCanonicalTitle(`tmdb-${part.id}`);
+                    const canonicalPart = resolveCanonicalTitles({
+                      tmdbViTitle: part.title,
+                      tmdbEnTitle: enPart?.title,
+                      tmdbOriginalTitle: part.original_title || enPart?.original_title,
+                    });
+                    return {
+                      _id: part.id.toString(),
+                      name: cachedPart?.name || canonicalPart.name,
+                      origin_name: cachedPart?.origin_name || canonicalPart.origin_name,
+                      thumb_url: getTmdbPosterUrl(part.backdrop_path || part.poster_path, 'w500'),
+                      poster_url: getTmdbPosterUrl(part.poster_path, 'w500'),
+                      year: part.release_date ? parseInt(part.release_date.substring(0, 4)) : null,
+                      slug: part.id === tmdbId ? movie.slug : '', 
+                      tmdb: { type: 'movie', id: part.id, vote_average: part.vote_average }
+                    };
+              });
               if (isMounted) setCollection({ ...collectionData, parts: initialParts });
 
               const allPartsPromises = sortedParts.map(async (part: any) => {
+                const enPart = enPartMap.get(part.id);
+                const baseCanonical = resolveCanonicalTitles({
+                  tmdbViTitle: part.title,
+                  tmdbEnTitle: enPart?.title,
+                  tmdbOriginalTitle: part.original_title || enPart?.original_title,
+                });
                 const fallbackMovie = {
                     _id: part.id.toString(),
-                    name: part.title,
-                    origin_name: part.original_title,
+                    name: baseCanonical.name,
+                    origin_name: baseCanonical.origin_name,
                     thumb_url: getTmdbPosterUrl(part.backdrop_path || part.poster_path, 'w500'),
                     poster_url: getTmdbPosterUrl(part.poster_path, 'w500'),
                     year: part.release_date ? parseInt(part.release_date.substring(0, 4)) : null,
@@ -628,11 +643,19 @@ export default function Detail() {
                     }
                   }
 
+                  const canonicalResolved = resolveCanonicalTitles({
+                    tmdbViTitle: part.title,
+                    tmdbEnTitle: enPart?.title,
+                    tmdbOriginalTitle: part.original_title || enPart?.original_title,
+                    phimapiName: matched?.name,
+                    phimapiOriginName: matched?.origin_name,
+                  });
+
                   const finalResolved = matched ? {
                     ...matched,
                     _id: part.id.toString(),
-                    name: part.title || matched.name,
-                    origin_name: part.original_title || matched.origin_name,
+                    name: canonicalResolved.name || matched.name,
+                    origin_name: canonicalResolved.origin_name || matched.origin_name,
                     thumb_url: getTmdbPosterUrl(part.backdrop_path || part.poster_path, 'w500') || matched.thumb_url,
                     poster_url: getTmdbPosterUrl(part.poster_path, 'w500') || matched.poster_url,
                     year: part.release_date ? parseInt(part.release_date.substring(0, 4)) : matched.year,
@@ -659,11 +682,17 @@ export default function Detail() {
                         uniqueResults.push(resolved);
                     }
                   } else {
+                    const enPart = enPartMap.get(part.id);
+                    const dupCanonical = resolveCanonicalTitles({
+                      tmdbViTitle: part.title,
+                      tmdbEnTitle: enPart?.title,
+                      tmdbOriginalTitle: part.original_title || enPart?.original_title,
+                    });
                     // Duplicated slug! Fallback to TMDB dummy item for this part so it renders correctly
                     finalParts.push({
                         _id: part.id.toString(),
-                        name: part.title,
-                        origin_name: part.original_title,
+                        name: dupCanonical.name,
+                        origin_name: dupCanonical.origin_name,
                         thumb_url: getTmdbPosterUrl(part.poster_path, 'w500'),
                         poster_url: getTmdbPosterUrl(part.poster_path, 'w500'),
                         year: part.release_date ? parseInt(part.release_date.substring(0, 4)) : null,

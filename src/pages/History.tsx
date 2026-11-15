@@ -1,7 +1,7 @@
 import { useHistory } from "@/hooks/useHistory";
 import { Link } from "react-router-dom";
 import { Play, Trash2, ArrowLeft, Clock } from "lucide-react";
-import { getImageUrl } from "@/lib/api";
+import { getImageUrl, getCachedCanonicalTitle } from "@/lib/api";
 import { getMoviePosterSync } from "@/utils/imageUtils";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useAuth } from "@/contexts/AuthContext";
@@ -72,10 +72,19 @@ export default function History() {
               </Link>
               
               <div className="flex-grow w-full py-1 sm:py-2 pr-8 sm:pr-0">
-                <Link to={`/watch/${item.slug}`}>
-                  <h3 className="text-lg md:text-xl font-heading font-bold text-white group-hover:text-[#E50914] transition-colors line-clamp-1 mb-1">{item.name}</h3>
-                </Link>
-                <p className="text-[#A0A0A0] text-xs md:text-sm mb-2 md:mb-4 line-clamp-1">{item.origin_name}</p>
+                {(() => {
+                  const cached = getCachedCanonicalTitle(item);
+                  const displayName = cached?.name || item.name;
+                  const displayOrigin = cached?.origin_name || item.origin_name;
+                  return (
+                    <>
+                      <Link to={`/watch/${item.slug}`}>
+                        <h3 className="text-lg md:text-xl font-heading font-bold text-white group-hover:text-[#E50914] transition-colors line-clamp-1 mb-1">{displayName}</h3>
+                      </Link>
+                      <p className="text-[#A0A0A0] text-xs md:text-sm mb-2 md:mb-4 line-clamp-1">{displayOrigin}</p>
+                    </>
+                  );
+                })()}
                 <div className="flex items-center gap-2 md:gap-3 text-xs md:text-sm">
                   <span className="bg-[#2A2A2A] text-white px-2 py-0.5 md:px-3 md:py-1 rounded-md font-medium border border-white/10">Tập {item.currentEpisode}</span>
                   <span className="text-[#A0A0A0]">•</span>

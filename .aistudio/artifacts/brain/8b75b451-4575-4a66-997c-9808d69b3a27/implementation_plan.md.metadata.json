@@ -1,6 +1,0 @@
-{
-  "summary": "Implementation plan to fix the dual-tab opening bug, guarantee mobile/iPhone Safari tab opening, and re-architect Multi-sub 1 to use EmbedMaster while removing the legacy provider.",
-  "updatedAt": "2026-10-18T04:16:26.296623434Z",
-  "requestFeedback": true,
-  "userFacing": true
-}

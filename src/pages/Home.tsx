@@ -2,7 +2,7 @@ import React, {
   useEffect, useState, Suspense,
   useRef, useCallback, memo, useMemo,
 } from "react";
-import { api, getImageUrl, NormalizedMovie, extractBestBackdrop, extractBestPoster, searchTmdbWithCache, calculateMovieQuality } from "@/lib/api";
+import { api, getImageUrl, NormalizedMovie, extractBestBackdrop, extractBestPoster, searchTmdbWithCache, calculateMovieQuality, resolveCanonicalTitles, getCachedCanonicalTitle } from "@/lib/api";
 import {
   Play, Info, ChevronRight, Heart, X, Flame, TrendingUp, Star
 } from "lucide-react";
@@ -300,7 +300,7 @@ function useTrendingMovies() {
         fetch(urlEn, options).then(r => r.json()).catch(() => null),
       ]);
       const res = resVi || resEn;
-      const enPosters = new Map((resEn?.results || []).map((m: any) => [m.id, m.poster_path]));
+      const enMap = new Map<number, any>((resEn?.results || []).map((m: any) => [m.id, m]));
 
       let items: any[] = [];
       if (res?.results && Array.isArray(res.results) && res.results.length > 0) {
@@ -315,14 +315,21 @@ function useTrendingMovies() {
         const releaseResults = await Promise.all(releasePromises);
 
         items = topResults.map((m: any, idx: number) => {
+          const enItem = enMap.get(m.id);
           const qualityTag = calculateMovieQuality(releaseResults[idx], m.release_date);
-          const englishPosterPath = enPosters.get(m.id) || m.poster_path;
+          const englishPosterPath = enItem?.poster_path || m.poster_path;
+          const canonical = resolveCanonicalTitles({
+            tmdbViTitle: m.title || m.name,
+            tmdbEnTitle: enItem?.title || enItem?.name,
+            tmdbOriginalTitle: m.original_title || m.original_name || enItem?.original_title || enItem?.original_name,
+          });
+          const cached = getCachedCanonicalTitle(`tmdb-${m.id}`);
 
           return {
             _id: `tmdb-${m.id}`,
             id: m.id,
-            name: m.title || m.name,
-            origin_name: m.original_title || m.original_name || m.title || '',
+            name: cached?.name || canonical.name,
+            origin_name: cached?.origin_name || canonical.origin_name,
             poster_url: englishPosterPath ? `https://image.tmdb.org/t/p/w500${englishPosterPath}` : '',
             thumb_url: m.backdrop_path ? `https://image.tmdb.org/t/p/w1280${m.backdrop_path}` : (englishPosterPath ? `https://image.tmdb.org/t/p/w500${englishPosterPath}` : ''),
             poster_path: englishPosterPath,
@@ -473,7 +480,12 @@ export default function Home() {
           { ...(chieuRapRes.items?.[0] || {}), badge: '🎬 PHIM CHIẾU RẠP' },
           { ...(hanQuocRes.items?.[0]  || {}), badge: '🇰🇷 PHIM HÀN QUỐC' },
           { ...(vietNamRes.items?.[0]  || {}), badge: '🇻🇳 PHIM VIỆT NAM' },
-        ].filter(m => m?.slug);
+        ]
+          .filter(m => m?.slug)
+          .map(m => {
+            const cached = getCachedCanonicalTitle(m);
+            return cached ? { ...m, name: cached.name, origin_name: cached.origin_name } : m;
+          });
 
         // Hiển thị ngay banner và trang chủ lập tức mà không cần đợi 10 API TMDB
         if (heroList.length > 0) {
@@ -875,24 +887,34 @@ export default function Home() {
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 w-full sm:w-auto bg-black/40 backdrop-blur-md border border-white/10 rounded-full p-1 gap-1 flex-shrink-0 shadow-lg">
-                {TRENDING_TABS.map((tab) => {
-                  const isActive = activeTab === tab.id;
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
-                      className={`flex items-center justify-center gap-1.5 min-h-[38px] sm:min-h-[36px] px-3 sm:px-6 rounded-full text-[11px] sm:text-xs md:text-sm font-bold whitespace-nowrap transition-all duration-200 ${
-                        isActive
-                          ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-black shadow-[0_0_16px_rgba(245,197,24,0.5)] scale-[1.02]'
-                          : 'text-white/60 hover:text-white hover:bg-white/[0.06] active:scale-95'
-                      }`}
-                    >
-                      <span className={`flex-shrink-0 ${isActive ? 'text-black' : 'text-amber-400'}`}>{tab.icon}</span>
-                      <span>{tab.label}</span>
-                    </button>
-                  );
-                })}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-shrink-0">
+                <div className="grid grid-cols-2 w-full sm:w-auto bg-black/40 backdrop-blur-md border border-white/10 rounded-full p-1 gap-1 flex-shrink-0 shadow-lg">
+                  {TRENDING_TABS.map((tab) => {
+                    const isActive = activeTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`flex items-center justify-center gap-1.5 min-h-[38px] sm:min-h-[36px] px-3 sm:px-6 rounded-full text-[11px] sm:text-xs md:text-sm font-bold whitespace-nowrap transition-all duration-200 ${
+                          isActive
+                            ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-black shadow-[0_0_16px_rgba(245,197,24,0.5)] scale-[1.02]'
+                            : 'text-white/60 hover:text-white hover:bg-white/[0.06] active:scale-95'
+                        }`}
+                      >
+                        <span className={`flex-shrink-0 ${isActive ? 'text-black' : 'text-amber-400'}`}>{tab.icon}</span>
+                        <span>{tab.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <Link
+                  to={`/browse?type=trending&slug=${activeTab}`}
+                  className="group/link self-end sm:self-auto inline-flex items-center gap-1.5 px-3.5 py-1.5 min-h-[38px] rounded-full bg-white/[0.04] hover:bg-white/[0.1] border border-white/10 hover:border-white/20 text-xs md:text-sm text-gray-300 hover:text-white transition-all duration-200 backdrop-blur-sm whitespace-nowrap shrink-0"
+                >
+                  <span>Xem tất cả</span>
+                  <ChevronRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover/link:translate-x-0.5 text-white/60 group-hover/link:text-white" />
+                </Link>
               </div>
             </div>
 
@@ -968,7 +990,7 @@ export default function Home() {
           <SwiperSection
             title="Phim Mới Cập Nhật"
             color="#E50914"
-            link="/movies"
+            link="/browse?type=category&slug=phim-moi-cap-nhat"
             items={newMovies.slice(1, 16)}
             keyPrefix="new"
             delay={5000}
@@ -976,15 +998,15 @@ export default function Home() {
           />
         )}
 
-        {chieuRap.length > 0 && <SwiperSection title="Phim Chiếu Rạp" color="#F59E0B" link="/genres?category=phim-chieu-rap" items={chieuRap} keyPrefix="chieurap" delay={4800} onHoldChange={handleHoldChange} />}
-        {series.length   > 0 && <SwiperSection title="Phim Bộ Nổi Bật"    color="#3B82F6" link="/series"                   items={series}   keyPrefix="series"   delay={6000} onHoldChange={handleHoldChange} />}
-        {hoatHinh.length > 0 && <SwiperSection title="Phim Hoạt Hình"      color="#10B981" link="/genres?genre=hoat-hinh"   items={hoatHinh} keyPrefix="hoathinh" delay={5500} onHoldChange={handleHoldChange} />}
-        {tvShows.length  > 0 && <SwiperSection title="Chương trình TV"      color="#8B5CF6" link="/genres?genre=tv-shows"    items={tvShows}  keyPrefix="tv"       delay={6500} onHoldChange={handleHoldChange} />}
-        {thaiLan.length  > 0 && <SwiperSection title="Phim Thái Lan"        color="#EC4899" link="/genres?country=thai-lan"  items={thaiLan}  keyPrefix="thai"     delay={4500} onHoldChange={handleHoldChange} />}
-        {hongKong.length > 0 && <SwiperSection title="Phim Hồng Kông"       color="#F59E0B" link="/genres?country=hong-kong" items={hongKong} keyPrefix="hk"       delay={5000} onHoldChange={handleHoldChange} />}
-        {auMy.length     > 0 && <SwiperSection title="Phim Âu Mỹ"           color="#3B82F6" link="/genres?country=au-my"    items={auMy}     keyPrefix="aumy"     delay={6000} onHoldChange={handleHoldChange} />}
-        {vietNam.length  > 0 && <SwiperSection title="Phim Việt Nam"        color="#EF4444" link="/genres?country=viet-nam" items={vietNam}  keyPrefix="vn"       delay={4000} onHoldChange={handleHoldChange} />}
-        {kinhDi.length   > 0 && <SwiperSection title="Phim Kinh Dị"         color="#6B7280" link="/genres?genre=kinh-di"    items={kinhDi}   keyPrefix="kinhdi"   delay={5500} onHoldChange={handleHoldChange} />}
+        {chieuRap.length > 0 && <SwiperSection title="Phim Chiếu Rạp" color="#F59E0B" link="/browse?type=category&slug=phim-chieu-rap" items={chieuRap} keyPrefix="chieurap" delay={4800} onHoldChange={handleHoldChange} />}
+        {series.length   > 0 && <SwiperSection title="Phim Bộ Nổi Bật"    color="#3B82F6" link="/browse?type=category&slug=phim-bo"        items={series}   keyPrefix="series"   delay={6000} onHoldChange={handleHoldChange} />}
+        {hoatHinh.length > 0 && <SwiperSection title="Phim Hoạt Hình"      color="#10B981" link="/browse?type=category&slug=hoat-hinh"      items={hoatHinh} keyPrefix="hoathinh" delay={5500} onHoldChange={handleHoldChange} />}
+        {tvShows.length  > 0 && <SwiperSection title="Chương trình TV"      color="#8B5CF6" link="/browse?type=category&slug=tv-shows"       items={tvShows}  keyPrefix="tv"       delay={6500} onHoldChange={handleHoldChange} />}
+        {thaiLan.length  > 0 && <SwiperSection title="Phim Thái Lan"        color="#EC4899" link="/browse?type=country&slug=thai-lan"       items={thaiLan}  keyPrefix="thai"     delay={4500} onHoldChange={handleHoldChange} />}
+        {hongKong.length > 0 && <SwiperSection title="Phim Hồng Kông"       color="#F59E0B" link="/browse?type=country&slug=hong-kong"      items={hongKong} keyPrefix="hk"       delay={5000} onHoldChange={handleHoldChange} />}
+        {auMy.length     > 0 && <SwiperSection title="Phim Âu Mỹ"           color="#3B82F6" link="/browse?type=country&slug=au-my"          items={auMy}     keyPrefix="aumy"     delay={6000} onHoldChange={handleHoldChange} />}
+        {vietNam.length  > 0 && <SwiperSection title="Phim Việt Nam"        color="#EF4444" link="/browse?type=country&slug=viet-nam"       items={vietNam}  keyPrefix="vn"       delay={4000} onHoldChange={handleHoldChange} />}
+        {kinhDi.length   > 0 && <SwiperSection title="Phim Kinh Dị"         color="#6B7280" link="/browse?type=genre&slug=kinh-di"          items={kinhDi}   keyPrefix="kinhdi"   delay={5500} onHoldChange={handleHoldChange} />}
       </div>
 
       {/* Trailer Modal */}

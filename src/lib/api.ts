@@ -766,6 +766,214 @@ export async function searchTmdbWithCache(movie: any) {
   }, TTL.TMDB_STATIC);
 }
 
+// ─────────────────────────────────────────────────────────────
+// CANONICAL MOVIE TITLE ENGINE (TMDB Official + PhimAPI Fallback)
+// ─────────────────────────────────────────────────────────────
+const FOREIGN_SCRIPT_REGEX = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\uFAFF\uac00-\ud7af\u1100-\u11ff\u3130-\u318f\u0e00-\u0e7f\u0400-\u04ff\u0600-\u06ff\u0900-\u097f]/;
+const CANONICAL_TITLE_STORAGE_KEY = 'cineverse_canonical_titles_v1';
+
+export function hasForeignTitleChars(str?: string | null): boolean {
+  if (!str) return false;
+  return FOREIGN_SCRIPT_REGEX.test(str);
+}
+
+export interface CanonicalTitlePair {
+  name: string;
+  origin_name: string;
+}
+
+const canonicalTitleMemory = new Map<string, CanonicalTitlePair>();
+const canonicalTitleInflight = new Map<string, Promise<CanonicalTitlePair | null>>();
+let canonicalStorageLoaded = false;
+
+function loadCanonicalTitleStorage() {
+  if (canonicalStorageLoaded || typeof localStorage === 'undefined') return;
+  canonicalStorageLoaded = true;
+  try {
+    const raw = localStorage.getItem(CANONICAL_TITLE_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      for (const [k, v] of Object.entries(parsed)) {
+        if (v && typeof (v as any).name === 'string') {
+          canonicalTitleMemory.set(k, v as CanonicalTitlePair);
+        }
+      }
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function persistCanonicalTitleStorage() {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    // Keep cache bounded to 600 recent entries
+    const entries = Array.from(canonicalTitleMemory.entries());
+    const trimmed = entries.length > 600 ? entries.slice(entries.length - 600) : entries;
+    localStorage.setItem(CANONICAL_TITLE_STORAGE_KEY, JSON.stringify(Object.fromEntries(trimmed)));
+  } catch {
+    // ignore storage quota errors
+  }
+}
+
+export function resolveCanonicalTitles(opts: {
+  tmdbViTitle?: string;
+  tmdbEnTitle?: string;
+  tmdbOriginalTitle?: string;
+  phimapiName?: string;
+  phimapiOriginName?: string;
+}): CanonicalTitlePair {
+  const vi = (opts.tmdbViTitle || '').trim();
+  const en = (opts.tmdbEnTitle || '').trim();
+  const orig = (opts.tmdbOriginalTitle || '').trim();
+  const pName = (opts.phimapiName || '').trim();
+  const pOrig = (opts.phimapiOriginName || '').trim();
+
+  // Main title: TMDB Vietnamese -> phimapi.com (when TMDB has foreign script) -> TMDB English -> fallback
+  let finalName = '';
+  if (vi && !hasForeignTitleChars(vi)) {
+    finalName = vi;
+  } else if (pName && !hasForeignTitleChars(pName)) {
+    finalName = pName;
+  } else if (en && !hasForeignTitleChars(en)) {
+    finalName = en;
+  } else if (pOrig && !hasForeignTitleChars(pOrig)) {
+    finalName = pOrig;
+  } else {
+    finalName = pName || vi || en || orig || pOrig || '';
+  }
+
+  // Subtitle / origin_name: readable Latin original -> TMDB English -> phimapi origin -> raw original
+  let finalOrigin = '';
+  if (orig && !hasForeignTitleChars(orig)) {
+    finalOrigin = orig;
+  } else if (en && !hasForeignTitleChars(en)) {
+    finalOrigin = en;
+  } else if (pOrig && !hasForeignTitleChars(pOrig)) {
+    finalOrigin = pOrig;
+  } else {
+    finalOrigin = orig || pOrig || en || finalName;
+  }
+
+  return { name: finalName, origin_name: finalOrigin };
+}
+
+export function getCachedCanonicalTitle(movieOrKey: { slug?: string; id?: string | number; tmdb?: { id?: string | number } } | string): CanonicalTitlePair | null {
+  loadCanonicalTitleStorage();
+  if (typeof movieOrKey === 'string') {
+    return canonicalTitleMemory.get(movieOrKey) || null;
+  }
+  const slug = movieOrKey?.slug;
+  const tmdbId = movieOrKey?.tmdb?.id || movieOrKey?.id;
+  if (slug && canonicalTitleMemory.has(slug)) {
+    return canonicalTitleMemory.get(slug)!;
+  }
+  if (tmdbId) {
+    const tmdbKey = `tmdb-${tmdbId}`;
+    if (canonicalTitleMemory.has(tmdbKey)) {
+      return canonicalTitleMemory.get(tmdbKey)!;
+    }
+  }
+  return null;
+}
+
+export function setCachedCanonicalTitle(
+  slug: string | undefined,
+  tmdbId: string | number | undefined,
+  titles: CanonicalTitlePair
+) {
+  if (!titles?.name) return;
+  loadCanonicalTitleStorage();
+  if (slug) canonicalTitleMemory.set(slug, titles);
+  if (tmdbId) canonicalTitleMemory.set(`tmdb-${tmdbId}`, titles);
+  persistCanonicalTitleStorage();
+}
+
+export async function resolveCanonicalTitleAsync(movie: any): Promise<CanonicalTitlePair | null> {
+  if (!TMDB_ENABLED || !movie) return null;
+  const cached = getCachedCanonicalTitle(movie);
+  if (cached) return cached;
+
+  const dedupeKey = movie.slug || (movie.tmdb?.id ? `tmdb-${movie.tmdb.id}` : '') || movie.name;
+  if (!dedupeKey) return null;
+
+  const existing = canonicalTitleInflight.get(dedupeKey);
+  if (existing) return existing;
+
+  const promise = (async (): Promise<CanonicalTitlePair | null> => {
+    try {
+      let tmdbId: string | number | undefined = movie.slug?.startsWith('tmdb-')
+        ? movie.slug.replace(/^tmdb-/, '')
+        : movie.tmdb?.id;
+      let mediaType: string = movie.tmdb?.type || (movie.type === 'series' || movie.type === 'hoathinh' || movie.type === 'tvshows' ? 'tv' : 'movie');
+
+      if (!tmdbId) {
+        const matched = await searchTmdbWithCache(movie);
+        if (matched?.id) {
+          tmdbId = matched.id;
+          mediaType = matched.media_type || mediaType;
+        }
+      }
+
+      if (!tmdbId) return null;
+
+      const t = mediaType === 'tv' ? 'tv' : 'movie';
+      const viData = await fetchWithCache(`tmdb_title_vi_${t}_${tmdbId}`, async () => {
+        await tmdbRateLimiter.acquire();
+        const r = await fetch(`https://api.themoviedb.org/3/${t}/${tmdbId}?api_key=${TMDB_KEY}&language=vi-VN`);
+        if (!r.ok) return null;
+        return r.json();
+      }, TTL.TMDB_STATIC);
+
+      if (!viData) return null;
+
+      const viTitle = viData.title || viData.name || '';
+      const origTitle = viData.original_title || viData.original_name || '';
+      let enTitle = '';
+
+      if (!viTitle || hasForeignTitleChars(viTitle) || hasForeignTitleChars(origTitle)) {
+        const enData = await fetchWithCache(`tmdb_title_en_${t}_${tmdbId}`, async () => {
+          await tmdbRateLimiter.acquire();
+          const r = await fetch(`https://api.themoviedb.org/3/${t}/${tmdbId}?api_key=${TMDB_KEY}&language=en-US`);
+          if (!r.ok) return null;
+          return r.json();
+        }, TTL.TMDB_STATIC);
+        enTitle = enData?.title || enData?.name || '';
+      }
+
+      // If this is a tmdb-only item and TMDB title still has foreign chars, check phimapi for a Vietnamese title
+      let phimapiName = movie.slug?.startsWith('tmdb-') ? '' : movie.name;
+      let phimapiOrigin = movie.slug?.startsWith('tmdb-') ? '' : movie.origin_name;
+      if ((!phimapiName || hasForeignTitleChars(phimapiName)) && hasForeignTitleChars(viTitle)) {
+        const { matched } = await findMatchInPhimApi(viData);
+        if (matched) {
+          if (matched.name) phimapiName = matched.name;
+          if (matched.origin_name) phimapiOrigin = matched.origin_name;
+        }
+      }
+
+      const resolved = resolveCanonicalTitles({
+        tmdbViTitle: viTitle,
+        tmdbEnTitle: enTitle,
+        tmdbOriginalTitle: origTitle,
+        phimapiName,
+        phimapiOriginName: phimapiOrigin,
+      });
+
+      setCachedCanonicalTitle(movie.slug, tmdbId, resolved);
+      return resolved;
+    } catch {
+      return null;
+    } finally {
+      canonicalTitleInflight.delete(dedupeKey);
+    }
+  })();
+
+  canonicalTitleInflight.set(dedupeKey, promise);
+  return promise;
+}
+
 export async function fetchTmdbDetail(id: string | number, type?: string) {
   if (!TMDB_ENABLED) return null;
   const t = type || 'movie';
@@ -785,13 +993,18 @@ export async function fetchTmdbDetail(id: string | number, type?: string) {
         }
       }
 
-      // Nếu không có tóm tắt tiếng Việt, lấy tóm tắt tiếng Anh
-      if (!data.overview) {
+      const viTitle = data.title || data.name || '';
+      const origTitle = data.original_title || data.original_name || '';
+
+      // Nếu thiếu tóm tắt tiếng Việt hoặc tiêu đề vẫn là chữ tượng hình/ngoại ngữ, fetch thêm bản en-US
+      if (!data.overview || !viTitle || hasForeignTitleChars(viTitle) || hasForeignTitleChars(origTitle)) {
         try {
           const enRes = await fetch(`https://api.themoviedb.org/3/${t}/${id}?api_key=${TMDB_KEY}&language=en-US`);
           if (enRes.ok) {
             const enData = await enRes.json();
-            if (enData.overview) data.overview = enData.overview;
+            if (!data.overview && enData.overview) data.overview = enData.overview;
+            data._en_title = enData.title || enData.name || '';
+            data._en_original_title = enData.original_title || enData.original_name || '';
           }
         } catch {}
       }
@@ -999,8 +1212,14 @@ export async function searchTmdbMultiList(query: string, page = 1, limit = 24, f
           ? `https://image.tmdb.org/t/p/w1280${backdropPath}` 
           : posterUrl;
 
-        const displayName = m.title || m.name || enItem.title || enItem.name || '';
-        const originName = m.original_title || m.original_name || enItem.original_title || enItem.original_name || displayName;
+        const canonical = resolveCanonicalTitles({
+          tmdbViTitle: m.title || m.name,
+          tmdbEnTitle: enItem.title || enItem.name,
+          tmdbOriginalTitle: m.original_title || m.original_name || enItem.original_title || enItem.original_name,
+        });
+        const cached = getCachedCanonicalTitle(`tmdb-${m.id}`);
+        const displayName = cached?.name || canonical.name;
+        const originName = cached?.origin_name || canonical.origin_name;
         const year = releaseDate ? releaseDate.slice(0, 4) : '';
         const overview = m.overview || enItem.overview || '';
 
@@ -1293,7 +1512,13 @@ export function normalizeFallback(raw: any, domain?: string): NormalizedMovie {
 }
 
 export function normalizeBySource(raw: any, source: 'primary' | 'fallback', domain?: string): NormalizedMovie {
-  return source === 'primary' ? normalizePrimary(raw, domain) : normalizeFallback(raw, domain);
+  const normalized = source === 'primary' ? normalizePrimary(raw, domain) : normalizeFallback(raw, domain);
+  const cachedTitle = getCachedCanonicalTitle(normalized);
+  if (cachedTitle) {
+    normalized.name = cachedTitle.name;
+    normalized.origin_name = cachedTitle.origin_name;
+  }
+  return normalized;
 }
 
 function isEndpointSupportedOnFallback(endpoint: string): boolean {
@@ -1481,9 +1706,18 @@ export const api = {
               if (phimapiResult?.data?.movie) {
                 const normPrimary = normalizePrimary(phimapiResult.data, phimapiResult.source);
 
-                // Ưu tiên tên tiếng Việt từ TMDb hoặc phimapi
-                if (tmdbDetail.title) normPrimary.name = tmdbDetail.title;
-                if (tmdbDetail.original_title) normPrimary.origin_name = tmdbDetail.original_title;
+                // Đồng bộ tên chuẩn từ TMDB & phimapi (tránh tên tiếng Trung/Thái/Hàn/Nhật chưa dịch)
+                const canonical = resolveCanonicalTitles({
+                  tmdbViTitle: tmdbDetail.title || tmdbDetail.name,
+                  tmdbEnTitle: (tmdbDetail as any)._en_title,
+                  tmdbOriginalTitle: tmdbDetail.original_title || tmdbDetail.original_name,
+                  phimapiName: normPrimary.name,
+                  phimapiOriginName: normPrimary.origin_name,
+                });
+                normPrimary.name = canonical.name;
+                normPrimary.origin_name = canonical.origin_name;
+                setCachedCanonicalTitle(normPrimary.slug, tmdbDetail.id, canonical);
+                setCachedCanonicalTitle(`tmdb-${tmdbDetail.id}`, tmdbDetail.id, canonical);
 
                 // [YÊU CẦU]: Actors và Images lấy từ TMDB
                 const bestPoster = extractBestPoster(tmdbDetail.images) || (tmdbDetail.poster_path ? `https://image.tmdb.org/t/p/w500${tmdbDetail.poster_path}` : normPrimary.poster_url);
@@ -1562,11 +1796,18 @@ export const api = {
             trailer = await fetchTmdbVideos(tmdbDetail.id, isTv ? 'tv' : 'movie');
           }
 
+          const tmdbOnlyCanonical = resolveCanonicalTitles({
+            tmdbViTitle: tmdbDetail.title || tmdbDetail.name,
+            tmdbEnTitle: (tmdbDetail as any)._en_title,
+            tmdbOriginalTitle: tmdbDetail.original_title || tmdbDetail.original_name,
+          });
+          setCachedCanonicalTitle(`tmdb-${tmdbDetail.id}`, tmdbDetail.id, tmdbOnlyCanonical);
+
           const tmdbOnlyMovie: NormalizedMovie = {
             _id: `tmdb-${tmdbDetail.id}`,
             slug: `tmdb-${tmdbDetail.id}`,
-            name: tmdbDetail.title || tmdbDetail.name || '',
-            origin_name: tmdbDetail.original_title || tmdbDetail.original_name || tmdbDetail.title || '',
+            name: tmdbOnlyCanonical.name,
+            origin_name: tmdbOnlyCanonical.origin_name,
             poster_url: bestPoster,
             thumb_url: bestBackdrop,
             poster_path: tmdbDetail.poster_path,
@@ -1655,12 +1896,18 @@ export const api = {
                 const qTag = calculateMovieQuality(tmdbDetail.release_dates, tmdbDetail.release_date);
                 const bestPoster = extractBestPoster(tmdbDetail.images) || (tmdbDetail.poster_path ? `https://image.tmdb.org/t/p/w500${tmdbDetail.poster_path}` : PLACEHOLDER_URL);
                 const bestBackdrop = extractBestBackdrop(tmdbDetail.images) || (tmdbDetail.backdrop_path ? `https://image.tmdb.org/t/p/w1280${tmdbDetail.backdrop_path}` : PLACEHOLDER_URL);
+                const fallbackCanonical = resolveCanonicalTitles({
+                  tmdbViTitle: tmdbDetail.title || tmdbDetail.name,
+                  tmdbEnTitle: (tmdbDetail as any)._en_title,
+                  tmdbOriginalTitle: tmdbDetail.original_title || tmdbDetail.original_name,
+                });
+                setCachedCanonicalTitle(`tmdb-${tmdbDetail.id}`, tmdbDetail.id, fallbackCanonical);
                 return {
                   movie: {
                     _id: `tmdb-${tmdbDetail.id}`,
                     slug: `tmdb-${tmdbDetail.id}`,
-                    name: tmdbDetail.title || tmdbDetail.name || '',
-                    origin_name: tmdbDetail.original_title || tmdbDetail.original_name || tmdbDetail.title || '',
+                    name: fallbackCanonical.name,
+                    origin_name: fallbackCanonical.origin_name,
                     poster_url: bestPoster,
                     thumb_url: bestBackdrop,
                     poster_path: tmdbDetail.poster_path,
@@ -1719,18 +1966,17 @@ export const api = {
       if (tmdbDetail) {
         const tmdbInfo = tmdbSearch!;
 
-        // Tên — Luôn ghi đè title đã được dịch sang tiếng Việt từ TMDB (do language=vi)
-        const tmdbName = tmdbDetail.title || tmdbDetail.name;
-        if (tmdbName) {
-          const hasForeignChars = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\uFAFF\uac00-\ud7af\u1100-\u11ff\u3130-\u318f\u0e00-\u0e7f]/.test(tmdbName);
-          if (!hasForeignChars) {
-            normalized.name = tmdbName;
-          }
-        }
-        // Giữ original title gốc chuẩn xác
-        if (tmdbDetail.original_title || tmdbDetail.original_name) {
-          normalized.origin_name = tmdbDetail.original_title || tmdbDetail.original_name || normalized.origin_name;
-        }
+        // Tên — Đồng bộ tiêu đề chuẩn từ TMDB & phimapi (ưu tiên tiếng Việt, fallback sang phimapi/English nếu có chữ tượng hình)
+        const canonical = resolveCanonicalTitles({
+          tmdbViTitle: tmdbDetail.title || tmdbDetail.name,
+          tmdbEnTitle: (tmdbDetail as any)._en_title,
+          tmdbOriginalTitle: tmdbDetail.original_title || tmdbDetail.original_name,
+          phimapiName: normalized.name,
+          phimapiOriginName: normalized.origin_name,
+        });
+        normalized.name = canonical.name;
+        normalized.origin_name = canonical.origin_name;
+        setCachedCanonicalTitle(normalized.slug, tmdbDetail.id, canonical);
 
         // Năm
         if (!normalized.year) {
@@ -1817,16 +2063,15 @@ export const api = {
 
       } else if (tmdbSearch) {
         // Có search result nhưng detail fetch fail — dùng search data tối thiểu
-        const tmdbSearchName = tmdbSearch.title || tmdbSearch.name;
-        if (tmdbSearchName) {
-          const hasForeignChars = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\uFAFF\uac00-\ud7af\u1100-\u11ff\u3130-\u318f\u0e00-\u0e7f]/.test(tmdbSearchName);
-          if (!hasForeignChars) {
-            normalized.name = tmdbSearchName;
-          }
-        }
-        if (tmdbSearch.original_title || tmdbSearch.original_name) {
-          normalized.origin_name = tmdbSearch.original_title || tmdbSearch.original_name || normalized.origin_name;
-        }
+        const fallbackSearchCanonical = resolveCanonicalTitles({
+          tmdbViTitle: tmdbSearch.title || tmdbSearch.name,
+          tmdbOriginalTitle: tmdbSearch.original_title || tmdbSearch.original_name,
+          phimapiName: normalized.name,
+          phimapiOriginName: normalized.origin_name,
+        });
+        normalized.name = fallbackSearchCanonical.name;
+        normalized.origin_name = fallbackSearchCanonical.origin_name;
+        setCachedCanonicalTitle(normalized.slug, tmdbSearch.id, fallbackSearchCanonical);
         if (!normalized.year && tmdbSearch.release_date) {
           normalized.year = tmdbSearch.release_date.slice(0, 4);
         }
@@ -1949,7 +2194,7 @@ export const api = {
       const data = resVi || resEn;
       if (!data?.results) throw new Error('No results from TMDB trending');
 
-      const enPosters = new Map((resEn?.results || []).map((m: any) => [m.id, m.poster_path]));
+      const enMap = new Map<number, any>((resEn?.results || []).map((m: any) => [m.id, m]));
       const results = (data.results || []).slice(0, 15);
 
       // Fetch release dates in parallel để tính quality tag chính xác
@@ -1961,14 +2206,21 @@ export const api = {
       const releaseResults = await Promise.all(releasePromises);
 
       return results.map((m: any, idx: number) => {
+        const enItem = enMap.get(m.id);
         const qualityTag = calculateMovieQuality(releaseResults[idx], m.release_date);
-        const englishPosterPath = enPosters.get(m.id) || m.poster_path;
+        const englishPosterPath = enItem?.poster_path || m.poster_path;
+        const canonical = resolveCanonicalTitles({
+          tmdbViTitle: m.title || m.name,
+          tmdbEnTitle: enItem?.title || enItem?.name,
+          tmdbOriginalTitle: m.original_title || m.original_name || enItem?.original_title || enItem?.original_name,
+        });
+        const cached = getCachedCanonicalTitle(`tmdb-${m.id}`);
 
         return {
           _id: `tmdb-${m.id}`,
           id: m.id,
-          name: m.title || m.name,
-          origin_name: m.original_title || m.original_name || m.title || '',
+          name: cached?.name || canonical.name,
+          origin_name: cached?.origin_name || canonical.origin_name,
           poster_url: englishPosterPath ? `https://image.tmdb.org/t/p/w500${englishPosterPath}` : PLACEHOLDER_URL,
           thumb_url: m.backdrop_path ? `https://image.tmdb.org/t/p/w1280${m.backdrop_path}` : (englishPosterPath ? `https://image.tmdb.org/t/p/w500${englishPosterPath}` : PLACEHOLDER_URL),
           poster_path: englishPosterPath,

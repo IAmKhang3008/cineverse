@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
-import { api, getImageUrl, searchTmdbWithCache } from "@/lib/api";
+import { api, getImageUrl, searchTmdbWithCache, hasForeignTitleChars, getCachedCanonicalTitle, resolveCanonicalTitleAsync } from "@/lib/api";
 import { getMoviePosterSync } from "@/utils/imageUtils";
 import { Play, Settings, SkipForward, Volume2, Maximize, AlertCircle, Film, Heart, ArrowLeft, ExternalLink, Tv, Sparkles, RefreshCcw } from "lucide-react";
 import { useHistory } from "@/hooks/useHistory";
@@ -60,6 +60,22 @@ export default function Watch() {
           // We can optionally store it if we match with current TMDB id
         }
       }
+
+      // vidstuck Watch Progress
+      if (event.origin.includes('vidstuck.cc') && typeof event.data === 'string') {
+        try {
+          const data = JSON.parse(event.data);
+          if (data && data.id && typeof data.timestamp === 'number' && data.timestamp > 0) {
+            const key =
+              (data.type === 'tv' || data.type === 'anime') && data.season != null && data.episode != null
+                ? `vidstuck_progress_${data.id}_${data.season}_${data.episode}`
+                : `vidstuck_progress_${data.id}`;
+            localStorage.setItem(key, Math.floor(data.timestamp).toString());
+          }
+        } catch {
+          // Ignore invalid JSON messages
+        }
+      }
     };
 
     window.addEventListener('message', handlePlayerMessage);
@@ -104,25 +120,29 @@ export default function Watch() {
       try {
         const res = await api.getMovieDetail(slug);
         
-        // Bảo vệ dữ liệu phim từ trang Detail (tránh nhầm lẫn phim cùng tên như Runner vs The Runner)
+        // Bảo vệ dữ liệu TMDB ID từ trang Detail, nhưng giữ nguyên tiêu đề chuẩn canonical
         const movieFromState = location.state?.movieDetail;
         if (movieFromState && res.movie) {
-          if (movieFromState.tmdb?.id) {
+          if (movieFromState.tmdb?.id && !res.movie.tmdb?.id) {
             res.movie.tmdb = movieFromState.tmdb;
           }
-          if (movieFromState.name) res.movie.name = movieFromState.name;
-          if (movieFromState.origin_name) res.movie.origin_name = movieFromState.origin_name;
+          if ((!res.movie.name || hasForeignTitleChars(res.movie.name)) && movieFromState.name && !hasForeignTitleChars(movieFromState.name)) {
+            res.movie.name = movieFromState.name;
+          }
+          if ((!res.movie.origin_name || hasForeignTitleChars(res.movie.origin_name)) && movieFromState.origin_name && !hasForeignTitleChars(movieFromState.origin_name)) {
+            res.movie.origin_name = movieFromState.origin_name;
+          }
         }
 
         setMovie(res.movie);
         
         // 1. Shallow copy to avoid mutating the cached res.episodes array
-        // 2. Filter out any existing Multi-sub/vidsrc to prevent duplicate injections on re-renders/cache hits
+        // 2. Filter out any existing Multi-sub/vidstuck/vidsrc to prevent duplicate injections on re-renders/cache hits
         let fetchedEpisodes = [...(res.episodes || [])].filter(s => 
           !s.server_name?.includes('Multi-sub') && !s.server_name?.toLowerCase().includes('peachify')
         );
         
-        // Inject VidSrc Server if TMDB ID is available or resolved
+        // Inject Multi-sub servers if TMDB ID is available or resolved
         let tmdbId = res.movie?.tmdb?.id || movieFromState?.tmdb?.id;
         if (!tmdbId && res.movie) {
           const tmdbRes = await searchTmdbWithCache(res.movie);
@@ -147,6 +167,8 @@ export default function Watch() {
         
         const fastSeason = (res.movie as any)?.season;
         const isSeries = isTv || epsCount > 1;
+        const vidstuckBaseParams = 'branding=Cineverse&color=E50914&subtitle=english&overlay=true';
+        const vidstuckTvParams = `${vidstuckBaseParams}&nextEpisode=true&episodeSelector=true&autoplayNextEpisode=true`;
 
         if (isSeries) {
           let multiSub1Data: any[] = [];
@@ -155,7 +177,7 @@ export default function Watch() {
           if (fetchedEpisodes[0]?.server_data?.length) {
             fetchedEpisodes[0].server_data.forEach((ep) => {
                const epMatch = ep.name.match(/\d+/);
-               // Parse to integer to remove leading zeros for EmbedMaster
+               // Parse to integer to remove leading zeros for EmbedMaster / vidstuck
                const epNum = epMatch ? parseInt(epMatch[0], 10).toString() : '1';
                const seasonNum = fastSeason || (res.movie?.tmdb as any)?.season || 1;
                
@@ -166,11 +188,11 @@ export default function Watch() {
                  link_embed: `https://embedmaster.link/tv/${tmdbId || ''}/${seasonNum}/${epNum}?skin=onyx&welcome_page=on&autoplay=on`
                });
 
-               // Multi-sub #2 (vidsrc)
+               // Multi-sub #2 (vidstuck)
                multiSub2Data.push({
                  ...ep,
-                 slug: ep.slug + '-vidsrc',
-                 link_embed: `https://vidsrc.tw/embed/tv/${tmdbId || ''}/${seasonNum}/${epNum}`
+                 slug: ep.slug + '-vidstuck',
+                 link_embed: `https://vidstuck.cc/embed/tv/${tmdbId || ''}/${seasonNum}/${epNum}?${vidstuckTvParams}`
                });
             });
           } else {
@@ -183,12 +205,12 @@ export default function Watch() {
               filename: 'Tập 1',
               link_embed: `https://embedmaster.link/tv/${tmdbId || ''}/${seasonNum}/1?skin=onyx&welcome_page=on&autoplay=on`
             });
-            // Multi-sub #2 (vidsrc)
+            // Multi-sub #2 (vidstuck)
             multiSub2Data.push({
               name: 'Tập 1',
-              slug: 'tap-1-vidsrc',
+              slug: 'tap-1-vidstuck',
               filename: 'Tập 1',
-              link_embed: `https://vidsrc.tw/embed/tv/${tmdbId || ''}/${seasonNum}/1`
+              link_embed: `https://vidstuck.cc/embed/tv/${tmdbId || ''}/${seasonNum}/1?${vidstuckTvParams}`
             });
           }
 
@@ -208,14 +230,14 @@ export default function Watch() {
               link_embed: `https://embedmaster.link/movie/${tmdbId || ''}?skin=onyx&welcome_page=on&autoplay=on`
             }]
           });
-          // Multi-sub #2 (vidsrc)
+          // Multi-sub #2 (vidstuck)
           fetchedEpisodes.push({
             server_name: "Multi-sub #2",
             server_data: [{
               name: 'Full',
-              slug: 'full-vidsrc',
+              slug: 'full-vidstuck',
               filename: 'Full',
-              link_embed: `https://vidsrc.tw/embed/movie/${tmdbId || ''}`
+              link_embed: `https://vidstuck.cc/embed/movie/${tmdbId || ''}?${vidstuckBaseParams}`
             }]
           });
         }
@@ -249,7 +271,20 @@ export default function Watch() {
         
         if (res.movie?.category?.[0]?.slug) {
           const relatedRes = await api.getByGenre(res.movie.category[0].slug, 1);
-          setRelatedMovies(relatedRes.items?.filter((m: any) => m.slug !== slug).slice(0, 6) || []);
+          const initialRelated = (relatedRes.items?.filter((m: any) => m.slug !== slug).slice(0, 6) || []).map((m: any) => {
+            const cached = getCachedCanonicalTitle(m);
+            return cached ? { ...m, name: cached.name, origin_name: cached.origin_name } : m;
+          });
+          setRelatedMovies(initialRelated);
+
+          Promise.all(
+            initialRelated.map(async (m: any) => {
+              const resolved = await resolveCanonicalTitleAsync(m);
+              return resolved ? { ...m, name: resolved.name, origin_name: resolved.origin_name } : m;
+            })
+          ).then((enriched) => {
+            setRelatedMovies(enriched);
+          }).catch(() => {});
         }
       } catch (error) {
         console.warn("Failed to fetch movie detail", error);
@@ -326,7 +361,25 @@ export default function Watch() {
     return clean;
   };
 
+  const isSandboxedContext = (() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      if (window.self !== window.top) return true;
+      if (window.location.ancestorOrigins && window.location.ancestorOrigins.length > 0) return true;
+      return false;
+    } catch {
+      return true;
+    }
+  })();
+
   const isMultiSub = currentServer?.includes('Multi-sub') || currentServer?.toLowerCase().includes('peachify');
+  const isVidstuckActive = currentServer === 'Multi-sub #2' || Boolean(currentEpisode?.link_embed?.includes('vidstuck.cc'));
+  const isExternalTabMultiSub = Boolean(
+    isMultiSub && (
+      !isVidstuckActive ||
+      isSandboxedContext
+    )
+  );
   const vietsubServer = episodes.find(s => !s.server_name?.includes('Multi-sub') && !s.server_name?.toLowerCase().includes('peachify')) || episodes[0];
 
   const handleSwitchToVietsub = () => {
@@ -406,11 +459,11 @@ export default function Watch() {
 
   const hasAutoOpenedRef = useRef<boolean>(false);
   useEffect(() => {
-    if (!loading && isMultiSub && currentEpisode?.link_embed && !hasAutoOpenedRef.current) {
+    if (!loading && isExternalTabMultiSub && currentEpisode?.link_embed && !hasAutoOpenedRef.current) {
       hasAutoOpenedRef.current = true;
-      openSinglePlayerTab(currentEpisode.link_embed);
+      openSinglePlayerTab(getCleanedEmbedUrl(currentEpisode.link_embed));
     }
-  }, [loading, isMultiSub, currentEpisode, openSinglePlayerTab]);
+  }, [loading, isExternalTabMultiSub, currentEpisode, openSinglePlayerTab]);
 
   const [autoRedirectTimer, setAutoRedirectTimer] = useState<number>(5);
   const hasTriggeredRef = useRef<boolean>(false);
@@ -576,6 +629,42 @@ export default function Watch() {
       const tmdbId = movie?.tmdb?.id;
       const isTv = movie?.tmdb?.type === 'tv' || movie?.type === 'series' || movie?.type === 'hoathinh';
 
+      // vidstuck Customization & Auto-resume (works even without movie.tmdb.id if ID is in URL)
+      if (newUrl.hostname === 'vidstuck.cc' || newUrl.hostname.endsWith('.vidstuck.cc')) {
+        if (!newUrl.searchParams.has('branding')) newUrl.searchParams.set('branding', 'Cineverse');
+        if (!newUrl.searchParams.has('color')) newUrl.searchParams.set('color', 'E50914');
+        if (!newUrl.searchParams.has('subtitle')) newUrl.searchParams.set('subtitle', 'english');
+        if (!newUrl.searchParams.has('overlay')) newUrl.searchParams.set('overlay', 'true');
+
+        const tvMatch = newUrl.pathname.match(/\/embed\/tv\/([^/]+)\/(\d+)\/(\d+)/);
+        const movieMatch = newUrl.pathname.match(/\/embed\/movie\/([^/]+)/);
+        if (tvMatch) {
+          if (!newUrl.searchParams.has('nextEpisode')) newUrl.searchParams.set('nextEpisode', 'true');
+          if (!newUrl.searchParams.has('episodeSelector')) newUrl.searchParams.set('episodeSelector', 'true');
+          if (!newUrl.searchParams.has('autoplayNextEpisode')) newUrl.searchParams.set('autoplayNextEpisode', 'true');
+          try {
+            const key = `vidstuck_progress_${tvMatch[1]}_${tvMatch[2]}_${tvMatch[3]}`;
+            const saved = localStorage.getItem(key);
+            if (saved && parseFloat(saved) > 5 && !newUrl.searchParams.has('progress')) {
+              newUrl.searchParams.set('progress', Math.floor(parseFloat(saved)).toString());
+            }
+          } catch (e) {
+            console.error("Error reading vidstuck TV progress", e);
+          }
+        } else if (movieMatch) {
+          try {
+            const key = `vidstuck_progress_${movieMatch[1]}`;
+            const saved = localStorage.getItem(key);
+            if (saved && parseFloat(saved) > 5 && !newUrl.searchParams.has('progress')) {
+              newUrl.searchParams.set('progress', Math.floor(parseFloat(saved)).toString());
+            }
+          } catch (e) {
+            console.error("Error reading vidstuck movie progress", e);
+          }
+        }
+        return newUrl.toString();
+      }
+
       if (!tmdbId) return newUrl.toString();
 
       // Peachify Auto-resume
@@ -679,7 +768,7 @@ export default function Watch() {
             cinemaMode ? "z-50" : ""
           )}
         >
-          {isMultiSub ? (
+          {isExternalTabMultiSub ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0d0d12] p-6 text-center z-20 overflow-hidden">
               {/* Subtle blurred poster backdrop */}
               {movie?.poster_url && (
@@ -699,11 +788,15 @@ export default function Watch() {
 
                 {/* Main Heading requested by user */}
                 <h3 className="text-base sm:text-lg md:text-xl lg:text-2xl font-heading font-extrabold text-white leading-snug mb-2 tracking-wide drop-shadow-md">
-                  Nguồn phụ đang mở ở cửa sổ mới.
+                  {isVidstuckActive && isSandboxedContext
+                    ? "Trình phát Multi-sub #2 đang mở ở cửa sổ mới."
+                    : "Nguồn phụ đang mở ở cửa sổ mới."}
                 </h3>
 
                 <p className="text-gray-300 text-xs sm:text-sm mb-6 max-w-sm leading-relaxed font-medium">
-                  Nếu xảy ra sự cố trong quá trình phát, vui lòng thử lại nguồn chính.
+                  {isVidstuckActive && isSandboxedContext
+                    ? "Khung xem trước bị giới hạn Sandbox nên trình phát được mở sang tab mới để phát ổn định."
+                    : "Nếu xảy ra sự cố trong quá trình phát, vui lòng thử lại nguồn chính."}
                 </p>
 
                 {/* Action buttons */}
@@ -711,7 +804,7 @@ export default function Watch() {
                   <button
                     onClick={() => {
                       if (currentEpisode?.link_embed) {
-                        openSinglePlayerTab(currentEpisode.link_embed, true);
+                        openSinglePlayerTab(getCleanedEmbedUrl(currentEpisode.link_embed), true);
                       } else {
                         triggerMultiSubAuto(true);
                       }
@@ -719,7 +812,7 @@ export default function Watch() {
                     className="bg-[#E50914] hover:bg-red-700 text-white w-full sm:w-auto min-h-[48px] px-5 py-2.5 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-[0_4px_20px_rgba(229,9,20,0.4)] hover:scale-105 active:scale-95 cursor-pointer"
                   >
                     <ExternalLink className="w-4 h-4" />
-                    <span>Mở lại tab mới</span>
+                    <span>{isVidstuckActive && isSandboxedContext ? "Mở trình phát trong tab mới" : "Mở lại tab mới"}</span>
                   </button>
 
                   {vietsubServer && (
@@ -775,6 +868,7 @@ export default function Watch() {
               height="100%"
               className="w-full h-full"
               allowFullScreen
+              referrerPolicy="origin"
               allow="autoplay *; fullscreen *; picture-in-picture *; encrypted-media *"
               frameBorder="0"
             ></iframe>
@@ -830,7 +924,7 @@ export default function Watch() {
               <button
                 onClick={() => {
                   if (currentEpisode?.link_embed) {
-                    openSinglePlayerTab(currentEpisode.link_embed, true);
+                    openSinglePlayerTab(getCleanedEmbedUrl(currentEpisode.link_embed), true);
                   }
                 }}
                 className="flex items-center gap-2 text-sm font-medium text-[#A0A0A0] hover:text-white transition-colors whitespace-nowrap bg-[#2A2A2A] px-3 py-1.5 rounded-lg hover:bg-white/10 cursor-pointer"
@@ -841,7 +935,7 @@ export default function Watch() {
               </button>
             )}
 
-            {!isMultiSub && episodes.some(s => s.server_name?.includes('Multi-sub')) && (
+            {!isExternalTabMultiSub && episodes.some(s => s.server_name?.includes('Multi-sub')) && (
               <button
                 onClick={() => triggerMultiSubAuto(true)}
                 className="flex items-center gap-2 text-sm font-medium text-[#A0A0A0] hover:text-white transition-colors whitespace-nowrap bg-[#2A2A2A] px-3 py-1.5 rounded-lg hover:bg-white/10 cursor-pointer"
@@ -949,16 +1043,21 @@ export default function Watch() {
                         {server.server_data.map((ep: any, idx: number) => {
                           const isCurrent = currentEpisode?.slug === ep.slug && currentServer === server.server_name;
                           const watched = isWatched(ep.name);
+                          const isExternalTabServer = isMultiSubServer && (
+                            (server.server_name !== 'Multi-sub #2' && !ep.link_embed?.includes('vidstuck.cc')) ||
+                            isSandboxedContext
+                          );
                           
                           return (
                             <button
                               key={idx}
                               onClick={() => {
+                                if (isExternalTabServer && ep.link_embed) {
+                                  hasAutoOpenedRef.current = true;
+                                  openSinglePlayerTab(getCleanedEmbedUrl(ep.link_embed), true);
+                                }
                                 setCurrentEpisode(ep);
                                 setCurrentServer(server.server_name);
-                                if (isMultiSubServer && ep.link_embed) {
-                                  openSinglePlayerTab(ep.link_embed, true);
-                                }
                               }}
                               className={`
                                 h-[36px] md:h-[40px] rounded-[8px] text-xs md:text-sm font-medium transition-all flex items-center justify-center cursor-pointer

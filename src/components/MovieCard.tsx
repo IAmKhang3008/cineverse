@@ -4,7 +4,7 @@ import { Play, Heart, Film } from "lucide-react";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useToast } from "@/contexts/ToastContext";
 import { decodeHtml } from "@/lib/utils";
-import { getImageUrl } from "@/lib/api";
+import { getImageUrl, getCachedCanonicalTitle, resolveCanonicalTitleAsync } from "@/lib/api";
 import { getMoviePosterSync, markPosterUrlFailed, LOCAL_PLACEHOLDER } from "@/utils/imageUtils";
 
 // Bộ nhớ đệm toàn cục ghi nhận các URL ảnh đã tải thành công để hiển thị tức thì 0ms, không nhấp nháy
@@ -43,8 +43,30 @@ export function MovieCard({ movie, fromSearch, onHoldChange, priority, hasRank }
     return initialPoster ? loadedImages.has(initialPoster) : false;
   });
 
-  const tmdbTitle = movie?.name;
-  const tmdbOriginName = movie?.origin_name;
+  const cachedCanonical = movie ? getCachedCanonicalTitle(movie) : null;
+  const [canonicalTitles, setCanonicalTitles] = useState<{ name: string; origin_name: string } | null>(cachedCanonical);
+
+  const tmdbTitle = canonicalTitles?.name || cachedCanonical?.name || movie?.name;
+  const tmdbOriginName = canonicalTitles?.origin_name || cachedCanonical?.origin_name || movie?.origin_name;
+
+  useEffect(() => {
+    let active = true;
+    if (!movie) return;
+    const hit = getCachedCanonicalTitle(movie);
+    if (hit) {
+      setCanonicalTitles(hit);
+      return;
+    }
+    setCanonicalTitles(null);
+    resolveCanonicalTitleAsync(movie).then((res) => {
+      if (active && res) {
+        setCanonicalTitles(res);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [movie?.slug, movie?.tmdb?.id, movie?.name]);
 
   useEffect(() => {
     if (initialPoster) {

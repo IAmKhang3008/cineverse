@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { Search, User as UserIcon, LogOut, Settings, Heart, History, Play, Menu, X, LogIn, Bell, Clock, TrendingUp, Home, Film, Tv, Tag } from "lucide-react";
 import { cn, DEFAULT_USER_AVATAR, cleanLangString, isVietnameseMovie } from "@/lib/utils";
-import { api, getImageUrl } from "@/lib/api";
+import { api, getImageUrl, resolveCanonicalTitleAsync } from "@/lib/api";
 import { getMoviePosterSync } from "@/utils/imageUtils";
 import { SearchSuggestionSkeleton, Skeleton } from "@/components/Skeleton";
 import { useAuth } from "@/contexts/AuthContext";
@@ -142,7 +142,14 @@ export default function Header() {
       setIsFetchingTrending(true);
       try {
         const res = await api.getByCategory("phim-bo", 1);
-        setTrendingMovies(res.items?.slice(0, 5) || []);
+        const initialTrending = res.items?.slice(0, 5) || [];
+        setTrendingMovies(initialTrending);
+        Promise.all(
+          initialTrending.map(async (item: any) => {
+            const canonical = await resolveCanonicalTitleAsync(item);
+            return canonical ? { ...item, name: canonical.name, origin_name: canonical.origin_name } : item;
+          })
+        ).then((enriched) => setTrendingMovies(enriched)).catch(() => {});
       } catch {}
       finally { setIsFetchingTrending(false); }
     };
@@ -191,7 +198,14 @@ export default function Header() {
       searchTimeoutRef.current = setTimeout(async () => {
         try {
           const res = await api.search(searchQuery.trim());
-          setSuggestions(res.items?.slice(0, 5) || []);
+          const initialSuggestions = res.items?.slice(0, 5) || [];
+          setSuggestions(initialSuggestions);
+          Promise.all(
+            initialSuggestions.map(async (item: any) => {
+              const canonical = await resolveCanonicalTitleAsync(item);
+              return canonical ? { ...item, name: canonical.name, origin_name: canonical.origin_name } : item;
+            })
+          ).then((enriched) => setSuggestions(enriched)).catch(() => {});
         } catch { setSuggestions([]); }
         finally { setLoadingSuggestions(false); }
       }, 500);
