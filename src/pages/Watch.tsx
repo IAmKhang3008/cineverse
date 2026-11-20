@@ -10,6 +10,7 @@ import { decodeHtml, cn, cleanLangString } from "@/lib/utils";
 import { motion } from "motion/react";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { toMovieTitleCase } from "@/lib/utils";
+import { Skeleton } from "@/components/Skeleton";
 
 export default function Watch() {
   const { slug } = useParams<{ slug: string }>();
@@ -103,6 +104,8 @@ export default function Watch() {
   const [cinemaMode, setCinemaMode] = useState(false);
   const [autoPlay, setAutoPlay] = useState(true);
   const [relatedMovies, setRelatedMovies] = useState<any[]>([]);
+  const [loadingRelated, setLoadingRelated] = useState<boolean>(true);
+  const [relatedRetryNonce, setRelatedRetryNonce] = useState<number>(0);
   
   const location = useLocation();
   const navigate = useNavigate();
@@ -117,6 +120,8 @@ export default function Watch() {
     const fetchDetail = async () => {
       if (!slug) return;
       setLoading(true);
+      setLoadingRelated(true);
+      setRelatedMovies([]);
       try {
         const res = await api.getMovieDetail(slug);
         
@@ -269,23 +274,6 @@ export default function Watch() {
           }
         }
         
-        if (res.movie?.category?.[0]?.slug) {
-          const relatedRes = await api.getByGenre(res.movie.category[0].slug, 1);
-          const initialRelated = (relatedRes.items?.filter((m: any) => m.slug !== slug).slice(0, 6) || []).map((m: any) => {
-            const cached = getCachedCanonicalTitle(m);
-            return cached ? { ...m, name: cached.name, origin_name: cached.origin_name } : m;
-          });
-          setRelatedMovies(initialRelated);
-
-          Promise.all(
-            initialRelated.map(async (m: any) => {
-              const resolved = await resolveCanonicalTitleAsync(m);
-              return resolved ? { ...m, name: resolved.name, origin_name: resolved.origin_name } : m;
-            })
-          ).then((enriched) => {
-            setRelatedMovies(enriched);
-          }).catch(() => {});
-        }
       } catch (error) {
         console.warn("Failed to fetch movie detail", error);
         showToast("Không thể tải dữ liệu phim. Vui lòng kiểm tra kết nối mạng.", "error");
@@ -295,6 +283,43 @@ export default function Watch() {
     };
     fetchDetail();
   }, [slug, showToast]);
+
+  // Independent loader for "Có thể bạn muốn xem" so recommendation errors never block the player
+  useEffect(() => {
+    if (!movie?.slug) return;
+    let cancelled = false;
+
+    const loadSidebarRelated = async () => {
+      setLoadingRelated(true);
+      try {
+        const items = await api.getRelatedMovies(movie, { limit: 6 });
+        if (cancelled) return;
+        const withCached = items.map((m: any) => {
+          const cached = getCachedCanonicalTitle(m);
+          return cached ? { ...m, name: cached.name, origin_name: cached.origin_name } : m;
+        });
+        setRelatedMovies(withCached);
+
+        Promise.all(
+          withCached.map(async (m: any) => {
+            const resolved = await resolveCanonicalTitleAsync(m);
+            return resolved ? { ...m, name: resolved.name, origin_name: resolved.origin_name } : m;
+          })
+        ).then((enriched) => {
+          if (!cancelled) setRelatedMovies(enriched);
+        }).catch(() => {});
+      } catch (err) {
+        console.warn("[Watch] Failed to load related movies:", err);
+      } finally {
+        if (!cancelled) setLoadingRelated(false);
+      }
+    };
+
+    loadSidebarRelated();
+    return () => {
+      cancelled = true;
+    };
+  }, [movie?.slug, movie?.tmdb?.id, relatedRetryNonce]);
 
   useEffect(() => {
     if (movie && currentEpisode) {
@@ -1091,27 +1116,51 @@ export default function Watch() {
               </h3>
               
               <div className="flex flex-col gap-3 md:gap-4">
-                {relatedMovies.map((m, idx) => (
-                  <Link 
-                    key={idx} 
-                    to={`/movie/${m.slug}`}
-                    className="flex items-center gap-3 md:gap-4 p-2 rounded-lg hover:bg-[#2A2A2A] transition-colors group"
-                  >
-                    <div className="w-[50px] h-[75px] md:w-[60px] md:h-[90px] rounded-md overflow-hidden flex-shrink-0 bg-gray-800 border border-white/10">
-                      <AsyncRelatedPoster movie={m} />
+                {loadingRelated ? (
+                  [...Array(6)].map((_, idx) => (
+                    <div key={`sidebar-sk-${idx}`} className="flex items-center gap-3 md:gap-4 p-2">
+                      <Skeleton className="w-[50px] h-[75px] md:w-[60px] md:h-[90px] rounded-md flex-shrink-0" />
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-4 w-4/5 rounded-sm" />
+                        <Skeleton className="h-3 w-1/2 rounded-sm" />
+                      </div>
                     </div>
-                    <div className="flex flex-col justify-center">
-                      <h4 
-                        className="text-white font-medium text-xs md:text-sm line-clamp-2 group-hover:text-[#E50914] transition-colors mb-1"
-                        title={decodeHtml(m.name)}
-                        dangerouslySetInnerHTML={{ __html: m.name }}
-                      />
-                      <p className="text-[#A0A0A0] text-[10px] md:text-xs">
-                        {m.year} • {decodeHtml(m.episode_current) || 'Full'}
-                      </p>
-                    </div>
-                  </Link>
-                ))}
+                  ))
+                ) : relatedMovies.length > 0 ? (
+                  relatedMovies.map((m, idx) => (
+                    <Link 
+                      key={`${m.slug || m._id || 'rec'}-${idx}`} 
+                      to={`/movie/${m.slug}`}
+                      className="flex items-center gap-3 md:gap-4 p-2 min-h-[44px] rounded-lg hover:bg-[#2A2A2A] transition-colors group"
+                    >
+                      <div className="w-[50px] h-[75px] md:w-[60px] md:h-[90px] rounded-md overflow-hidden flex-shrink-0 bg-gray-800 border border-white/10">
+                        <AsyncRelatedPoster movie={m} />
+                      </div>
+                      <div className="flex flex-col justify-center min-w-0">
+                        <h4 
+                          className="text-white font-medium text-xs md:text-sm line-clamp-2 group-hover:text-[#E50914] transition-colors mb-1"
+                          title={decodeHtml(m.name)}
+                          dangerouslySetInnerHTML={{ __html: m.name }}
+                        />
+                        <p className="text-[#A0A0A0] text-[10px] md:text-xs tabular-nums truncate">
+                          {m.year || 'N/A'} · {decodeHtml(m.episode_current) || 'Full'}
+                        </p>
+                      </div>
+                    </Link>
+                  ))
+                ) : (
+                  <div className="py-8 text-center">
+                    <p className="text-sm text-[#A0A0A0] mb-4">Chưa tải được danh sách gợi ý.</p>
+                    <button
+                      type="button"
+                      onClick={() => setRelatedRetryNonce((n) => n + 1)}
+                      className="min-h-[44px] px-4 py-2 rounded-lg bg-[#2A2A2A] hover:bg-[#333] text-white text-xs font-semibold inline-flex items-center gap-2 cursor-pointer transition-colors"
+                    >
+                      <RefreshCcw className="w-3.5 h-3.5" />
+                      <span>Tải lại gợi ý</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>

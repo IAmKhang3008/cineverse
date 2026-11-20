@@ -2307,4 +2307,327 @@ export const api = {
         _source: source,
       };
     }, TTL.MOVIE_DETAIL),
+
+  getRelatedMovies: async (
+    movie: any,
+    options: { limit?: number; excludeSlugs?: string[] } = {}
+  ): Promise<NormalizedMovie[]> => {
+    const limit = options.limit ?? 10;
+    const movieSlug = movie?.slug || '';
+    const tmdbRawId = movie?.tmdb?.id || (movieSlug.startsWith('tmdb-') ? movieSlug.replace(/^tmdb-/, '') : '');
+    const cacheKey = `related:v2:${movieSlug || tmdbRawId || movie?.name || 'unknown'}:${limit}`;
+
+    const baseList = await fetchWithCache(
+      cacheKey,
+      async () => {
+        const excludeSet = new Set<string>(
+          [movieSlug, tmdbRawId ? `tmdb-${tmdbRawId}` : '', ...(options.excludeSlugs || [])].filter(Boolean)
+        );
+        const excludeTitles = new Set<string>(
+          [movie?.name, movie?.origin_name]
+            .filter(Boolean)
+            .map((t: string) => t.toLowerCase().trim())
+        );
+
+        const mediaType: 'movie' | 'tv' =
+          movie?.tmdb?.type === 'tv' ||
+          movie?.type === 'series' ||
+          movie?.type === 'tvshows'
+            ? 'tv'
+            : 'movie';
+
+        // 1. Resolve TMDB ID if missing
+        let resolvedTmdbId: string | number | undefined = tmdbRawId || undefined;
+        let resolvedMediaType: 'movie' | 'tv' = mediaType;
+        if (!resolvedTmdbId && TMDB_ENABLED && movie) {
+          try {
+            const matched = await searchTmdbWithCache(movie);
+            if (matched?.id) {
+              resolvedTmdbId = matched.id;
+              resolvedMediaType = matched.media_type === 'tv' ? 'tv' : 'movie';
+            }
+          } catch {
+            // ignore TMDB search error
+          }
+        }
+
+        // 2. Build PhimAPI genre/category targets from normalized movie categories
+        const rawCats = Array.isArray(movie?.category)
+          ? movie.category
+          : movie?.category && typeof movie.category === 'object'
+          ? Object.values(movie.category)
+          : [];
+
+        const genreTargets: { kind: 'genre' | 'category'; slug: string }[] = [];
+        const seenTargets = new Set<string>();
+        for (const cat of rawCats as any[]) {
+          const targets = resolvePhimApiGenreTargets(cat?.slug || toSlug(cat?.name || ''));
+          for (const t of targets) {
+            const key = `${t.kind}:${t.slug}`;
+            if (!seenTargets.has(key)) {
+              seenTargets.add(key);
+              genreTargets.push(t);
+            }
+          }
+          if (genreTargets.length >= 3) break;
+        }
+
+        // 3. Fetch TMDB recommendations/similar and PhimAPI genre/category matches in parallel
+        const tmdbPromise = resolvedTmdbId
+          ? getTmdbRecommendations(resolvedTmdbId, resolvedMediaType, limit).catch(() => [])
+          : Promise.resolve([] as NormalizedMovie[]);
+
+        const phimapiPromises = genreTargets.slice(0, 2).map((target) =>
+          (target.kind === 'category'
+            ? api.getByCategory(target.slug, 1)
+            : api.getByGenre(target.slug, 1)
+          )
+            .then((r) => r?.items || [])
+            .catch(() => [] as NormalizedMovie[])
+        );
+
+        const [tmdbItems, ...phimapiBatches] = await Promise.all([
+          tmdbPromise,
+          ...phimapiPromises,
+        ]);
+
+        const phimapiItems: NormalizedMovie[] = phimapiBatches.flat();
+
+        // 4. Country fallback if PhimAPI genre batches yielded few items
+        if (phimapiItems.length < 4 && Array.isArray(movie?.country) && movie.country.length > 0) {
+          const rawCountrySlug = movie.country[0]?.slug || toSlug(movie.country[0]?.name || '');
+          const countrySlug = resolvePhimApiCountrySlug(rawCountrySlug);
+          if (countrySlug) {
+            try {
+              const countryRes = await api.getByCountry(countrySlug, 1);
+              if (countryRes?.items?.length) {
+                phimapiItems.push(...countryRes.items);
+              }
+            } catch {
+              // ignore country fallback error
+            }
+          }
+        }
+
+        // 5. Interleave TMDB recommendations + PhimAPI genre matches cleanly & deduplicate
+        const merged: NormalizedMovie[] = [];
+        const seenSlugs = new Set<string>(excludeSet);
+        const seenTitleKeys = new Set<string>(excludeTitles);
+
+        const tryPush = (item: NormalizedMovie | undefined) => {
+          if (!item || merged.length >= limit + 6) return;
+          const itemSlug = item.slug || '';
+          const itemTmdbSlug = item.tmdb?.id ? `tmdb-${item.tmdb.id}` : '';
+          const titleKey = (item.name || item.origin_name || '').toLowerCase().trim();
+
+          if (itemSlug && seenSlugs.has(itemSlug)) return;
+          if (itemTmdbSlug && seenSlugs.has(itemTmdbSlug)) return;
+          if (titleKey && seenTitleKeys.has(titleKey)) return;
+
+          if (itemSlug) seenSlugs.add(itemSlug);
+          if (itemTmdbSlug) seenSlugs.add(itemTmdbSlug);
+          if (titleKey) seenTitleKeys.add(titleKey);
+          merged.push(item);
+        };
+
+        const maxLen = Math.max(tmdbItems.length, phimapiItems.length);
+        for (let i = 0; i < maxLen && merged.length < limit + 6; i++) {
+          if (i < tmdbItems.length) tryPush(tmdbItems[i]);
+          if (i < phimapiItems.length) tryPush(phimapiItems[i]);
+        }
+
+        // 6. Guaranteed popular fallback (Trending + Newly Updated)
+        if (merged.length < limit) {
+          const [trendingFallback, newFallback] = await Promise.all([
+            api.getTrendingTmdb('day').catch(() => [] as any[]),
+            api.getNewUpdated(1).then((r) => r?.items || []).catch(() => [] as NormalizedMovie[]),
+          ]);
+          for (const item of [...trendingFallback, ...newFallback]) {
+            if (merged.length >= limit + 6) break;
+            tryPush(item);
+          }
+        }
+
+        return merged;
+      },
+      TTL.CATEGORY_LIST
+    );
+
+    const extraExclude = new Set<string>(
+      [movieSlug, ...(options.excludeSlugs || [])].filter(Boolean)
+    );
+    return baseList.filter((m) => !extraExclude.has(m.slug)).slice(0, limit);
+  },
 };
+
+const VALID_PHIMAPI_GENRE_SLUGS = new Set([
+  'hanh-dong', 'tinh-cam', 'hai-huoc', 'co-trang', 'tam-ly', 'hinh-su',
+  'chien-tranh', 'the-thao', 'vo-thuat', 'vien-tuong', 'phieu-luu',
+  'khoa-hoc', 'kinh-di', 'am-nhac', 'than-thoai', 'tai-lieu',
+  'gia-dinh', 'chinh-kich', 'bi-an', 'hoc-duong', 'kinh-dien',
+]);
+
+const GENRE_ALIAS_MAP: Record<string, { kind: 'genre' | 'category'; slug: string }[]> = {
+  'hai': [{ kind: 'genre', slug: 'hai-huoc' }],
+  'comedy': [{ kind: 'genre', slug: 'hai-huoc' }],
+  'lang-man': [{ kind: 'genre', slug: 'tinh-cam' }],
+  'romance': [{ kind: 'genre', slug: 'tinh-cam' }],
+  'khoa-hoc-vien-tuong': [{ kind: 'genre', slug: 'vien-tuong' }, { kind: 'genre', slug: 'khoa-hoc' }],
+  'science-fiction': [{ kind: 'genre', slug: 'vien-tuong' }, { kind: 'genre', slug: 'khoa-hoc' }],
+  'gia-tuong': [{ kind: 'genre', slug: 'vien-tuong' }, { kind: 'genre', slug: 'than-thoai' }],
+  'fantasy': [{ kind: 'genre', slug: 'vien-tuong' }, { kind: 'genre', slug: 'than-thoai' }],
+  'gay-can': [{ kind: 'genre', slug: 'tam-ly' }, { kind: 'genre', slug: 'hinh-su' }],
+  'giat-gan': [{ kind: 'genre', slug: 'tam-ly' }, { kind: 'genre', slug: 'hinh-su' }],
+  'thriller': [{ kind: 'genre', slug: 'tam-ly' }, { kind: 'genre', slug: 'hinh-su' }],
+  'toi-pham': [{ kind: 'genre', slug: 'hinh-su' }],
+  'crime': [{ kind: 'genre', slug: 'hinh-su' }],
+  'lich-su': [{ kind: 'genre', slug: 'co-trang' }, { kind: 'genre', slug: 'chien-tranh' }],
+  'history': [{ kind: 'genre', slug: 'co-trang' }, { kind: 'genre', slug: 'chien-tranh' }],
+  'hoat-hinh': [{ kind: 'category', slug: 'hoat-hinh' }],
+  'animation': [{ kind: 'category', slug: 'hoat-hinh' }],
+  'tre-em': [{ kind: 'category', slug: 'hoat-hinh' }],
+  'kids': [{ kind: 'category', slug: 'hoat-hinh' }],
+  'truyen-hinh': [{ kind: 'category', slug: 'tv-shows' }],
+  'truyen-hinh-thuc-te': [{ kind: 'category', slug: 'tv-shows' }],
+  'tv-shows': [{ kind: 'category', slug: 'tv-shows' }],
+  'tv-movie': [{ kind: 'category', slug: 'tv-shows' }],
+  'tro-chuyen': [{ kind: 'category', slug: 'tv-shows' }],
+  'tin-tuc': [{ kind: 'category', slug: 'tv-shows' }],
+  'hanh-dong-phieu-luu': [{ kind: 'genre', slug: 'hanh-dong' }, { kind: 'genre', slug: 'phieu-luu' }],
+  'phieu-luu-hanh-dong': [{ kind: 'genre', slug: 'hanh-dong' }, { kind: 'genre', slug: 'phieu-luu' }],
+  'action-adventure': [{ kind: 'genre', slug: 'hanh-dong' }, { kind: 'genre', slug: 'phieu-luu' }],
+  'khoa-hoc-vien-tuong-gia-tuong': [{ kind: 'genre', slug: 'vien-tuong' }, { kind: 'genre', slug: 'than-thoai' }],
+  'sci-fi-fantasy': [{ kind: 'genre', slug: 'vien-tuong' }, { kind: 'genre', slug: 'than-thoai' }],
+  'tam-ly-tinh-cam': [{ kind: 'genre', slug: 'tam-ly' }, { kind: 'genre', slug: 'tinh-cam' }],
+  'soap': [{ kind: 'genre', slug: 'tam-ly' }, { kind: 'genre', slug: 'tinh-cam' }],
+  'chien-tranh-chinh-tri': [{ kind: 'genre', slug: 'chien-tranh' }, { kind: 'genre', slug: 'chinh-kich' }],
+  'war-politics': [{ kind: 'genre', slug: 'chien-tranh' }, { kind: 'genre', slug: 'chinh-kich' }],
+  'mien-tay': [{ kind: 'genre', slug: 'phieu-luu' }, { kind: 'genre', slug: 'hanh-dong' }],
+  'western': [{ kind: 'genre', slug: 'phieu-luu' }, { kind: 'genre', slug: 'hanh-dong' }],
+};
+
+export function resolvePhimApiGenreTargets(rawSlugOrName: string): { kind: 'genre' | 'category'; slug: string }[] {
+  const slug = toSlug(rawSlugOrName || '');
+  if (!slug) return [];
+  if (GENRE_ALIAS_MAP[slug]) return GENRE_ALIAS_MAP[slug];
+  if (VALID_PHIMAPI_GENRE_SLUGS.has(slug)) return [{ kind: 'genre', slug }];
+
+  // Try matching known valid slugs contained in compound strings
+  const matched: { kind: 'genre' | 'category'; slug: string }[] = [];
+  for (const valid of VALID_PHIMAPI_GENRE_SLUGS) {
+    if (slug.includes(valid)) {
+      matched.push({ kind: 'genre', slug: valid });
+    }
+  }
+  return matched;
+}
+
+export function resolvePhimApiCountrySlug(rawSlug: string): string {
+  const s = toSlug(rawSlug || '');
+  if (!s) return '';
+  if (['hoa-ky', 'my', 'anh', 'canada', 'uc', 'phap', 'duc', 'y', 'tay-ban-nha', 'au-my'].includes(s)) {
+    return 'au-my';
+  }
+  return s;
+}
+
+export async function getTmdbRecommendations(
+  tmdbId: string | number,
+  mediaType: 'movie' | 'tv' = 'movie',
+  limit = 10
+): Promise<NormalizedMovie[]> {
+  if (!TMDB_ENABLED || !tmdbId) return [];
+  const cleanId = String(tmdbId).replace(/^tmdb-/, '');
+  if (!cleanId) return [];
+  const t = mediaType === 'tv' ? 'tv' : 'movie';
+
+  return fetchWithCache(
+    `tmdb_rec_v1_${t}_${cleanId}_${limit}`,
+    async () => {
+      const fetchPair = async (endpoint: 'recommendations' | 'similar') => {
+        const [viRes, enRes] = await Promise.all([
+          fetch(`https://api.themoviedb.org/3/${t}/${cleanId}/${endpoint}?api_key=${TMDB_KEY}&language=vi-VN&page=1`)
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null),
+          fetch(`https://api.themoviedb.org/3/${t}/${cleanId}/${endpoint}?api_key=${TMDB_KEY}&language=en-US&page=1`)
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null),
+        ]);
+        const viList: any[] = viRes?.results || [];
+        const enMap = new Map<number, any>((enRes?.results || []).map((m: any) => [m.id, m]));
+        const primaryList = viList.length > 0 ? viList : enRes?.results || [];
+        return primaryList.map((m: any) => ({ m, enItem: enMap.get(m.id) }));
+      };
+
+      let combinedPairs = await fetchPair('recommendations');
+      if (combinedPairs.length < limit) {
+        const similarPairs = await fetchPair('similar');
+        const seen = new Set(combinedPairs.map((p) => p.m.id));
+        for (const p of similarPairs) {
+          if (!seen.has(p.m.id)) {
+            seen.add(p.m.id);
+            combinedPairs.push(p);
+          }
+        }
+      }
+
+      return combinedPairs.slice(0, limit).map(({ m, enItem }) => {
+        const posterPath = enItem?.poster_path || m.poster_path || '';
+        const backdropPath = m.backdrop_path || enItem?.backdrop_path || '';
+        const canonical = resolveCanonicalTitles({
+          tmdbViTitle: m.title || m.name,
+          tmdbEnTitle: enItem?.title || enItem?.name,
+          tmdbOriginalTitle: m.original_title || m.original_name || enItem?.original_title || enItem?.original_name,
+        });
+        const cached = getCachedCanonicalTitle(`tmdb-${m.id}`);
+        if (!cached && canonical.name) {
+          setCachedCanonicalTitle(`tmdb-${m.id}`, m.id, canonical);
+        }
+
+        const isItemTv = t === 'tv' || m.media_type === 'tv' || Boolean(m.first_air_date && !m.release_date);
+        const yearStr = (m.release_date || m.first_air_date || '').slice(0, 4);
+
+        return {
+          _id: `tmdb-${m.id}`,
+          slug: `tmdb-${m.id}`,
+          name: cached?.name || canonical.name,
+          origin_name: cached?.origin_name || canonical.origin_name,
+          poster_url: posterPath ? `https://image.tmdb.org/t/p/w500${posterPath}` : PLACEHOLDER_URL,
+          thumb_url: backdropPath
+            ? `https://image.tmdb.org/t/p/w1280${backdropPath}`
+            : posterPath
+            ? `https://image.tmdb.org/t/p/w500${posterPath}`
+            : PLACEHOLDER_URL,
+          poster_path: posterPath || undefined,
+          backdrop_path: backdropPath || undefined,
+          description: m.overview || enItem?.overview || '',
+          content: m.overview || enItem?.overview || '',
+          year: yearStr,
+          quality: 'FHD',
+          lang: 'Vietsub',
+          time: '',
+          episode_current: isItemTv ? 'Series' : 'Full',
+          episode_total: '1',
+          type: isItemTv ? 'series' : 'movie',
+          category: [],
+          country: [],
+          actor: [],
+          director: [],
+          tmdb: {
+            id: String(m.id),
+            type: isItemTv ? 'tv' : 'movie',
+            vote_average: m.vote_average,
+            vote_count: m.vote_count,
+            poster_path: posterPath || undefined,
+            backdrop_path: backdropPath || undefined,
+            title: m.title || m.name,
+            original_title: m.original_title || m.original_name,
+          },
+          trailer_url: '',
+          _source: 'primary' as const,
+        } as NormalizedMovie;
+      });
+    },
+    TTL.CATEGORY_LIST
+  );
+}

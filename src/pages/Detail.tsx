@@ -159,7 +159,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Suspense, lazy } from "react";
 import CommentsSection from "@/components/CommentsSection";
 
-import { MovieDetailSkeleton } from "@/components/Skeleton";
+import { MovieDetailSkeleton, MovieCardSkeleton } from "@/components/Skeleton";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { toMovieTitleCase } from "@/lib/utils";
 
@@ -485,10 +485,12 @@ export default function Detail() {
     const fetchDetail = async () => {
       if (!slug) return;
       setLoading(true);
-      // Reset related movies state when slug changes
+      // Reset related movies & collection state immediately when slug changes
       if (isMounted) {
         setHasFetchedRelated(false);
+        setLoadingRelated(true);
         setRelatedMovies([]);
+        setCollection(null);
       }
       try {
         const res = await api.getMovieDetail(slug);
@@ -522,212 +524,204 @@ export default function Detail() {
 
   useEffect(() => {
     let isMounted = true;
-    if (!movie || hasFetchedRelated) return;
+    if (!movie?.slug) return;
 
     const fetchRelatedMovies = async () => {
       if (isMounted) setLoadingRelated(true);
-      
+
       try {
         // --- Ưu tiên 1: Tìm phim cùng series qua TMDb (belongs_to_collection) ---
         let relatedFromDB: any[] = [];
         const apiKey = (import.meta as any).env.VITE_TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
 
-        // 1.1. Lấy tmdb_id của phim hiện tại
         let tmdbId = movie.tmdb?.id;
-        let tmdbType = movie.tmdb?.type || 'movie';
+        const tmdbType = movie.tmdb?.type || 'movie';
 
         if (!tmdbId) {
-          // Tìm kiếm trên TMDb nếu chưa có
           const yearQuery = movie.year ? `&year=${movie.year}` : '';
           const searchUrl = `https://api.themoviedb.org/3/search/movie?api_key=${apiKey}&query=${encodeURIComponent(movie.origin_name || movie.name)}${yearQuery}&language=vi`;
-          const searchData = await fetchWithCache(`tmdb_search_${movie.slug}`, () => fetch(searchUrl).then(r => r.json()), TTL.TMDB_STATIC);
-          if (searchData.results && searchData.results.length > 0) {
+          const searchData = await fetchWithCache(`tmdb_search_${movie.slug}`, () => fetch(searchUrl).then(r => r.json()), TTL.TMDB_STATIC).catch(() => null);
+          if (searchData?.results?.length > 0) {
             tmdbId = searchData.results[0].id;
           }
         }
 
         if (tmdbId && tmdbType === 'movie') {
-          // 1.2. Lấy collection_id từ chi tiết phim TMDb
-          const detailsUrl = `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${apiKey}&language=vi`;
-          const detailsData = await fetchWithCache(`tmdb_details_${tmdbId}`, () => fetch(detailsUrl).then(r => r.json()), TTL.TMDB_STATIC);
-          
-          const collectionId = detailsData?.belongs_to_collection?.id;
+          try {
+            const detailsUrl = `https://api.themoviedb.org/3/movie/${tmdbId}?api_key=${apiKey}&language=vi`;
+            const detailsData = await fetchWithCache(`tmdb_details_${tmdbId}`, () => fetch(detailsUrl).then(r => r.json()), TTL.TMDB_STATIC);
 
-          if (collectionId) {
-            // 1.3. Lấy danh sách phim trong collection (tiếng Việt cho tiêu đề, tiếng Anh cho poster)
-            const collectionUrlVi = `https://api.themoviedb.org/3/collection/${collectionId}?api_key=${apiKey}&language=vi&append_to_response=translations`;
-            const collectionUrlEn = `https://api.themoviedb.org/3/collection/${collectionId}?api_key=${apiKey}&language=en-US`;
-            const [collectionData, collectionDataEn] = await Promise.all([
-              fetchWithCache(`tmdb_collection_vi_${collectionId}`, () => fetch(collectionUrlVi).then(r => r.json()), TTL.TMDB_STATIC),
-              fetchWithCache(`tmdb_collection_en_${collectionId}`, () => fetch(collectionUrlEn).then(r => r.json()), TTL.TMDB_STATIC),
-            ]);
-            
-            // Luôn gán poster_path của từng phần sang poster tiếng Anh và map thông tin tiếng Anh
-            const enPartMap = new Map<number, any>((collectionDataEn?.parts || []).map((p: any) => [p.id, p]));
-            if (collectionData?.parts && collectionData.parts.length > 0) {
-              collectionData.parts.forEach((p: any) => {
-                const enPart = enPartMap.get(p.id);
-                if (enPart?.poster_path) p.poster_path = enPart.poster_path;
-              });
-            }
+            const collectionId = detailsData?.belongs_to_collection?.id;
 
-            // Fallback overview sang tiếng Anh nếu tiếng Việt trống
-            if (collectionData && !collectionData.overview && collectionData.translations) {
-              const enOverview = collectionData.translations.translations?.find((t: any) => t.iso_639_1 === 'en')?.data?.overview;
-              if (enOverview) collectionData.overview = enOverview;
-            }
+            if (collectionId) {
+              const collectionUrlVi = `https://api.themoviedb.org/3/collection/${collectionId}?api_key=${apiKey}&language=vi&append_to_response=translations`;
+              const collectionUrlEn = `https://api.themoviedb.org/3/collection/${collectionId}?api_key=${apiKey}&language=en-US`;
+              const [collectionData, collectionDataEn] = await Promise.all([
+                fetchWithCache(`tmdb_collection_vi_${collectionId}`, () => fetch(collectionUrlVi).then(r => r.json()), TTL.TMDB_STATIC),
+                fetchWithCache(`tmdb_collection_en_${collectionId}`, () => fetch(collectionUrlEn).then(r => r.json()), TTL.TMDB_STATIC),
+              ]);
 
-            if (collectionData?.parts && collectionData.parts.length > 0) {
-
-              const sortedParts = [...collectionData.parts].sort((a: any, b: any) => {
-                if (!a.release_date) return 1;
-                if (!b.release_date) return -1;
-                return new Date(a.release_date).getTime() - new Date(b.release_date).getTime();
-              });
-
-              // BLAAAZINGLY FAST: Set TMDB parts immediately for instant render
-              const initialParts = sortedParts.map((part: any) => {
-                    const enPart = enPartMap.get(part.id);
-                    const cachedPart = getCachedCanonicalTitle(`tmdb-${part.id}`);
-                    const canonicalPart = resolveCanonicalTitles({
-                      tmdbViTitle: part.title,
-                      tmdbEnTitle: enPart?.title,
-                      tmdbOriginalTitle: part.original_title || enPart?.original_title,
-                    });
-                    return {
-                      _id: part.id.toString(),
-                      name: cachedPart?.name || canonicalPart.name,
-                      origin_name: cachedPart?.origin_name || canonicalPart.origin_name,
-                      thumb_url: getTmdbPosterUrl(part.backdrop_path || part.poster_path, 'w500'),
-                      poster_url: getTmdbPosterUrl(part.poster_path, 'w500'),
-                      year: part.release_date ? parseInt(part.release_date.substring(0, 4)) : null,
-                      slug: part.id === tmdbId ? movie.slug : '', 
-                      tmdb: { type: 'movie', id: part.id, vote_average: part.vote_average }
-                    };
-              });
-              if (isMounted) setCollection({ ...collectionData, parts: initialParts });
-
-              const allPartsPromises = sortedParts.map(async (part: any) => {
-                const enPart = enPartMap.get(part.id);
-                const baseCanonical = resolveCanonicalTitles({
-                  tmdbViTitle: part.title,
-                  tmdbEnTitle: enPart?.title,
-                  tmdbOriginalTitle: part.original_title || enPart?.original_title,
+              const enPartMap = new Map<number, any>((collectionDataEn?.parts || []).map((p: any) => [p.id, p]));
+              if (collectionData?.parts?.length > 0) {
+                collectionData.parts.forEach((p: any) => {
+                  const enPart = enPartMap.get(p.id);
+                  if (enPart?.poster_path) p.poster_path = enPart.poster_path;
                 });
-                const fallbackMovie = {
+              }
+
+              if (collectionData && !collectionData.overview && collectionData.translations) {
+                const enOverview = collectionData.translations.translations?.find((t: any) => t.iso_639_1 === 'en')?.data?.overview;
+                if (enOverview) collectionData.overview = enOverview;
+              }
+
+              if (collectionData?.parts?.length > 0) {
+                const sortedParts = [...collectionData.parts].sort((a: any, b: any) => {
+                  if (!a.release_date) return 1;
+                  if (!b.release_date) return -1;
+                  return new Date(a.release_date).getTime() - new Date(b.release_date).getTime();
+                });
+
+                const initialParts = sortedParts.map((part: any) => {
+                  const enPart = enPartMap.get(part.id);
+                  const cachedPart = getCachedCanonicalTitle(`tmdb-${part.id}`);
+                  const canonicalPart = resolveCanonicalTitles({
+                    tmdbViTitle: part.title,
+                    tmdbEnTitle: enPart?.title,
+                    tmdbOriginalTitle: part.original_title || enPart?.original_title,
+                  });
+                  return {
+                    _id: part.id.toString(),
+                    name: cachedPart?.name || canonicalPart.name,
+                    origin_name: cachedPart?.origin_name || canonicalPart.origin_name,
+                    thumb_url: getTmdbPosterUrl(part.backdrop_path || part.poster_path, 'w500'),
+                    poster_url: getTmdbPosterUrl(part.poster_path, 'w500'),
+                    year: part.release_date ? parseInt(part.release_date.substring(0, 4)) : null,
+                    slug: part.id === tmdbId ? movie.slug : '',
+                    tmdb: { type: 'movie', id: part.id, vote_average: part.vote_average }
+                  };
+                });
+                if (isMounted) setCollection({ ...collectionData, parts: initialParts });
+
+                const allPartsPromises = sortedParts.map(async (part: any) => {
+                  const enPart = enPartMap.get(part.id);
+                  const baseCanonical = resolveCanonicalTitles({
+                    tmdbViTitle: part.title,
+                    tmdbEnTitle: enPart?.title,
+                    tmdbOriginalTitle: part.original_title || enPart?.original_title,
+                  });
+                  const fallbackMovie = {
                     _id: part.id.toString(),
                     name: baseCanonical.name,
                     origin_name: baseCanonical.origin_name,
                     thumb_url: getTmdbPosterUrl(part.backdrop_path || part.poster_path, 'w500'),
                     poster_url: getTmdbPosterUrl(part.poster_path, 'w500'),
                     year: part.release_date ? parseInt(part.release_date.substring(0, 4)) : null,
-                    slug: `tmdb-${part.id}`, 
+                    slug: `tmdb-${part.id}`,
                     tmdb: { type: 'movie', id: part.id, vote_average: part.vote_average }
-                };
+                  };
 
-                if (part.id === tmdbId) return { part, resolved: movie };
+                  if (part.id === tmdbId) return { part, resolved: movie };
 
-                try {
-                  const partYear = part.release_date ? parseInt(part.release_date.substring(0, 4)) : null;
-                  let matched = null;
+                  try {
+                    const partYear = part.release_date ? parseInt(part.release_date.substring(0, 4)) : null;
+                    let matched = null;
 
-                  const searchInDB = await api.search(part.title);
-                  if (searchInDB?.items?.length) {
-                    matched = searchInDB.items.find((item: any) => item.year === partYear || item.origin_name?.toLowerCase() === part.original_title?.toLowerCase()) || searchInDB.items[0];
-                  }
-
-                  if (!matched && part.original_title && part.original_title !== part.title) {
-                    const searchInDBOriginal = await api.search(part.original_title);
-                    if (searchInDBOriginal?.items?.length) {
-                      matched = searchInDBOriginal.items.find((item: any) => item.year === partYear) || searchInDBOriginal.items[0];
+                    const searchInDB = await api.search(part.title);
+                    if (searchInDB?.items?.length) {
+                      matched = searchInDB.items.find((item: any) => item.year === partYear || item.origin_name?.toLowerCase() === part.original_title?.toLowerCase()) || searchInDB.items[0];
                     }
-                  }
 
-                  const canonicalResolved = resolveCanonicalTitles({
-                    tmdbViTitle: part.title,
-                    tmdbEnTitle: enPart?.title,
-                    tmdbOriginalTitle: part.original_title || enPart?.original_title,
-                    phimapiName: matched?.name,
-                    phimapiOriginName: matched?.origin_name,
-                  });
-
-                  const finalResolved = matched ? {
-                    ...matched,
-                    _id: part.id.toString(),
-                    name: canonicalResolved.name || matched.name,
-                    origin_name: canonicalResolved.origin_name || matched.origin_name,
-                    thumb_url: getTmdbPosterUrl(part.backdrop_path || part.poster_path, 'w500') || matched.thumb_url,
-                    poster_url: getTmdbPosterUrl(part.poster_path, 'w500') || matched.poster_url,
-                    year: part.release_date ? parseInt(part.release_date.substring(0, 4)) : matched.year,
-                    tmdb: { type: 'movie', id: part.id, vote_average: part.vote_average }
-                  } : fallbackMovie;
-                  return { part, resolved: finalResolved };
-                } catch { return { part, resolved: fallbackMovie }; }
-              });
-
-              const resolvedPairs = await Promise.all(allPartsPromises);
-              
-              const finalParts: any[] = [];
-              const uniqueResults: any[] = [];
-              const seenSlugs = new Set();
-              
-              resolvedPairs.forEach(({ part, resolved }) => {
-                if (!resolved) return;
-                
-                if (resolved.slug) {
-                  if (!seenSlugs.has(resolved.slug)) {
-                    seenSlugs.add(resolved.slug);
-                    finalParts.push(resolved);
-                    if (resolved.slug !== slug) {
-                        uniqueResults.push(resolved);
+                    if (!matched && part.original_title && part.original_title !== part.title) {
+                      const searchInDBOriginal = await api.search(part.original_title);
+                      if (searchInDBOriginal?.items?.length) {
+                        matched = searchInDBOriginal.items.find((item: any) => item.year === partYear) || searchInDBOriginal.items[0];
+                      }
                     }
-                  } else {
-                    const enPart = enPartMap.get(part.id);
-                    const dupCanonical = resolveCanonicalTitles({
+
+                    const canonicalResolved = resolveCanonicalTitles({
                       tmdbViTitle: part.title,
                       tmdbEnTitle: enPart?.title,
                       tmdbOriginalTitle: part.original_title || enPart?.original_title,
+                      phimapiName: matched?.name,
+                      phimapiOriginName: matched?.origin_name,
                     });
-                    // Duplicated slug! Fallback to TMDB dummy item for this part so it renders correctly
-                    finalParts.push({
+
+                    const finalResolved = matched ? {
+                      ...matched,
+                      _id: part.id.toString(),
+                      name: canonicalResolved.name || matched.name,
+                      origin_name: canonicalResolved.origin_name || matched.origin_name,
+                      thumb_url: getTmdbPosterUrl(part.backdrop_path || part.poster_path, 'w500') || matched.thumb_url,
+                      poster_url: getTmdbPosterUrl(part.poster_path, 'w500') || matched.poster_url,
+                      year: part.release_date ? parseInt(part.release_date.substring(0, 4)) : matched.year,
+                      tmdb: { type: 'movie', id: part.id, vote_average: part.vote_average }
+                    } : fallbackMovie;
+                    return { part, resolved: finalResolved };
+                  } catch { return { part, resolved: fallbackMovie }; }
+                });
+
+                const resolvedPairs = await Promise.all(allPartsPromises);
+
+                const finalParts: any[] = [];
+                const uniqueResults: any[] = [];
+                const seenSlugs = new Set();
+
+                resolvedPairs.forEach(({ part, resolved }) => {
+                  if (!resolved) return;
+
+                  if (resolved.slug) {
+                    if (!seenSlugs.has(resolved.slug)) {
+                      seenSlugs.add(resolved.slug);
+                      finalParts.push(resolved);
+                      if (resolved.slug !== slug) {
+                        uniqueResults.push(resolved);
+                      }
+                    } else {
+                      const enPart = enPartMap.get(part.id);
+                      const dupCanonical = resolveCanonicalTitles({
+                        tmdbViTitle: part.title,
+                        tmdbEnTitle: enPart?.title,
+                        tmdbOriginalTitle: part.original_title || enPart?.original_title,
+                      });
+                      finalParts.push({
                         _id: part.id.toString(),
                         name: dupCanonical.name,
                         origin_name: dupCanonical.origin_name,
                         thumb_url: getTmdbPosterUrl(part.poster_path, 'w500'),
                         poster_url: getTmdbPosterUrl(part.poster_path, 'w500'),
                         year: part.release_date ? parseInt(part.release_date.substring(0, 4)) : null,
-                        slug: `tmdb-${part.id}`, 
+                        slug: `tmdb-${part.id}`,
                         tmdb: { type: 'movie', id: part.id, vote_average: part.vote_average }
-                    });
+                      });
+                    }
+                  } else {
+                    finalParts.push(resolved);
                   }
-                } else {
-                  finalParts.push(resolved);
-                }
-              });
+                });
 
-              if (isMounted) setCollection({ ...collectionData, parts: finalParts });
-              relatedFromDB = uniqueResults;
+                if (isMounted) setCollection({ ...collectionData, parts: finalParts });
+                relatedFromDB = uniqueResults;
+              }
             }
-
+          } catch (collectionErr) {
+            console.warn("Collection fetch failed, continuing to recommendations:", collectionErr);
           }
         }
 
-        // --- Ưu tiên 2: Thử tìm theo trích xuất tên series nếu kết quả từ Collection quá ít (nhỏ hơn 3 phim) ---
+        // --- Ưu tiên 2: Thử tìm theo trích xuất tên series nếu kết quả từ Collection quá ít ---
         if (relatedFromDB.length < 3) {
           const seriesName = extractSeriesName(movie.origin_name || movie.name);
           if (seriesName.length > 2) {
             try {
               const searchRes = await api.search(seriesName, 1);
               const items = (searchRes.items || []).filter((m: any) => m.slug !== slug);
-              
-              // Lọc kỹ hơn các phim có cùng tên series
+
               const seriesNameLower = seriesName.toLowerCase();
               const seriesMatched = items.filter((m: any) => {
                 const mSeries = extractSeriesName(m.origin_name || m.name).toLowerCase();
                 return mSeries === seriesNameLower || mSeries.includes(seriesNameLower) || seriesNameLower.includes(mSeries);
               });
 
-              // Gộp thêm vào danh sách
               seriesMatched.forEach((item: any) => {
                 if (relatedFromDB.length < 10 && !relatedFromDB.some(m => m.slug === item.slug)) {
                   relatedFromDB.push(item);
@@ -739,18 +733,16 @@ export default function Detail() {
           }
         }
 
-        // --- Ưu tiên 3: Điền thêm phim cùng thể loại để đạt tối thiểu 10 phim gợi ý ---
+        // --- Ưu tiên 3: Gợi ý từ TMDB Recommendations + PhimAPI thể loại + Fallback phim phổ biến ---
         if (relatedFromDB.length < 10) {
-          const genreSlug = movie.category?.[0]?.slug;
-          if (genreSlug) {
-            const genreRes = await api.getByGenre(genreSlug, 1);
-            const genreItems = (genreRes.items || []).filter((m: any) => m.slug !== slug);
-            
-            for (const item of genreItems) {
-              if (relatedFromDB.length >= 10) break;
-              if (!relatedFromDB.some(m => m.slug === item.slug)) {
-                relatedFromDB.push(item);
-              }
+          const recommended = await api.getRelatedMovies(movie, {
+            limit: 10 - relatedFromDB.length,
+            excludeSlugs: relatedFromDB.map((m) => m.slug).filter(Boolean),
+          });
+          for (const item of recommended) {
+            if (relatedFromDB.length >= 10) break;
+            if (!relatedFromDB.some((m) => m.slug === item.slug)) {
+              relatedFromDB.push(item);
             }
           }
         }
@@ -759,17 +751,11 @@ export default function Detail() {
       } catch (error) {
         if (!isMounted) return;
         console.warn("Failed to fetch related movies", error);
-        
-        // Hồi phục lỗi mượt mà sử dụng thể loại gốc
         try {
-          const genreSlug = movie?.category?.[0]?.slug;
-          if (genreSlug) {
-            const res = await api.getByGenre(genreSlug, 1);
-            const filtered = (res.items || []).filter((m: any) => m.slug !== slug);
-            if (isMounted) setRelatedMovies(filtered.slice(0, 10));
-          }
-        } catch (innerError) {
-          console.warn("Fallback related movies failed", innerError);
+          const fallback = await api.getRelatedMovies(movie, { limit: 10 });
+          if (isMounted) setRelatedMovies(fallback.slice(0, 10));
+        } catch {
+          // keep empty if completely offline
         }
       } finally {
         if (isMounted) {
@@ -779,27 +765,12 @@ export default function Detail() {
       }
     };
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          fetchRelatedMovies();
-          if (relatedMoviesRef.current) {
-            observer.unobserve(relatedMoviesRef.current);
-          }
-        }
-      },
-      { rootMargin: "200px" }
-    );
-
-    if (relatedMoviesRef.current) {
-      observer.observe(relatedMoviesRef.current);
-    }
+    fetchRelatedMovies();
 
     return () => {
       isMounted = false;
-      observer.disconnect();
     };
-  }, [movie, hasFetchedRelated, slug]);
+  }, [movie?.slug, movie?.tmdb?.id, slug]);
 
   // 🚀 TỐI ƯU: Lấy diễn viên (cast) và hình ảnh (images) trực tiếp từ TMDb
   useEffect(() => {
@@ -1695,33 +1666,33 @@ export default function Detail() {
 
 
           {/* Related Movies */}
-          <div ref={relatedMoviesRef} className="mt-16 md:mt-24 min-h-[200px]" style={{ contentVisibility: 'auto' }}>
-            {loadingRelated ? (
-              <div className="flex justify-center py-10">
-
-                <div className="w-8 h-8 border-4 border-[#E50914] border-t-transparent rounded-full animate-spin"></div>
-              </div>
-            ) : relatedMovies.length > 0 ? (
+          <div ref={relatedMoviesRef} className="mt-16 md:mt-24 min-h-[200px]">
+            {(loadingRelated || relatedMovies.length > 0) && (
               <>
                 <h2 className="text-xl md:text-2xl font-heading font-bold text-white tracking-wider mb-6 md:mb-8 flex items-center gap-2 md:gap-3">
-                   <span className="w-1.5 h-6 md:h-8 rounded-full inline-block bg-[#E50914]"></span>
+                  <span className="w-1.5 h-6 md:h-8 rounded-full inline-block bg-[#E50914]"></span>
                   Phim Liên Quan
                 </h2>
-                <motion.div 
-                  variants={containerVariants}
-                  initial="hidden"
-                  whileInView="show"
-                  viewport={{ once: true, margin: "-100px" }}
-                  className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6 gap-y-8 md:gap-y-10"
-                >
-                  {relatedMovies.map((m, index) => (
-                    <motion.div key={`${m.slug || m._id || 'related'}-${index}`} variants={itemVariants}>
-                      <MovieCard movie={m} />
-                    </motion.div>
-                  ))}
-                </motion.div>
+                {loadingRelated ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6 gap-y-8 md:gap-y-10">
+                    {[...Array(10)].map((_, index) => (
+                      <MovieCardSkeleton key={`related-sk-${index}`} />
+                    ))}
+                  </div>
+                ) : (
+                  <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.35 }}
+                    className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6 gap-y-8 md:gap-y-10"
+                  >
+                    {relatedMovies.map((m, index) => (
+                      <MovieCard key={`${m.slug || m._id || 'related'}-${index}`} movie={m} />
+                    ))}
+                  </motion.div>
+                )}
               </>
-            ) : null}
+            )}
           </div>
         </div>
 
